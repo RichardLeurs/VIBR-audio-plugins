@@ -1,6 +1,6 @@
-# Richard Leurs Audio Plugins
+# VIBR Audio Plugins
 
-A collection of Vintage effects pedals redesigned as audio plugins (VST3, Audio Unit and Standalone), built with JUCE 8 and C++20.
+A collection of Vintage effects pedals (and some new) redesigned as audio plugins (VST3, Audio Unit and Standalone), vibe coded with JUCE 8 and C++20.
 
 | Plugin | What it is |
 |---|---|
@@ -18,8 +18,6 @@ A collection of Vintage effects pedals redesigned as audio plugins (VST3, Audio 
 | GE-7 Equalizer | graphic equalizer: 7 bands (100 Hz - 6.4 kHz, +-15 dB) and a level fader |
 | EH-2 Enhancer | treble enhancer: mix (inverting), freq, sens |
 | IR-2 Amp & Cabinet | amp and cabinet: 11 amp types, gain, level, bass / middle / treble, ambience |
-| DC-1 Multi Effect | chain up to 8 of the pedals above: add, remove, reorder, bypass; each pedal keeps its own front panel |
-| TR-8 Drum Machine | drum machine: 11 voices or sampled kits, 16-step A/B sequencer, host sync (instrument) |
 | BS-1 Reverb | 12 reverb types (room, hall, plate, spring, swell, bloom, cloud, chorale, shimmer, magneto, nonlinear, reflections) |
 | OC-5 Octave | vintage (monophonic) and poly octave: direct, +1 oct, -1 oct, -2 oct range |
 | DS-1 Distortion | stompbox distortion: tone, level, dist |
@@ -31,6 +29,29 @@ A collection of Vintage effects pedals redesigned as audio plugins (VST3, Audio 
 You can find the web page for the project on this [`website`](https://audio-plugins.richardleurs.nl).
 
 ## Build
+
+### What you need
+
+The build is set up for macOS (the copy and signing steps use `codesign`, `xattr` and `~/Library/Audio/Plug-Ins`).
+
+| Tool | Version | How to get it |
+|---|---|---|
+| Xcode Command Line Tools (compiler, `git`, `codesign`) | recent | `xcode-select --install` |
+| CMake | 3.22 or newer | `brew install cmake` ([Homebrew](https://brew.sh)), or the installer from [cmake.org/download](https://cmake.org/download/) |
+| JUCE | 8.0.3 | see below |
+| Python 3 with `numpy` and `Pillow` | only to re-render the front-panel artwork (`make_background.py`) | `pip install numpy pillow` |
+
+**JUCE.** The plugins are written for JUCE 8.0.3 (C++20). The easiest way is to clone it once into `~/Developer/JUCE`, where the build finds it automatically:
+
+```bash
+git clone --depth 1 --branch 8.0.3 https://github.com/juce-framework/JUCE.git ~/Developer/JUCE
+```
+
+Keep it outside iCloud-synced folders such as `~/Documents`, where files can be evicted to the cloud and reads stall. If `~/Developer/JUCE` does not exist, CMake downloads JUCE 8.0.3 from GitHub by itself (`FetchContent`), which needs an internet connection and takes longer on a fresh build. You can point to another checkout with `cmake -DFETCHCONTENT_SOURCE_DIR_JUCE=/path/to/JUCE ...`.
+
+**Signing (optional).** After each build the bundles are signed with a self-signed certificate if it exists in your login keychain; otherwise they get an ad-hoc signature, which is fine for your own machine.
+
+### Building
 
 The build on macOS is placed outside the iCloud synced folders in `~/Developer/Plugins-build`.
 
@@ -47,11 +68,11 @@ cmake -S . -B ~/Developer/Plugins-build
 cmake --build ~/Developer/Plugins-build --config Release -j8
 ```
 
-JUCE 8 is expected in `~/Developer/JUCE` (see `CMakeLists.txt`). One plugin: `--target DD-1_All` (or `DM-1_All`, `CE-1_All`, `RE-1_All`, `RE-2_All`, `DS-1_All`, `BF-3_All`, `CS-3_All`, `LM-2_All`, `PH-2_All`, `GE-7_All`, `EH-2_All`, `IR-2_All`, `DC-1_All`, `TR-8_All`, `SL-2_All`, `OD-2_All`, `OC-5_All`, `BS-1_All`, `MM-1_All`, `SD-1_All`, `SD-3_All`, ...).
+One plugin: `--target DD-1_All` (or `DM-1_All`, `CE-1_All`, `RE-1_All`, `RE-2_All`, `DS-1_All`, `BF-3_All`, `CS-3_All`, `LM-2_All`, `PH-2_All`, `GE-7_All`, `EH-2_All`, `IR-2_All`, `DC-1_All`, `TR-8_All`, `SL-2_All`, `OD-2_All`, `OC-5_All`, `BS-1_All`, `MM-1_All`, `SD-1_All`, `SD-3_All`, ...).
 
 ## License
 
-Copyright (C) 2026 Richard Leurs
+Copyright © 2026 Richard Leurs
 
 This program is free software: you can redistribute it and/or modify it under the terms of the **GNU General Public License, version 3**, as published by the Free Software Foundation. It is distributed in the hope that it will be useful, but **without any warranty**; without even the implied warranty of merchantability or fitness for a particular purpose. See the [`LICENSE`](LICENSE) file for the full text.
 
