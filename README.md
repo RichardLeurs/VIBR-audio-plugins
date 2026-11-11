@@ -1,30 +1,82 @@
+Are you interested in audio plugins and want to help improving and expanding the plugins then send me a message.
+
 # VIBR Audio Plugins
 
 A collection of Vintage effects pedals (and some new) redesigned as audio plugins (VST3, Audio Unit and Standalone), vibe coded with JUCE 8 and C++20.
+
+![DM-1 Delay Machine front panel](src/effects/dm1/assets/preview.png)
+
+### Delay & Echo
 
 | Plugin | What it is |
 |---|---|
 | DD-1 Dual Delay | two delays + shimmer reverb, boost, chorus, hall reverb, 4 panel memories |
 | DM-1 Delay Machine | 12-mode modulation delay, tap division, 4 panel memories |
-| CE-1 Chorus Ensemble | chorus / vibrato |
 | RE-1 Space Echo | tape echo + spring reverb, 12-position mode selector |
 | RE-2 Space Echo | RE-1 engine + saturation, guitar / line, new / aged tape, 4 panel memories |
-| OD-2 Hybrid Drive | 12 drive types, 3-band tone, boost, noise gate, 4 panel memories |
-| SL-2 Slicer | rhythmic slicer: 11 patterns, 5 modes, tempo from the knob or the host |
+| MM-1 Analog Delay | analog-style delay, chorus and vibrato, overload lamp |
+| SD-1 Digital Delay | digital delay: time, factor, regeneration, hi-cut, modulation, hold, headroom meter |
+| SD-3 Digital Delay | programmable digital delay: 9 programs, filter, 5 waveforms, level balance |
+
+### Modulation
+
+| Plugin | What it is |
+|---|---|
+| CE-1 Chorus Ensemble | chorus / vibrato |
 | BF-3 Flanger | stereo flanger: manual, res, depth, rate, 3 modes (standard, ultra, gate / pan) |
+| PH-2 Phaser | phaser: rate, depth, res, 2 modes (4 or 8 stages) |
+
+### Drive
+
+| Plugin | What it is |
+|---|---|
+| DS-1 Distortion | stompbox distortion: tone, level, dist |
+| OD-2 Hybrid Drive | 12 drive types, 3-band tone, boost, noise gate, 4 panel memories |
+
+### Dynamics
+
+| Plugin | What it is |
+|---|---|
 | CS-3 Compression Sustainer | compressor / sustainer: level, tone, attack, sustain |
 | LM-2 Limiter | peak limiter: level, tone, release, threshold |
-| PH-2 Phaser | phaser: rate, depth, res, 2 modes (4 or 8 stages) |
+
+### EQ
+
+| Plugin | What it is |
+|---|---|
 | GE-7 Equalizer | graphic equalizer: 7 bands (100 Hz - 6.4 kHz, +-15 dB) and a level fader |
 | EH-2 Enhancer | treble enhancer: mix (inverting), freq, sens |
-| IR-2 Amp & Cabinet | amp and cabinet: 11 amp types, gain, level, bass / middle / treble, ambience |
-| BS-1 Reverb | 12 reverb types (room, hall, plate, spring, swell, bloom, cloud, chorale, shimmer, magneto, nonlinear, reflections) |
-| OC-5 Octave | vintage (monophonic) and poly octave: direct, +1 oct, -1 oct, -2 oct range |
-| DS-1 Distortion | stompbox distortion: tone, level, dist |
-| SD-3 Digital Delay | programmable digital delay: 9 programs, filter, 5 waveforms, level balance |
-| SD-1 Digital Delay | digital delay: time, factor, regeneration, hi-cut, modulation, hold, headroom meter |
-| MM-1 Analog Delay | analog-style delay, chorus and vibrato, overload lamp |
 
+### Amp & Cabinet
+
+| Plugin | What it is |
+|---|---|
+| IR-2 Amp & Cabinet | amp and cabinet: 11 amp types, gain, level, bass / middle / treble, ambience |
+
+### Pitch
+
+| Plugin | What it is |
+|---|---|
+| OC-5 Octave | vintage (monophonic) and poly octave: direct, +1 oct, -1 oct, -2 oct range |
+
+### Reverb
+
+| Plugin | What it is |
+|---|---|
+| BS-1 Reverb | 12 reverb types (room, hall, plate, spring, swell, bloom, cloud, chorale, shimmer, magneto, nonlinear, reflections) |
+
+### Rhythm
+
+| Plugin | What it is |
+|---|---|
+| SL-2 Slicer | rhythmic slicer: 11 patterns, 5 modes, tempo from the knob or the host |
+| TR-8 Drum Machine | instrument: 11 voices or sampled kits, 16-step A/B sequencer, host sync |
+
+### Multi effect
+
+| Plugin | What it is |
+|---|---|
+| DC-1 Multi Effect | chain up to 8 of the pedals: add, remove, reorder and bypass; each pedal keeps its own front panel |
 
 You can find the web page for the project on this [`website`](https://audio-plugins.richardleurs.nl).
 
