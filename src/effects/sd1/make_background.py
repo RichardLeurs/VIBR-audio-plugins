@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
-"""Renders the SD-1 digital delay front panel (2800 x 818) used as the plugin background: rose satin body, six black panels
-(INPUT with the headroom meter frame, DELAY TIME, REGENERATION, MODULATION, OUTPUT, HOLD). Control positions match
+"""Renders the SD-1 digital delay front panel (2520 x 818) used as the plugin background: rose satin body, five black panels
+(INPUT with the headroom meter frame, DELAY TIME, REGENERATION, MODULATION, OUTPUT). Control positions match
 PluginEditor.cpp. Needs numpy + Pillow.  Usage: make_background.py out.png"""
 import math, sys
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-W, H, S = 2800, 818, 2
+W, H, S = 2520, 818, 2
 rng = np.random.default_rng(41)
 BODY = (57, 121, 239)                          # blue #3979EF (palette)
 ACC = BODY                                    # panel titles use the plugin's body colour
@@ -18,7 +18,7 @@ CHROME = [(0, (250, 250, 252)), (0.35, (190, 194, 202)), (0.7, (110, 114, 124)),
 
 # ----- layout (shared with PluginEditor.cpp); same margins and gaps as the DM-1 (see ../style.md) -----
 PT, PB = 268, 680
-P1, P2, P3, P4, P5, P6 = (40, PT, 480, PB), (500, PT, 980, PB), (1000, PT, 1480, PB), (1500, PT, 1980, PB), (2000, PT, 2480, PB), (2500, PT, 2760, PB)
+P1, P2, P3, P4, P5 = (40, PT, 480, PB), (500, PT, 980, PB), (1000, PT, 1480, PB), (1500, PT, 1980, PB), (2000, PT, 2480, PB)
 KR = 60                                       # knob radius
 KY, NAME_Y = 500, 350
 # (x, name, left legend, right legend, a0, a1)
@@ -27,8 +27,7 @@ KNOBS = [(360, "LEVEL", "MIN", "MAX", -154, 154), (635, "TIME", "SHORT", "LONG",
          (1635, "INTENSITY", "MIN", "MAX", -154, 154), (1845, "FREQUENCY", "SLOW", "FAST", -154, 154),
          (2135, "DIRECT", "MIN", "MAX", -154, 154), (2345, "EFFECT", "MIN", "MAX", -154, 154)]
 METER = (94, 356, 36, 262)                   # headroom meter frame (x, y, w, h); the editor draws the four segments
-HOLD_LAMP, HOLD_BTN = (2560, 500), (2680, 500)          # the only control of the HOLD panel, centred in it
-LED = (P6[2] - 35, 87)                        # power slide switch (top right)
+LED = (P5[2] - 35, 87)                        # power slide switch (top right)
 
 FONT = '/System/Library/Fonts/Avenir Next.ttc'
 COND = '/System/Library/Fonts/Avenir Next Condensed.ttc'
@@ -471,9 +470,9 @@ def rrect_grad(x0, y0, x1, y1, r, top, bot):
 
 # ----- title -----
 text(P1[0] + 6, 110, "SD-1", font(140, 9), DARK, 'lm')
-text(P6[2] - 190, 86, "DIGITAL DELAY", font(40, 5), DARK, 'rm', spacing=6)
-text(P6[2] - 190, 134, "DELAY  \u00b7  REGENERATION  \u00b7  MODULATION", font(30, 5), DARK, 'rm', spacing=5)
-line([(P1[0], 208), (P6[2], 208)], DARK, 2, 150)
+text(P5[2] - 190, 86, "DIGITAL DELAY", font(40, 5), DARK, 'rm', spacing=6)
+text(P5[2] - 190, 134, "DIGITAL ECHOES", font(34, 5), DARK, 'rm', spacing=6)
+line([(P1[0], 208), (P5[2], 208)], DARK, 2, 150)
 
 # ----- black panels with a titled outline -----
 def panel(box, title):
@@ -496,7 +495,6 @@ panel(P2, "DELAY TIME")
 panel(P3, "REGENERATION")
 panel(P4, "MODULATION")
 panel(P5, "OUTPUT")
-panel(P6, "HOLD")
 
 # ----- headroom meter frame (the editor draws the lit segments) -----
 mx, my, mw, mh = METER
@@ -535,24 +533,11 @@ for x, name, lo, hi, a0, a1 in KNOBS:
     text(x - 56, KY + 108, lo, font(22, 2), INK, 'mm')
     text(x + 56, KY + 108, hi, font(22, 2), INK, 'mm')
 
-# ----- HOLD panel: a lamp (lit by the editor) and a push button -----
-def led_bezel(lx, ly):
-    shadow(lx, ly, 20, 3, 6, 5, 160)
-    disc(lx, ly, 21, CHROME, (-0.4, -0.5), 1.6)
-    disc(lx, ly, 14, [(0, (20, 20, 22)), (1, (4, 4, 5))], (0, 0), 1.2)
-
-def pushbutton(bx, by, w=96, h=54):
-    m = Image.new('L', (W * S, H * S), 0)
-    ImageDraw.Draw(m).rounded_rectangle([(bx - w / 2 - 6) * S, (by - h / 2 - 2) * S, (bx + w / 2 + 10) * S, (by + h / 2 + 12) * S], radius=14 * S, fill=170)
-    m = m.filter(ImageFilter.GaussianBlur(8 * S)); lay = new(); lay.putalpha(m); comp(lay)
-    rrect_grad(bx - w / 2 - 6, by - h / 2 - 6, bx + w / 2 + 6, by + h / 2 + 6, 16, (236, 238, 244), (92, 96, 106))
-    rrect_grad(bx - w / 2, by - h / 2, bx + w / 2, by + h / 2, 11, (30, 31, 34), (8, 8, 10))
-
-led_bezel(*HOLD_LAMP)
-pushbutton(*HOLD_BTN)
-
 # ----- credit, bottom right (right edge lined up with the panels) -----
-text(P6[2], PB + 70, "Made by Richard Leurs", font(28, 2), DARK, 'rm', spacing=2)
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'common'))
+from vibr_credit import credit
+credit(text, new, comp, S, P5[2], PB + 70, font(28, 2), DARK, 28)
 
 out = img.convert('RGB').resize((W, H), Image.LANCZOS)
 arr = np.asarray(out, np.float32) + rng.normal(0, 1.3, (H, W, 1)).astype(np.float32)

@@ -4,10 +4,10 @@
 
 namespace
 {
-// Positions are in the 2800 x 818 coordinates of the rendered background (make_background.py). The editor is resizable at a
+// Positions are in the 2520 x 818 coordinates of the rendered background (make_background.py). The editor is resizable at a
 // fixed aspect ratio; paint() scales image pixels to the window.
-constexpr float kImgW = 2800.0f, kImgH = 818.0f;
-constexpr int kBaseW = 1400;
+constexpr float kImgW = 2520.0f, kImgH = 818.0f;
+constexpr int kBaseW = 1260;
 
 constexpr float kKnobRadius = 60.0f;                       // black knob; the printed scale sits outside it
 constexpr float kPad = 3.0f;
@@ -20,8 +20,7 @@ const KnobSpec kKnobs[9] = {
     { "modFrequency", 1845.0f, -154.0f, 154.0f }, { "direct",     2135.0f, -154.0f, 154.0f },
     { "effect",      2345.0f, -154.0f, 154.0f } };
 
-const juce::Point<float> kLed { 2725.0f, 87.0f };          // power slide switch (top right, ball left = off) = the `power` parameter
-const juce::Point<float> kHoldLamp { 2560.0f, 500.0f }, kHoldButton { 2680.0f, 500.0f };
+const juce::Point<float> kLed { 2445.0f, 87.0f };          // power slide switch (top right, ball left = off) = the `power` parameter
 const juce::Rectangle<float> kMeter { 94.0f, 356.0f, 36.0f, 262.0f };      // headroom meter frame
 
 juce::Point<float> polar (juce::Point<float> c, float r, float a)
@@ -117,7 +116,7 @@ SDD1000AudioProcessorEditor::SDD1000AudioProcessorEditor (SDD1000AudioProcessor&
     }
 
     constrainer.setFixedAspectRatio ((double) kImgW / (double) kImgH);
-    constrainer.setSizeLimits (700, 205, 2800, 818);
+    constrainer.setSizeLimits (630, 205, 2520, 818);
     setConstrainer (&constrainer);
     setResizable (true, true);
     setSize (kBaseW, (int) std::round ((float) kBaseW * kImgH / kImgW));
@@ -136,7 +135,7 @@ void SDD1000AudioProcessorEditor::resized()
 
 void SDD1000AudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 {
-    // power slide switch (top right) = power, and the HOLD push button toggles the hold parameter
+    // power slide switch (top right) = power
     const float S = (float) getWidth() / kImgW;
     const auto toggle = [this] (const char* id)
     {
@@ -146,19 +145,17 @@ void SDD1000AudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
         prm->endChangeGesture();
     };
     if (juce::Rectangle<float> (110.0f * S, 70.0f * S).withCentre (kLed * S).contains (e.position)) toggle ("power");
-    else if (juce::Rectangle<float> (130.0f * S, 80.0f * S).withCentre (kHoldButton * S).contains (e.position)) toggle ("hold");
 }
 
 void SDD1000AudioProcessorEditor::timerCallback()
 {
     const float db = juce::Decibels::gainToDecibels (proc.meterLevel.load(), -60.0f);
     meterDb += (db - meterDb) * 0.5f;
-    const bool hold = proc.apvts.getRawParameterValue ("hold")->load() > 0.5f;
     const bool pwr = proc.apvts.getRawParameterValue ("power")->load() > 0.5f;
     const int segs = (meterDb >= -20.0f) + (meterDb >= -10.0f) + (meterDb >= 0.0f) + (meterDb >= 6.0f);
-    if (segs != lastSegs || hold != lastHold || pwr != lastPower)
+    if (segs != lastSegs || pwr != lastPower)
     {
-        lastSegs = segs; lastHold = hold; lastPower = pwr;
+        lastSegs = segs; lastPower = pwr;
         repaint();
     }
 }
@@ -188,9 +185,6 @@ void SDD1000AudioProcessorEditor::paint (juce::Graphics& g)
             }
         }
     }
-
-    // ---- HOLD lamp
-    drawLamp (g, kHoldLamp, proc.apvts.getRawParameterValue ("hold")->load() > 0.5f, juce::Colour (0xffff2a1a));
 
     // ---- power slide switch: chrome ball left = off, right = on; the slot lights up green when on
     const bool on = proc.apvts.getRawParameterValue ("power")->load() > 0.5f;

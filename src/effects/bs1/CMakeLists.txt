@@ -7,7 +7,8 @@ juce_add_binary_data(BS1Assets
 )
 
 juce_add_plugin(BS-1
-  COMPANY_NAME "Richard Leurs"
+  COMPANY_NAME "VIBR"
+  ICON_BIG "${RL_ICON}"
   BUNDLE_ID com.richardleurs.bs1
   IS_SYNTH FALSE
   NEEDS_MIDI_INPUT FALSE

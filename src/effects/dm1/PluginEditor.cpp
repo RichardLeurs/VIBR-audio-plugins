@@ -33,34 +33,14 @@ juce::Point<float> polar (juce::Point<float> c, float r, float a)
     return { c.x + r * std::sin (a), c.y - r * std::cos (a) };
 }
 
-// strip LED: chrome bezel, dark well, lamp (red when on; green for the memory strip)
+// strip LED (flat, see style.md "Flat style"): a plain disc inside the dark grey ring painted in the background; red when on (green for the
+// memory strip), a dark shade of the same colour when off; no glow, no highlight
 void drawStripLed (juce::Graphics& g, juce::Point<float> d, bool on, bool green = false)
 {
     const auto c = at (d.x, d.y);
-    const auto circle = [&] (float r) { return juce::Rectangle<float> (r * 2.0f * S, r * 2.0f * S).withCentre (c); };
-
-    g.setColour (juce::Colours::black.withAlpha (0.5f));
-    g.fillEllipse (circle (21.0f).translated (1.5f, 3.0f));
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xfffafafc), c.x - 14.0f * S, c.y - 16.0f * S,
-                                             juce::Colour (0xff3c3e46), c.x + 14.0f * S, c.y + 16.0f * S, false));
-    g.fillEllipse (circle (21.0f));
-    g.setColour (juce::Colour (0xff060607));
-    g.fillEllipse (circle (14.0f));
-    if (on)
-    {
-        g.setColour (green ? juce::Colour (0x6640d070) : juce::Colour (0x66ff2a1a));
-        g.fillEllipse (circle (22.0f));
-        g.setGradientFill (juce::ColourGradient (green ? juce::Colour (0xffc8ffd8) : juce::Colour (0xffffa090), c.x - 4.0f * S, c.y - 5.0f * S,
-                                                 green ? juce::Colour (0xff1ea84a) : juce::Colour (0xffd01410), c.x + 6.0f * S, c.y + 7.0f * S, true));
-    }
-    else
-    {
-        g.setGradientFill (juce::ColourGradient (juce::Colour (0xff4a4c4e), c.x - 4.0f * S, c.y - 5.0f * S,
-                                                 juce::Colour (0xff161718), c.x + 6.0f * S, c.y + 7.0f * S, true));
-    }
-    g.fillEllipse (circle (11.0f));
-    g.setColour (juce::Colours::white.withAlpha (on ? 0.55f : 0.2f));
-    g.fillEllipse (juce::Rectangle<float> (7.0f * S, 5.0f * S).withCentre (c.translated (-3.0f * S, -4.5f * S)));
+    const juce::Colour lit = green ? juce::Colour (0xff40d070) : juce::Colour (0xffe5432c);
+    g.setColour (on ? lit : lit.interpolatedWith (juce::Colour (0xff0c0d0f), 0.78f));
+    g.fillEllipse (juce::Rectangle<float> (22.0f * S, 22.0f * S).withCentre (c));
 }
 
 // power slide switch: chrome ball left = off, right = on; it is also the bypass switch
@@ -88,22 +68,13 @@ void drawPowerLed (juce::Graphics& g, bool on)
     g.fillEllipse (circle (14.0f));
 }
 
-// the TAP pad is its own light: a small rectangular pad with a faint red glow on the beat and when tapped
+// the TAP pad is its own light (flat, see style.md "Flat style"): a flat pad inside the ring of the background, bright red on the beat and
+// when tapped, dark red otherwise
 void drawTapPad (juce::Graphics& g, bool lit)
 {
-    const auto pad = juce::Rectangle<float> (88.0f * S, 52.0f * S).withCentre (at (kTapPad.x, kTapPad.y));
-    if (lit)
-    {
-        g.setColour (juce::Colour (0xffff3a24).withAlpha (0.07f));
-        g.fillRoundedRectangle (pad.expanded (16.0f * S), 22.0f * S);
-        g.setColour (juce::Colour (0xffff3a24).withAlpha (0.09f));
-        g.fillRoundedRectangle (pad.expanded (8.0f * S), 15.0f * S);
-    }
-    g.setGradientFill (juce::ColourGradient (lit ? juce::Colour (0xffd8503a) : juce::Colour (0xff3a1411), pad.getX(), pad.getY(),
-                                             lit ? juce::Colour (0xff8a1c12) : juce::Colour (0xff150605), pad.getX(), pad.getBottom(), false));
-    g.fillRoundedRectangle (pad, 9.0f * S);
-    g.setColour (juce::Colours::white.withAlpha (lit ? 0.22f : 0.07f));
-    g.fillRoundedRectangle (pad.withHeight (pad.getHeight() * 0.38f).reduced (5.0f * S, 3.0f * S), 6.0f * S);
+    const auto pad = juce::Rectangle<float> (104.0f * S, 50.0f * S).withCentre (at (kTapPad.x, kTapPad.y));
+    g.setColour (lit ? juce::Colour (0xffe5432c) : juce::Colour (0xff3a1411));
+    g.fillRoundedRectangle (pad, 8.0f * S);
 }
 } // namespace
 
@@ -184,6 +155,19 @@ DM1AudioProcessorEditor::DM1AudioProcessorEditor (DM1AudioProcessor& p)
     memoryZone.onDown    = [this] { memHeld = true; memWritten = false; memDownAt = juce::Time::getMillisecondCounter(); };
     memoryZone.onUp      = [this] { memHeld = false; };
     memoryZone.onClick   = [this] { if (! memWritten) memory.stepNext(); repaint(); };      // short press
+    for (int i = 0; i < 5; ++i)      // clicking a lamp selects it: a memory slot (MANUAL, 1-4) or a tap division
+    {
+        memLedZone[i].onClick = [this, i] { memory.select (i); repaint(); };
+        divLedZone[i].onClick = [this, i]
+        {
+            auto* prm = proc.apvts.getParameter ("tapDivision");
+            prm->beginChangeGesture();
+            prm->setValueNotifyingHost (prm->convertTo0to1 ((float) (i + 1)));
+            prm->endChangeGesture();
+        };
+        addAndMakeVisible (memLedZone[i]);
+        addAndMakeVisible (divLedZone[i]);
+    }
     for (auto* z : { &powerZone, &tapZone, &divisionZone, &memoryZone })
         addAndMakeVisible (z);
 
@@ -240,6 +224,11 @@ void DM1AudioProcessorEditor::resized()
     tapZone.setBounds (sq (kTapPad, 112.0f, 72.0f));
     divisionZone.setBounds (sq (kDivisionButton, 140.0f, 80.0f));
     memoryZone.setBounds (sq (kMemoryButton, 140.0f, 80.0f));
+    for (int i = 0; i < 5; ++i)
+    {
+        memLedZone[i].setBounds (sq ({ kMemLedX[i], kStripLedY }, 50.0f, 50.0f));
+        divLedZone[i].setBounds (sq ({ kDivisionLedX[i], kStripLedY }, 50.0f, 50.0f));
+    }
 }
 
 void DM1AudioProcessorEditor::timerCallback()

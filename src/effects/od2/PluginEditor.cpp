@@ -33,22 +33,12 @@ juce::Point<float> polar (juce::Point<float> c, float r, float a)
     return { c.x + r * std::sin (a), c.y - r * std::cos (a) };
 }
 
-// lamp sitting in a chrome bezel that is painted in the background (image pixels)
+// lamp (flat, see style.md "Flat style"): a plain 22 px disc inside the dark grey ring painted in the background, the colour when on, a dark
+// shade of it when off; no glow, no highlight
 void drawLamp (juce::Graphics& g, juce::Point<float> c, bool on, juce::Colour colour)
 {
-    const auto circle = [&] (float r) { return juce::Rectangle<float> (r * 2.0f, r * 2.0f).withCentre (c); };
-    if (on)
-    {
-        g.setColour (colour.withAlpha (0.20f));
-        g.fillEllipse (circle (32.0f));
-        g.setColour (colour.withAlpha (0.25f));
-        g.fillEllipse (circle (21.0f));
-    }
-    g.setGradientFill (juce::ColourGradient (on ? colour.brighter (0.8f) : colour.darker (1.8f), c.x - 5.0f, c.y - 7.0f,
-                                             on ? colour.darker (0.2f) : colour.darker (3.0f), c.x + 8.0f, c.y + 10.0f, true));
-    g.fillEllipse (circle (11.5f));
-    g.setColour (juce::Colours::white.withAlpha (on ? 0.55f : 0.18f));
-    g.fillEllipse (juce::Rectangle<float> (6.0f, 4.0f).withCentre (c.translated (-4.0f, -6.0f)));
+    g.setColour (on ? colour : colour.interpolatedWith (juce::Colour (0xff0c0d0f), 0.78f));
+    g.fillEllipse (juce::Rectangle<float> (22.0f, 22.0f).withCentre (c));
 }
 
 void drawBall (juce::Graphics& g, juce::Point<float> c)
@@ -141,6 +131,13 @@ OD2AudioProcessorEditor::OD2AudioProcessorEditor (OD2AudioProcessor& p)
     memoryZone.onDown = [this] { memHeld = true; memWritten = false; memDownAt = juce::Time::getMillisecondCounter(); };
     memoryZone.onUp = [this] { memHeld = false; };
     memoryZone.onClick = [this] { if (! memWritten) memory.stepNext(); repaint(); };      // short press
+    for (int i = 0; i < 5; ++i)      // clicking a lamp selects it: the parameter the PARAM knob edits, or a memory slot (MAN, 1-4)
+    {
+        paramLedZone[i].onClick = [this, i] { selectSlot (i); };
+        memLedZone[i].onClick   = [this, i] { memory.select (i); repaint(); };
+        addAndMakeVisible (paramLedZone[i]);
+        addAndMakeVisible (memLedZone[i]);
+    }
     addAndMakeVisible (paramZone);
     addAndMakeVisible (memoryZone);
 
@@ -174,6 +171,11 @@ void OD2AudioProcessorEditor::resized()
     place (low, kLow); place (middle, kMiddle); place (high, kHigh);
     paramZone.setBounds (juce::Rectangle<float> (140.0f * S, 80.0f * S).withCentre (kParamButton * S).toNearestInt());
     memoryZone.setBounds (juce::Rectangle<float> (140.0f * S, 80.0f * S).withCentre (kMemoryButton * S).toNearestInt());
+    for (int i = 0; i < 5; ++i)
+    {
+        paramLedZone[i].setBounds (juce::Rectangle<float> (50.0f * S, 50.0f * S).withCentre (juce::Point<float> (kParamLedX[i], kLedY) * S).toNearestInt());
+        memLedZone[i].setBounds   (juce::Rectangle<float> (50.0f * S, 50.0f * S).withCentre (juce::Point<float> (kMemLedX[i], kLedY) * S).toNearestInt());
+    }
 }
 
 void OD2AudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
@@ -240,7 +242,7 @@ void OD2AudioProcessorEditor::paint (juce::Graphics& g)
 
     // PARAM lamps (which parameter the PARAM knob edits) and the memory lamps
     for (int i = 0; i < 5; ++i)
-        drawLamp (g, { kParamLedX[i], kLedY }, slot == i, juce::Colour (0xffff2a1a));
+        drawLamp (g, { kParamLedX[i], kLedY }, slot == i, juce::Colour (0xffe5432c));
     const auto t = juce::Time::getMillisecondCounter();
     const bool memFlashing = t < memFlashUntil;
     const bool blinkOff = t < memFlashUntil && ((t / 100) % 2) == 1;

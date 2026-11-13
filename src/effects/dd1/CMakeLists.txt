@@ -3,11 +3,13 @@ juce_add_binary_data(DD1Assets
   HEADER_NAME DD1Data.h
   NAMESPACE DD1Data
   SOURCES
-    assets/background.png
+    assets/background.png      # tab DELAY
+    assets/background2.png     # tab EFFECTS
 )
 
 juce_add_plugin(DD-1
-  COMPANY_NAME "Richard Leurs"
+  COMPANY_NAME "VIBR"
+  ICON_BIG "${RL_ICON}"
   BUNDLE_ID com.richardleurs.dd1
   IS_SYNTH FALSE
   NEEDS_MIDI_INPUT FALSE

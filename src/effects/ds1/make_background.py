@@ -177,8 +177,8 @@ def rrect_grad(x0, y0, x1, y1, r, top, bot):
 
 # ----- title -----
 text(P1[0] + 6, 110, "DS-1", font(140, 9), DARK, 'lm')
-text(P3[2] - 190, 86, "STOMPBOX DISTORTION", font(40, 5), DARK, 'rm', spacing=6)
-text(P3[2] - 190, 134, "TONE  \u00b7  LEVEL  \u00b7  DIST", font(34, 5), DARK, 'rm', spacing=6)
+text(P3[2] - 190, 86, "DISTORTION", font(40, 5), DARK, 'rm', spacing=6)
+text(P3[2] - 190, 134, "SONIC GRIT", font(34, 5), DARK, 'rm', spacing=6)
 line([(P1[0], 208), (P3[2], 208)], DARK, 2, 150)
 
 # ----- black panels with a titled outline -----
@@ -230,7 +230,10 @@ for x, name in KNOBS:
     text(x + 80, KY + 160, "MAX", font(28, 2), INK, spacing=1)
 
 # ----- credit, bottom right (right edge lined up with the panels) -----
-text(P3[2], PB + 70, "Made by Richard Leurs", font(28, 2), DARK, 'rm', spacing=2)
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'common'))
+from vibr_credit import credit
+credit(text, new, comp, S, P3[2], PB + 70, font(28, 2), DARK, 28)
 
 out = img.convert('RGB').resize((W, H), Image.LANCZOS)
 arr = np.asarray(out, np.float32) + rng.normal(0, 1.3, (H, W, 1)).astype(np.float32)

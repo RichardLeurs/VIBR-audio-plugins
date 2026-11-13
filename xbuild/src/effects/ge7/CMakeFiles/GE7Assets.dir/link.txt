@@ -1,0 +1,2 @@
+/usr/bin/ar qc libGE7Assets.a CMakeFiles/GE7Assets.dir/juce_binarydata_GE7Assets/JuceLibraryCode/BinaryData1.cpp.o
+/usr/bin/ranlib libGE7Assets.a

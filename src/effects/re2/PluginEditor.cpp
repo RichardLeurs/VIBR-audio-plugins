@@ -32,22 +32,12 @@ juce::Point<float> polar (juce::Point<float> c, float r, float a)
     return { c.x + r * std::sin (a), c.y - r * std::cos (a) };
 }
 
-// lamp sitting in a chrome bezel that is painted in the background (image pixels)
-void drawLamp (juce::Graphics& g, juce::Point<float> c, bool on, juce::Colour colour = juce::Colour (0xffff2a1a))
+// lamp (flat, see style.md "Flat style"): a plain disc inside the dark grey ring painted in the background; the colour when on (red by default,
+// green for the memory strip), a dark shade of it when off; no glow, no highlight
+void drawLamp (juce::Graphics& g, juce::Point<float> c, bool on, juce::Colour colour = juce::Colour (0xffe5432c))
 {
-    const auto circle = [&] (float r) { return juce::Rectangle<float> (r * 2.0f, r * 2.0f).withCentre (c); };
-    if (on)
-    {
-        g.setColour (colour.withAlpha (0.20f));
-        g.fillEllipse (circle (32.0f));
-        g.setColour (colour.withAlpha (0.25f));
-        g.fillEllipse (circle (21.0f));
-    }
-    g.setGradientFill (juce::ColourGradient (on ? colour.brighter (0.8f) : colour.darker (1.8f), c.x - 5.0f, c.y - 7.0f,
-                                             on ? colour.darker (0.2f) : colour.darker (3.0f), c.x + 8.0f, c.y + 10.0f, true));
-    g.fillEllipse (circle (11.5f));
-    g.setColour (juce::Colours::white.withAlpha (on ? 0.55f : 0.18f));
-    g.fillEllipse (juce::Rectangle<float> (6.0f, 4.0f).withCentre (c.translated (-4.0f, -6.0f)));
+    g.setColour (on ? colour : colour.interpolatedWith (juce::Colour (0xff0c0d0f), 0.78f));
+    g.fillEllipse (juce::Rectangle<float> (22.0f, 22.0f).withCentre (c));
 }
 } // namespace
 
@@ -129,6 +119,18 @@ RE2AudioProcessorEditor::RE2AudioProcessorEditor (RE2AudioProcessor& p)
     memoryZone.onUp    = [this] { memHeld = false; };
     memoryZone.onClick = [this] { if (! memWritten) memory.stepNext(); repaint(); };      // short press
     addAndMakeVisible (memoryZone);
+    for (int i = 0; i < 5; ++i)      // clicking a lamp selects it: a memory slot (MANUAL, 1-4), GUITAR / LINE, NEW / AGED
+    {
+        memLedZone[i].onClick = [this, i] { memory.select (i); repaint(); };
+        addAndMakeVisible (memLedZone[i]);
+    }
+    for (int i = 0; i < 2; ++i)
+    {
+        inputLedZone[i].onClick = [this, i] { inputSwitch.setToggleState (i == 1, juce::sendNotificationSync); repaint(); };      // GUITAR = off, LINE = on
+        tapeLedZone[i].onClick  = [this, i] { tapeSwitch.setToggleState  (i == 1, juce::sendNotificationSync); repaint(); };      // NEW = off, AGED = on
+        addAndMakeVisible (inputLedZone[i]);
+        addAndMakeVisible (tapeLedZone[i]);
+    }
 
     setSize (kW, kH);
     timerCallback();      // initial LED state
@@ -179,6 +181,10 @@ void RE2AudioProcessorEditor::resized()
     inputSwitch.setBounds (buttonSize.withCentre (img (kInputButton.x, kInputButton.y)).toNearestInt());
     tapeSwitch.setBounds  (buttonSize.withCentre (img (kTapeButton.x, kTapeButton.y)).toNearestInt());
     memoryZone.setBounds (buttonSize.withCentre (img (kMemoryButton.x, kMemoryButton.y)).toNearestInt());
+    const auto lampZone = [] (juce::Point<float> d) { return juce::Rectangle<float> (50.0f * S, 50.0f * S).withCentre (img (d.x, d.y)).toNearestInt(); };
+    for (int i = 0; i < 5; ++i) memLedZone[i].setBounds (lampZone ({ kMemLedX[i], kMemoryLed0.y }));
+    inputLedZone[0].setBounds (lampZone (kGuitarLed)); inputLedZone[1].setBounds (lampZone (kLineLed));
+    tapeLedZone[0].setBounds  (lampZone (kNewLed));    tapeLedZone[1].setBounds  (lampZone (kAgedLed));
     powerSwitch.setBounds (juce::Rectangle<float> (110.0f * S, 70.0f * S).withCentre (img (kPowerSwitch.x, kPowerSwitch.y)).toNearestInt());
 }
 

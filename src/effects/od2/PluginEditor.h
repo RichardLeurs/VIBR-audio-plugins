@@ -44,6 +44,7 @@ private:
     juce::Image background;
     Knob type, param, level, drive, low, middle, high;
     ClickZone paramZone, memoryZone;
+    ClickZone paramLedZone[5], memLedZone[5];       // click a lamp to select it
 
     int slot = 0;                                  // what the PARAM knob edits: TYPE param, POST, PRE, DECAY, THRESH
     bool lastOn = true, lastBoost = false, valueShown = false, memHeld = false, memWritten = false, memFlashShown = false;

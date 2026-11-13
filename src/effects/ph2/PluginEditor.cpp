@@ -13,9 +13,9 @@ constexpr float kKnobRadius = 100.0f;                      // black knob; the pr
 constexpr float kPad = 3.0f;
 constexpr float kKnobY = 532.0f;
 struct KnobSpec { const char* id; float x; float startDeg, endDeg; };
-const KnobSpec kRate { "rate", 195.0f, -154.0f, 154.0f }, kDepth { "depth", 505.0f, -154.0f, 154.0f },
-               kRes { "res", 990.0f, -154.0f, 154.0f },
-               kMode { "mode", 1560.0f, -40.0f, 40.0f };        // 2 positions: I, II
+const KnobSpec kRate { "rate", 310.0f, -154.0f, 154.0f }, kDepth { "depth", 690.0f, -154.0f, 154.0f },
+               kRes { "res", 1180.0f, -154.0f, 154.0f },
+               kMode { "mode", 1600.0f, -40.0f, 40.0f };        // 2 positions: I, II
 
 const juce::Point<float> kLed { 1765.0f, 87.0f };          // power slide switch (top right, ball left = off) = bypass
 
@@ -95,6 +95,7 @@ PH2AudioProcessorEditor::PH2AudioProcessorEditor (PH2AudioProcessor& p)
     add (depth, kDepth);
     add (rate, kRate);
     add (mode, kMode);
+    mode.slider.setMouseDragSensitivity (40);      // only 2 positions: a short drag flips I / II
 
     constrainer.setFixedAspectRatio ((double) kImgW / (double) kImgH);
     constrainer.setSizeLimits (460, 222, 1840, 890);

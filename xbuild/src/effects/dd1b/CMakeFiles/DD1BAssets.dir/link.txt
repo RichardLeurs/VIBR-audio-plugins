@@ -1,0 +1,2 @@
+/usr/bin/ar qc libDD1BAssets.a CMakeFiles/DD1BAssets.dir/juce_binarydata_DD1BAssets/JuceLibraryCode/BinaryData1.cpp.o CMakeFiles/DD1BAssets.dir/juce_binarydata_DD1BAssets/JuceLibraryCode/BinaryData2.cpp.o
+/usr/bin/ranlib libDD1BAssets.a

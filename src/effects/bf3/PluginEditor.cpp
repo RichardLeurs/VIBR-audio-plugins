@@ -9,13 +9,13 @@ namespace
 constexpr float kImgW = 1840.0f, kImgH = 890.0f;
 constexpr int kBaseW = 920;
 
-constexpr float kKnobRadius = 100.0f;                      // black knob; the printed scale sits outside it
+constexpr float kKnobRadius = 78.0f;                       // black knob; the printed scale sits outside it
 constexpr float kPad = 3.0f;
 constexpr float kKnobY = 532.0f;
 struct KnobSpec { const char* id; float x; float startDeg, endDeg; };
-const KnobSpec kManual { "manual", 195.0f, -154.0f, 154.0f }, kRes { "res", 505.0f, -154.0f, 154.0f },
-               kDepth { "depth", 815.0f, -154.0f, 154.0f }, kRate { "rate", 1125.0f, -154.0f, 154.0f },
-               kMode { "mode", 1560.0f, -55.0f, 55.0f };        // 3 positions: GATE / PAN, STANDARD, ULTRA
+const KnobSpec kManual { "manual", 192.0f, -154.0f, 154.0f }, kRes { "res", 478.0f, -154.0f, 154.0f },
+               kDepth { "depth", 802.0f, -154.0f, 154.0f }, kRate { "rate", 1088.0f, -154.0f, 154.0f },
+               kMode { "mode", 1530.0f, -55.0f, 55.0f };        // 3 positions: GATE / PAN, STANDARD, ULTRA
 
 const juce::Point<float> kLed { 1765.0f, 87.0f };          // power slide switch (top right, ball left = off) = bypass
 

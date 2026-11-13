@@ -28,6 +28,8 @@ private:
     void timerCallback() override;
     void toggleParam (const char* id);
     void tap();
+    void setTab (int newTab);
+    void updateTabVisibility();
     // void stepPreset (int dir);        // presets panel replaced by the memory panel
     // void showPresetMenu();
 
@@ -37,12 +39,14 @@ private:
         std::unique_ptr<juce::SliderParameterAttachment> attachment;
         juce::Point<float> centre;
         float radius = 40.0f;
+        int tab = 0;               // 0 = DELAY, 1 = EFFECTS
     };
 
     DD1AudioProcessor& proc;
     DD1LookAndFeel laf;
     juce::ComponentBoundsConstrainer constrainer;
-    juce::Image background;
+    juce::Image background[2];           // one background per tab
+    int tab = 0;
     std::vector<std::unique_ptr<Knob>> knobs;
     bool lastOn = true, lastSeries = false;
     int lastPing = 0;

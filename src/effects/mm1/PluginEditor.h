@@ -36,8 +36,7 @@ private:
     juce::ComponentBoundsConstrainer constrainer;
     juce::Image background;
     Knob knobs[6];
-    bool lastOn = true, overloadLit = false;
-    int overloadHold = 0;
+    bool lastOn = true;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MemoryManAudioProcessorEditor)
 };

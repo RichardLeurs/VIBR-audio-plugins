@@ -177,6 +177,7 @@ void RE2AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
         const float gRev = revGain.getNextValue();
         const float gFb = fbGain.getNextValue();
         const float gPower = powerMix.getNextValue();
+        const float dryComp = 1.0f / juce::jmax (gIn, 0.05f);   // undoes the input gain (0.75 instrument / 0.37 line) on the dry path
         for (int h = 0; h < 3; ++h)
             headGain[h] += (((mode.headMask >> h) & 1) - headGain[h]) * modeCoef;
         revSend += (revSendTarget - revSend) * modeCoef;
@@ -211,7 +212,7 @@ void RE2AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
             float wet = tap * gEcho + rev * gRev;
             wet = ch.treble.processSample (ch.bass.processSample (wet));
 
-            const float out = x + wet;
+            const float out = x * dryComp + wet;       // dry path at unity for small signals, so ON matches bypass level
             const float y = raw + (out - raw) * gPower;   // power switch = bypass (smoothed)
             data[c][n] = y;
             peakOut = juce::jmax (peakOut, std::abs (y));

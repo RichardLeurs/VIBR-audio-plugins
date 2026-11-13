@@ -7,7 +7,8 @@ juce_add_binary_data(OC5Assets
 )
 
 juce_add_plugin(OC-5
-  COMPANY_NAME "Richard Leurs"
+  COMPANY_NAME "VIBR"
+  ICON_BIG "${RL_ICON}"
   BUNDLE_ID com.richardleurs.oc5
   IS_SYNTH FALSE
   NEEDS_MIDI_INPUT FALSE

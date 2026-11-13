@@ -44,6 +44,7 @@ private:
 
     Knob modRate, modDepth, variation, delayTime, intensity, delayVolume, mode;
     ClickZone powerZone, tapZone, divisionZone, memoryZone;
+    ClickZone memLedZone[5], divLedZone[5];       // click a lamp to select it (memory slot / tap division)
 
     // MEMORY: short press steps MANUAL / 1-4, holding it writes the knobs into the selected slot
     ParamMemory memory { proc.apvts, { "power" } };

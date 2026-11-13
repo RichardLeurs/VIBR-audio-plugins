@@ -1,0 +1,2 @@
+/usr/bin/ar qc libTR2Assets.a CMakeFiles/TR2Assets.dir/juce_binarydata_TR2Assets/JuceLibraryCode/BinaryData1.cpp.o
+/usr/bin/ranlib libTR2Assets.a

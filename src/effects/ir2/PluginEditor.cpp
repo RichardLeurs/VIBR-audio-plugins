@@ -17,7 +17,6 @@ const KnobSpec kBass { "bass", 900.0f, -154.0f, 154.0f }, kMiddle { "middle", 11
                kGain { "gain", 1810.0f, -154.0f, 154.0f }, kLevel { "level", 2080.0f, -154.0f, 154.0f }, kAmbience { "ambience", 2350.0f, -154.0f, 154.0f };
 constexpr float kTypeX = 370.0f;                           // amp type selector (11 positions, 30 degrees apart, -150 .. +150)
 
-const juce::Point<float> kCheck { 560.0f, 87.0f };         // CHECK lamp (red, lit when the effect is on)
 const juce::Point<float> kLed { 2485.0f, 87.0f };          // power slide switch (top right, ball left = off) = bypass
 
 juce::Point<float> polar (juce::Point<float> c, float r, float a)
@@ -173,26 +172,6 @@ void IR2AudioProcessorEditor::paint (juce::Graphics& g)
         g.fillRoundedRectangle (slot, 17.0f);
         g.setColour (juce::Colours::white.withAlpha (0.10f));
         g.fillRoundedRectangle (slot.withHeight (slot.getHeight() * 0.40f).reduced (8.0f, 3.0f), 6.0f);
-    }
-    // CHECK lamp: red, lit while the effect is on
-    {
-        const auto lamp = [&] (float r) { return juce::Rectangle<float> (r * 2.0f, r * 2.0f).withCentre (kCheck); };
-        g.setColour (juce::Colours::black.withAlpha (0.8f));
-        g.fillEllipse (lamp (17.0f));
-        g.setColour (juce::Colour (0xff808590).withAlpha (0.5f));
-        g.drawEllipse (lamp (17.0f), 2.0f);
-        if (on)
-        {
-            g.setColour (juce::Colour (0xffff2a1c).withAlpha (0.10f)); g.fillEllipse (lamp (34.0f));
-            g.setColour (juce::Colour (0xffff2a1c).withAlpha (0.18f)); g.fillEllipse (lamp (25.0f));
-            g.setGradientFill (juce::ColourGradient (juce::Colour (0xffffb0a0), kCheck.x - 4.0f, kCheck.y - 5.0f,
-                                                     juce::Colour (0xffd8160c), kCheck.x + 6.0f, kCheck.y + 8.0f, true));
-            g.fillEllipse (lamp (12.5f));
-        }
-        else
-        {
-            g.setColour (juce::Colour (0xff4a1612)); g.fillEllipse (lamp (12.5f));
-        }
     }
     const juce::Point<float> c (kLed.x + (on ? 17.0f : -17.0f), kLed.y);
     const auto circle = [&] (float r) { return juce::Rectangle<float> (r * 2.0f, r * 2.0f).withCentre (c); };

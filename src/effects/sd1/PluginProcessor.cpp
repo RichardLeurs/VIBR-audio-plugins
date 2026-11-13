@@ -28,7 +28,6 @@ juce::AudioProcessorValueTreeState::ParameterLayout SDD1000AudioProcessor::creat
     knob ("modFrequency",  "Modulation Frequency", 3.0f);
     knob ("direct",        "Direct",               7.0f);
     knob ("effect",        "Effect",               5.0f);
-    l.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "hold", 1 },   "Hold",   false));
     l.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "bypass", 1 }, "Bypass", false));
     l.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "power", 1 },  "Power",  true));
     return l;
@@ -49,7 +48,6 @@ SDD1000AudioProcessor::SDD1000AudioProcessor()
     pModFreq  = apvts.getRawParameterValue ("modFrequency");
     pDirect   = apvts.getRawParameterValue ("direct");
     pEffect   = apvts.getRawParameterValue ("effect");
-    pHold     = apvts.getRawParameterValue ("hold");
     pBypass   = apvts.getRawParameterValue ("bypass");
     pPower    = apvts.getRawParameterValue ("power");
 }
@@ -70,7 +68,7 @@ void SDD1000AudioProcessor::prepareToPlay (double sampleRate, int)
     for (auto& c : channels) c.reset();
 
     auto init = [this] (juce::SmoothedValue<float>& s, double seconds, float v) { s.reset (sr, seconds); s.setCurrentAndTargetValue (v); };
-    init (sDelayMs, 0.10, 500.0f);  init (sFeedback, 0.03, 0.0f);   init (sHoldIn, 0.03, 1.0f);
+    init (sDelayMs, 0.10, 500.0f);  init (sFeedback, 0.03, 0.0f);
     init (sInGain, 0.03, 1.0f);     init (sDirect, 0.03, 0.6f);     init (sEffect, 0.03, 0.5f);
     init (sActive, 0.02, 1.0f);     init (sModInt, 0.05, 0.0f);     init (sModRate, 0.08, 1.0f);
     init (sCutHz, 0.05, 8000.0f);
@@ -86,13 +84,11 @@ void SDD1000AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     for (int c = numCh; c < buffer.getNumChannels(); ++c)
         buffer.clear (c, 0, numSamples);
 
-    const bool hold = *pHold > 0.5f;
     const float timeMs = sdd1000::timeKnobToMs (*pTime) * 0.25f * std::pow (4.0f, knob01 (*pFactor));   // Factor x0.25 .. x1
     const float fbKnob = (*pFeedback - 5.0f) / 5.0f;                                                    // -1 .. +1
 
     sDelayMs.setTargetValue (juce::jlimit (3.0f, 2048.0f, timeMs));
-    sFeedback.setTargetValue (hold ? 0.9995f : fbKnob * 1.02f);   // HOLD freezes the loop; >1 near the ends self-oscillates (bounded by tanh)
-    sHoldIn.setTargetValue (hold ? 0.0f : 1.0f);                  // ... and stops new input entering it
+    sFeedback.setTargetValue (fbKnob * 1.02f);                    // >1 near the ends self-oscillates (bounded by tanh)
     sInGain.setTargetValue (*pLevel / 5.0f);
     sDirect.setTargetValue (std::pow (knob01 (*pDirect), 1.6f) * 1.1f);
     sEffect.setTargetValue (std::pow (knob01 (*pEffect), 1.4f) * 1.3f);
@@ -105,7 +101,7 @@ void SDD1000AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     auto* data = buffer.getArrayOfWritePointers();
     for (int n = 0; n < numSamples; ++n)
     {
-        const float delayMs = sDelayMs.getNextValue(), fb = sFeedback.getNextValue(), holdIn = sHoldIn.getNextValue();
+        const float delayMs = sDelayMs.getNextValue(), fb = sFeedback.getNextValue();
         const float gIn = sInGain.getNextValue(), dry = sDirect.getNextValue(), eff = sEffect.getNextValue();
         const float active = sActive.getNextValue(), modI = sModInt.getNextValue(), rate = sModRate.getNextValue();
         const float cutCoef = 1.0f - std::exp (-kTwoPi * juce::jmin (sCutHz.getNextValue(), 0.45f * (float) sr) / (float) sr);
@@ -130,7 +126,7 @@ void SDD1000AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             ch.cut2 += cutCoef * (ch.cut1 - ch.cut2);
             const float regen = std::tanh (ch.cut2 * fb);                     // bounded feedback (also handles negative = inverted)
 
-            ch.delay.write (x * holdIn + regen);
+            ch.delay.write (x + regen);
 
             const float y = x * dry + wet * eff;
             data[c][n] = raw + (y - raw) * active;
