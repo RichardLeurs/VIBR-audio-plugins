@@ -1,0 +1,2 @@
+/usr/bin/ar qc libHM1Assets.a CMakeFiles/HM1Assets.dir/juce_binarydata_HM1Assets/JuceLibraryCode/BinaryData1.cpp.o CMakeFiles/HM1Assets.dir/juce_binarydata_HM1Assets/JuceLibraryCode/BinaryData2.cpp.o
+/usr/bin/ranlib libHM1Assets.a

@@ -7,7 +7,8 @@ juce_add_binary_data(SL2Assets
 )
 
 juce_add_plugin(SL-2
-  COMPANY_NAME "Richard Leurs"
+  COMPANY_NAME "VIBR"
+  ICON_BIG "${RL_ICON}"
   BUNDLE_ID com.richardleurs.sl2
   IS_SYNTH FALSE
   NEEDS_MIDI_INPUT FALSE

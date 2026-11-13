@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
 """Renders the MM-1 analog delay front panel (1980 x 890) used as the plugin background: silver satin body, three black panels
-(MIX, ECHO, MODULATION), the OVERLOAD lamp bezel in the header, printed legends. Control positions match PluginEditor.cpp. Needs numpy + Pillow.
+(MIX, ECHO, MODULATION), printed legends. Control positions match PluginEditor.cpp. Needs numpy + Pillow.
 Usage: make_background.py out.png"""
 import math, sys
 import numpy as np
@@ -19,10 +19,9 @@ CHROME = [(0, (250, 250, 252)), (0.35, (190, 194, 202)), (0.7, (110, 114, 124)),
 # ----- layout (shared with PluginEditor.cpp); same margins and gaps as the DM-1 (see ../style.md) -----
 PT, PB = 268, 752
 P1, P2, P3 = (40, PT, 660, PB), (680, PT, 1300, PB), (1320, PT, 1940, PB)      # side margins 40, panel gaps 20
-KY, KR = 532, 100                             # knob row and knob radius
+KY, KR = 532, 78                              # knob row and knob radius
 NAME_Y = 348                                  # knob name above the knob
-KNOBS = [(195, "BLEND"), (505, "LEVEL"), (835, "FEEDBACK"), (1145, "DELAY"), (1475, "CHRS/VIBR"), (1785, "DEPTH")]
-OVERLOAD = (900, 66)
+KNOBS = [(207, "BLEND"), (493, "LEVEL"), (847, "FEEDBACK"), (1133, "DELAY"), (1487, "CHRS/VIBR"), (1773, "DEPTH")]      # smaller knobs, 260 apart round the middle of each panel: more room to the border
 LED = (P3[2] - 35, 87)                        # power slide switch (top right)
 
 FONT = '/System/Library/Fonts/Avenir Next.ttc'
@@ -179,7 +178,7 @@ def rrect_grad(x0, y0, x1, y1, r, top, bot):
 # ----- title -----
 text(P1[0] + 6, 110, "MM-1", font(140, 9), DARK, 'lm')
 text(P3[2] - 190, 86, "ANALOG DELAY", font(40, 5), DARK, 'rm', spacing=6)
-text(P3[2] - 190, 134, "ECHO  \u00b7  CHORUS  \u00b7  VIBRATO", font(34, 5), DARK, 'rm', spacing=6)
+text(P3[2] - 190, 134, "WARM REPEATS", font(34, 5), DARK, 'rm', spacing=6)
 line([(P1[0], 208), (P3[2], 208)], DARK, 2, 150)
 
 # ----- black panels with a titled outline -----
@@ -230,14 +229,12 @@ for x, name in KNOBS:
     text(x - 80, KY + 160, "MIN", font(28, 2), INK, spacing=1)
     text(x + 80, KY + 160, "MAX", font(28, 2), INK, spacing=1)
 
-# ----- OVERLOAD lamp in the header: chrome bezel round a dark well (the editor lights it), caption below -----
-shadow(OVERLOAD[0], OVERLOAD[1], 20, 3, 6, 5, 160)
-disc(OVERLOAD[0], OVERLOAD[1], 21, CHROME, (-0.4, -0.5), 1.6)
-disc(OVERLOAD[0], OVERLOAD[1], 14, [(0, (20, 20, 22)), (1, (4, 4, 5))], (0, 0), 1.2)
-text(OVERLOAD[0], OVERLOAD[1] + 52, "OVERLOAD", font(26, 2), DARK, spacing=2)
 
 # ----- credit, bottom right (right edge lined up with the panels) -----
-text(P3[2], PB + 70, "Made by Richard Leurs", font(28, 2), DARK, 'rm', spacing=2)
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'common'))
+from vibr_credit import credit
+credit(text, new, comp, S, P3[2], PB + 70, font(28, 2), DARK, 28)
 
 out = img.convert('RGB').resize((W, H), Image.LANCZOS)
 arr = np.asarray(out, np.float32) + rng.normal(0, 1.3, (H, W, 1)).astype(np.float32)

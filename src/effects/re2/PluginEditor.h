@@ -54,6 +54,7 @@ private:
 
     // MEMORY: short press steps MANUAL / 1-4, holding it writes the knobs into the selected slot
     ClickZone memoryZone;
+    ClickZone memLedZone[5], inputLedZone[2], tapeLedZone[2];       // click a lamp to select it (memory slot, GUITAR / LINE, NEW / AGED)
     ParamMemory memory { proc.apvts, { "power" } };
     bool memHeld = false, memWritten = false;
     juce::uint32 memDownAt = 0, memFlashUntil = 0;

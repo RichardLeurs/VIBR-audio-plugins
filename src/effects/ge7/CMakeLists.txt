@@ -7,7 +7,8 @@ juce_add_binary_data(GE7Assets
 )
 
 juce_add_plugin(GE-7
-  COMPANY_NAME "Richard Leurs"
+  COMPANY_NAME "VIBR"
+  ICON_BIG "${RL_ICON}"
   BUNDLE_ID com.richardleurs.ge7
   IS_SYNTH FALSE
   NEEDS_MIDI_INPUT FALSE

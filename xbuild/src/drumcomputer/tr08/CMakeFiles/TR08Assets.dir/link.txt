@@ -1,0 +1,2 @@
+/usr/bin/ar qc libTR08Assets.a CMakeFiles/TR08Assets.dir/juce_binarydata_TR08Assets/JuceLibraryCode/BinaryData1.cpp.o
+/usr/bin/ranlib libTR08Assets.a

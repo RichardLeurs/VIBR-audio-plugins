@@ -7,7 +7,8 @@ juce_add_binary_data(BF3Assets
 )
 
 juce_add_plugin(BF-3
-  COMPANY_NAME "Richard Leurs"
+  COMPANY_NAME "VIBR"
+  ICON_BIG "${RL_ICON}"
   BUNDLE_ID com.richardleurs.bf3
   IS_SYNTH FALSE
   NEEDS_MIDI_INPUT FALSE

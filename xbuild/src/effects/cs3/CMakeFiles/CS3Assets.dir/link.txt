@@ -1,0 +1,2 @@
+/usr/bin/ar qc libCS3Assets.a CMakeFiles/CS3Assets.dir/juce_binarydata_CS3Assets/JuceLibraryCode/BinaryData1.cpp.o
+/usr/bin/ranlib libCS3Assets.a

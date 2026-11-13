@@ -16,7 +16,6 @@ struct KnobSpec { const char* id; float x; float startDeg, endDeg; };
 const KnobSpec kLevel { "level", 305.0f, -154.0f, 154.0f }, kTone { "tone", 645.0f, -154.0f, 154.0f },
                kAttack { "attack", 1195.0f, -154.0f, 154.0f }, kSustain { "sustain", 1535.0f, -154.0f, 154.0f };
 
-const juce::Point<float> kCheck { 560.0f, 87.0f };         // CHECK lamp (red, lit when the effect is on)
 const juce::Point<float> kLed { 1765.0f, 87.0f };          // power slide switch (top right, ball left = off) = bypass
 
 juce::Point<float> polar (juce::Point<float> c, float r, float a)
@@ -159,26 +158,6 @@ void CS3AudioProcessorEditor::paint (juce::Graphics& g)
         g.fillRoundedRectangle (slot, 17.0f);
         g.setColour (juce::Colours::white.withAlpha (0.10f));
         g.fillRoundedRectangle (slot.withHeight (slot.getHeight() * 0.40f).reduced (8.0f, 3.0f), 6.0f);
-    }
-    // CHECK lamp: red, lit while the effect is on
-    {
-        const auto lamp = [&] (float r) { return juce::Rectangle<float> (r * 2.0f, r * 2.0f).withCentre (kCheck); };
-        g.setColour (juce::Colours::black.withAlpha (0.8f));
-        g.fillEllipse (lamp (17.0f));
-        g.setColour (juce::Colour (0xff808590).withAlpha (0.5f));
-        g.drawEllipse (lamp (17.0f), 2.0f);
-        if (on)
-        {
-            g.setColour (juce::Colour (0xffff2a1c).withAlpha (0.10f)); g.fillEllipse (lamp (34.0f));
-            g.setColour (juce::Colour (0xffff2a1c).withAlpha (0.18f)); g.fillEllipse (lamp (25.0f));
-            g.setGradientFill (juce::ColourGradient (juce::Colour (0xffffb0a0), kCheck.x - 4.0f, kCheck.y - 5.0f,
-                                                     juce::Colour (0xffd8160c), kCheck.x + 6.0f, kCheck.y + 8.0f, true));
-            g.fillEllipse (lamp (12.5f));
-        }
-        else
-        {
-            g.setColour (juce::Colour (0xff4a1612)); g.fillEllipse (lamp (12.5f));
-        }
     }
     const juce::Point<float> c (kLed.x + (on ? 17.0f : -17.0f), kLed.y);
     const auto circle = [&] (float r) { return juce::Rectangle<float> (r * 2.0f, r * 2.0f).withCentre (c); };

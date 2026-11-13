@@ -9,16 +9,15 @@ namespace
 constexpr float kImgW = 1980.0f, kImgH = 890.0f;
 constexpr int kBaseW = 990;
 
-constexpr float kKnobRadius = 100.0f;                      // black knob; the printed scale sits outside it
+constexpr float kKnobRadius = 78.0f;                       // black knob; the printed scale sits outside it
 constexpr float kPad = 3.0f;
 constexpr float kKnobY = 532.0f;
 struct KnobSpec { const char* id; float x; };
-const KnobSpec kKnobs[6] = { { "blend", 195.0f }, { "level", 505.0f }, { "feedback", 835.0f }, { "delay", 1145.0f },
-                             { "chrsVibr", 1475.0f }, { "depth", 1785.0f } };
+const KnobSpec kKnobs[6] = { { "blend", 207.0f }, { "level", 493.0f }, { "feedback", 847.0f }, { "delay", 1133.0f },
+                             { "chrsVibr", 1487.0f }, { "depth", 1773.0f } };
 constexpr float kStartDeg = -154.0f, kEndDeg = 154.0f;     // 11 ticks over 308 degrees
 
 const juce::Point<float> kLed { 1905.0f, 87.0f };          // power slide switch (top right) = the effect on / off switch (ball right = on)
-const juce::Point<float> kOverload { 900.0f, 66.0f };      // OVERLOAD lamp in the header
 
 juce::Point<float> polar (juce::Point<float> c, float r, float a)
 {
@@ -130,11 +129,8 @@ void MemoryManAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 
 void MemoryManAudioProcessorEditor::timerCallback()
 {
-    if (proc.overloadPeak.exchange (0.0f) > 0.9f) overloadHold = 6;                 // lamp stays lit for a moment
-    const bool lit = overloadHold > 0;
-    if (overloadHold > 0) --overloadHold;
     const bool on = proc.apvts.getRawParameterValue ("effect")->load() > 0.5f;
-    if (on != lastOn || lit != overloadLit) { lastOn = on; overloadLit = lit; repaint(); }
+    if (on != lastOn) { lastOn = on; repaint(); }
 }
 
 void MemoryManAudioProcessorEditor::paint (juce::Graphics& g)
@@ -144,18 +140,6 @@ void MemoryManAudioProcessorEditor::paint (juce::Graphics& g)
     g.addTransform (juce::AffineTransform::scale ((float) getWidth() / kImgW));      // image pixels from here on
 
     // power slide switch: chrome ball left = off, right = on; the slot lights up green when on
-    // OVERLOAD lamp (red) in its bezel
-    {
-        const auto circleAt = [&] (float rad) { return juce::Rectangle<float> (rad * 2.0f, rad * 2.0f).withCentre (kOverload); };
-        const juce::Colour red (0xffff2a1a);
-        if (overloadLit) { g.setColour (red.withAlpha (0.20f)); g.fillEllipse (circleAt (32.0f)); g.setColour (red.withAlpha (0.25f)); g.fillEllipse (circleAt (21.0f)); }
-        g.setGradientFill (juce::ColourGradient (overloadLit ? red.brighter (0.8f) : red.darker (1.8f), kOverload.x - 5.0f, kOverload.y - 7.0f,
-                                                 overloadLit ? red.darker (0.2f) : red.darker (3.0f), kOverload.x + 8.0f, kOverload.y + 10.0f, true));
-        g.fillEllipse (circleAt (11.5f));
-        g.setColour (juce::Colours::white.withAlpha (overloadLit ? 0.55f : 0.18f));
-        g.fillEllipse (juce::Rectangle<float> (6.0f, 4.0f).withCentre (kOverload.translated (-4.0f, -6.0f)));
-    }
-
     const bool on = proc.apvts.getRawParameterValue ("effect")->load() > 0.5f;
     if (on)
     {

@@ -1,0 +1,2 @@
+/usr/bin/ar qc libBF3Assets.a CMakeFiles/BF3Assets.dir/juce_binarydata_BF3Assets/JuceLibraryCode/BinaryData1.cpp.o
+/usr/bin/ranlib libBF3Assets.a

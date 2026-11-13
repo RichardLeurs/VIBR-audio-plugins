@@ -87,7 +87,6 @@ void MemoryManAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
     sDepth.setTargetValue (knob01 (pDepth->load()));
     sRate.setTargetValue (0.15f * std::pow (60.0f, knob01 (pRate->load())));   // 0.15 .. 9 Hz
 
-    float peak = 0.0f;
     auto* data = buffer.getArrayOfWritePointers();
     for (int n = 0; n < numSamples; ++n)
     {
@@ -108,8 +107,7 @@ void MemoryManAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
         {
             auto& ch = channels[c];
             const float raw = std::isfinite (data[c][n]) ? data[c][n] : 0.0f;
-            peak = juce::jmax (peak, std::abs (raw * 1.3f));
-            const float x = std::tanh (raw * 1.3f) / 1.3f;                  // input stage (the Overload LED lights near here)
+            const float x = std::tanh (raw * 1.3f) / 1.3f;                  // input stage
 
             const float lfo = std::sin (phase + (float) c * 0.5f * juce::MathConstants<float>::pi);
             const float d = juce::jlimit (2.0f, ch.delay.getMaxDelay(), (dMs + depthMs * lfo) * 0.001f * (float) sr);
@@ -127,7 +125,6 @@ void MemoryManAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
         }
     }
 
-    if (peak > overloadPeak.load()) overloadPeak.store (peak);
 }
 
 //==============================================================================

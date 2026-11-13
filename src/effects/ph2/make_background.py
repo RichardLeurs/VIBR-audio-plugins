@@ -18,11 +18,11 @@ CHROME = [(0, (250, 250, 252)), (0.35, (190, 194, 202)), (0.7, (110, 114, 124)),
 
 # ----- layout (shared with PluginEditor.cpp); same margins and gaps as the DM-1 (see ../style.md) -----
 PT, PB = 268, 752
-P1, P2, P3 = (40, PT, 660, PB), (680, PT, 1300, PB), (1320, PT, 1800, PB)      # side margins 40, panel gaps 20
+P1, P2, P3 = (40, PT, 960, PB), (980, PT, 1380, PB), (1400, PT, 1800, PB)      # side margins 40, panel gaps 20; RESONANCE and MODE are the same size, SWEEP takes the rest
 KY, KR = 532, 100                             # knob row and knob radius
 NAME_Y = 348                                  # knob name above the knob
-KNOBS = [(195, "RATE"), (505, "DEPTH"), (990, "RES")]
-MODE_X = 1560
+KNOBS = [(310, "RATE"), (690, "DEPTH"), (1180, "RES")]
+MODE_X = 1600
 LED = (P3[2] - 35, 87)                        # power slide switch (top right)
 
 FONT = '/System/Library/Fonts/Avenir Next.ttc'
@@ -179,7 +179,7 @@ def rrect_grad(x0, y0, x1, y1, r, top, bot):
 # ----- title -----
 text(P1[0] + 6, 110, "PH-2", font(140, 9), DARK, 'lm')
 text(P3[2] - 190, 86, "SUPER PHASER", font(40, 5), DARK, 'rm', spacing=6)
-text(P3[2] - 190, 134, "RATE  \u00b7  DEPTH  \u00b7  RES  \u00b7  MODE I / II", font(34, 5), DARK, 'rm', spacing=6)
+text(P3[2] - 190, 134, "PHASE MOVEMENT", font(34, 5), DARK, 'rm', spacing=6)
 line([(P1[0], 208), (P3[2], 208)], DARK, 2, 150)
 
 # ----- black panels with a titled outline -----
@@ -236,7 +236,10 @@ text(MODE_X - 120, KY - 130, "I", font(40, 2), INK, 'mm')
 text(MODE_X + 120, KY - 130, "II", font(40, 2), INK, 'mm')
 
 # ----- credit, bottom right (right edge lined up with the panels) -----
-text(P3[2], PB + 70, "Made by Richard Leurs", font(28, 2), DARK, 'rm', spacing=2)
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'common'))
+from vibr_credit import credit
+credit(text, new, comp, S, P3[2], PB + 70, font(28, 2), DARK, 28)
 
 out = img.convert('RGB').resize((W, H), Image.LANCZOS)
 arr = np.asarray(out, np.float32) + rng.normal(0, 1.3, (H, W, 1)).astype(np.float32)

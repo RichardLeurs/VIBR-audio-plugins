@@ -18,11 +18,11 @@ CHROME = [(0, (250, 250, 252)), (0.35, (190, 194, 202)), (0.7, (110, 114, 124)),
 
 # ----- layout (shared with PluginEditor.cpp); same margins and gaps as the DM-1 (see ../style.md) -----
 PT, PB = 268, 752
-P1, P2, P3 = (40, PT, 660, PB), (680, PT, 1300, PB), (1320, PT, 1800, PB)      # side margins 40, panel gaps 20
-KY, KR = 532, 100                             # knob row and knob radius
+P1, P2, P3 = (40, PT, 630, PB), (650, PT, 1240, PB), (1260, PT, 1800, PB)      # side margins 40, panel gaps 20; MODE is wider (more room for its legends)
+KY, KR = 532, 78                              # knob row and knob radius
 NAME_Y = 348                                  # knob name above the knob
-KNOBS = [(195, "MANUAL"), (505, "RES"), (815, "DEPTH"), (1125, "RATE")]
-MODE_X = 1560
+KNOBS = [(192, "MANUAL"), (478, "RES"), (802, "DEPTH"), (1088, "RATE")]      # smaller knobs, 286 apart and centred in their panels
+MODE_X = 1530
 LED = (P3[2] - 35, 87)                        # power slide switch (top right)
 
 FONT = '/System/Library/Fonts/Avenir Next.ttc'
@@ -179,7 +179,7 @@ def rrect_grad(x0, y0, x1, y1, r, top, bot):
 # ----- title -----
 text(P1[0] + 6, 110, "BF-3", font(140, 9), DARK, 'lm')
 text(P3[2] - 190, 86, "STEREO FLANGER", font(40, 5), DARK, 'rm', spacing=6)
-text(P3[2] - 190, 134, "STANDARD  \u00b7  ULTRA  \u00b7  GATE / PAN", font(34, 5), DARK, 'rm', spacing=6)
+text(P3[2] - 190, 134, "LIQUID MOTION", font(34, 5), DARK, 'rm', spacing=6)
 line([(P1[0], 208), (P3[2], 208)], DARK, 2, 150)
 
 # ----- black panels with a titled outline -----
@@ -232,13 +232,16 @@ for x, name in KNOBS:
 
 # ----- mode selector: three positions, fan of 110 degrees -----
 scale(MODE_X, KY, 3, -55, 55)
-text(MODE_X - 134, KY - 104, "GATE /", font(27, 2), INK, 'rm', spacing=1)
-text(MODE_X - 134, KY - 74, "PAN", font(27, 2), INK, 'rm', spacing=1)
-text(MODE_X, KY - 174, "STANDARD", font(27, 2), INK, 'mm', spacing=1)
-text(MODE_X + 134, KY - 90, "ULTRA", font(27, 2), INK, 'lm', spacing=1)
+text(MODE_X - 112, KY - 84, "GATE /", font(27, 2), INK, 'rm', spacing=1)
+text(MODE_X - 112, KY - 56, "PAN", font(27, 2), INK, 'rm', spacing=1)
+text(MODE_X, KY - 140, "STANDARD", font(27, 2), INK, 'mm', spacing=1)
+text(MODE_X + 112, KY - 70, "ULTRA", font(27, 2), INK, 'lm', spacing=1)
 
 # ----- credit, bottom right (right edge lined up with the panels) -----
-text(P3[2], PB + 70, "Made by Richard Leurs", font(28, 2), DARK, 'rm', spacing=2)
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'common'))
+from vibr_credit import credit
+credit(text, new, comp, S, P3[2], PB + 70, font(28, 2), DARK, 28)
 
 out = img.convert('RGB').resize((W, H), Image.LANCZOS)
 arr = np.asarray(out, np.float32) + rng.normal(0, 1.3, (H, W, 1)).astype(np.float32)

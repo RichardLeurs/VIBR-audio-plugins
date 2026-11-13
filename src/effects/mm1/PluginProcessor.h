@@ -35,7 +35,6 @@ public:
 
     juce::AudioProcessorValueTreeState apvts;
 
-    std::atomic<float> overloadPeak { 0.0f };   // input stage peak; the editor reads and clears it (exchange(0))
 
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();

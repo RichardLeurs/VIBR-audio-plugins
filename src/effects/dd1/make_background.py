@@ -1,65 +1,60 @@
 #!/usr/bin/env python3
 # VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
-"""Renders the DD-1 pedal front panel (1560 x 900) used as the plugin background.
+"""Renders the DD-1 front panel (1560 x 800), one image per tab (0 = DELAY, 1 = EFFECTS), used as the plugin backgrounds.
 Photo-style finish: satin lime anodised body with black panels, bevelled edges, printed legends.
-Needs numpy + Pillow.  Usage: make_background.py out.png"""
+Needs numpy + Pillow.  Usage: make_background.py TAB out.png"""
 import math, sys
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-W, H, S = 2690, 740, 2                      # image size and supersampling
+W, H, S = 1560, 766, 2                      # image size and supersampling
 rng = np.random.default_rng(7)
+TAB = int(sys.argv[1]) if len(sys.argv) > 2 else 0          # 0 = DELAY tab, 1 = EFFECTS tab;  usage: make_background.py TAB out.png
 
 # ----- layout (shared with PluginEditor.cpp) -----
-CX = [800, 1560, 2430]       # delay A, delay B, shimmer (the stereo panel sits between A and B)
 ROW1, ROW2 = 365, 585
+ROW2D = 585                                 # tab DELAY: the REPEATS / LEVEL / MOD / RATE row sits higher, the MEMORY section is under it (PluginEditor.cpp: kRow2Delay)
 BIG, SMALL = 44, 34
-PANEL_T, PANEL_B, PANEL_HW = 192, 680, 230
-GH = 7.5                                    # panel gaps are 15 px (= 10 px on screen, as on the DM-1 and CE-1): panels grow 7.5 px on their inner sides
-PANEL_L, PANEL_R = 30, 2660                 # left edge of the TEMPO panel, right edge of the SHIMMER panel
-FOOT = (780, 805)
+PANEL_T, PANEL_B = 192, 706
+PANEL_L, PANEL_R = 30, 1530                 # left edge of the first panel, right edge of the last one (panel gaps are 15 px)
 LED = (PANEL_R - 27, 67)
-KNOBS = []   # (cx, cy, r, name, kind, labels)
 DIV = ["FREE", "1/1", "1/2", "1/4.", "1/4", "1/4T", "1/8.", "1/8", "1/8T", "1/16"]
 DIV_B = ["2/1", "3/2", "1/1", "3/4", "2/3", "1/2", "3/8", "1/3", "1/4", "1/8"]      # ratios of delay A's time
 INT = ["-OCT", "+5TH", "+OCT", "+OCT+5", "+2OCT"]
-for i in (0, 1):
-    c = CX[i]
-    if i == 0:      # delay A: division + time
-        KNOBS += [(c - 110, ROW1, BIG, "DIVISION", "sel", DIV),
-                  (c + 70, ROW1, SMALL, "LOW CUT", "knob", None), (c + 170, ROW1, SMALL, "HI CUT", "knob", None)]
-    else:           # delay B: no time knob ("=A" copies delay A's time); the repeat filter (A + B) sits in its place
-        KNOBS += [(c - 110, ROW1, BIG, "DIVISION", "sel", DIV_B),
-                  (c + 70, ROW1, SMALL, "LOW CUT", "knob", None), (c + 170, ROW1, SMALL, "HI CUT", "knob", None)]
-    KNOBS += [(c - 162, ROW2, SMALL, "REPEATS", "knob", None), (c - 54, ROW2, SMALL, "LEVEL", "knob", None),
-              (c + 54, ROW2, SMALL, "MOD", "knob", None), (c + 162, ROW2, SMALL, "RATE", "knob", None)]
-c = CX[2]
-KNOBS += [(c - 110, ROW1, BIG, "INTERVAL", "sel", INT), (c + 110, ROW1, BIG, "DECAY", "knob", None),
-          (c - 162, ROW2, SMALL, "SHIMMER", "knob", None), (c - 54, ROW2, SMALL, "TONE", "knob", None),
-          (c + 54, ROW2, SMALL, "LEVEL", "knob", None)]
-ROUTE = (CX[2] + 162, ROW2)
-BOOST_CX = 420
-FX_BOX = (1820 - GH, PANEL_T, 2170 + GH, PANEL_B)         # ambience panel (chorus + reverb), between delay B and the shimmer
-FX_CX = 1995
 FXR = 34
 MINI = 34
-# knob rows line up with the neighbouring panels (row 1 = ROW1, row 2 = ROW2)
-KNOBS += [(FX_CX - 108, ROW1, FXR, "RATE", "knob", None), (FX_CX, ROW1, FXR, "DEPTH", "knob", None), (FX_CX + 108, ROW1, FXR, "LEVEL", "knob", None),
-          (FX_CX - 108, ROW2, FXR, "DECAY", "knob", None), (FX_CX, ROW2, FXR, "TONE", "knob", None), (FX_CX + 108, ROW2, FXR, "LEVEL", "knob", None)]
-SPREAD = (1180, ROW1)                      # level with the knobs in the neighbouring panels
-PING = [(1125, ROW2), (1235, ROW2)]        # side by side, level with the ROUTING switch
-BOOST_SW = (BOOST_CX, 335)                 # same height as the SOURCE switch
-KNOBS.append((BOOST_CX, 450, SMALL, "DRIVE", "knob", None))      # same height and size as the TIME knob
-KNOBS.append((BOOST_CX - 54, 590, MINI, "TONE", "knob", None))
-KNOBS.append((BOOST_CX + 54, 590, MINI, "LEVEL", "knob", None))
-STEREO_BOX = (1060 - GH, PANEL_T, 1300 + GH, PANEL_B)      # TEMPO, BOOST and STEREO panels share one width (240)
-TEMPO_BOX = (30, PANEL_T, 270 + GH, PANEL_B)
-BOOST_BOX = (300 - GH, PANEL_T, 540 + GH, PANEL_B)
-BPM = (150, 246)
-SYNC = (150, 335)
-TAPPAD = (150, 595)
-KNOBS.append((150, 450, SMALL, "TIME", "knob", None))      # the time of delay A lives in the tempo panel
-KNOBS.append((SPREAD[0], SPREAD[1], SMALL, "SPREAD", "knob", None))
+DSMALL = 30                                 # tab DELAY: the small knobs of the delays and the TIME knob (more room to the panel border and to each other)
+# tab DELAY: TEMPO | DELAY A | STEREO | DELAY B      (every box: x0, x1)
+TEMPO_BOX, A_BOX, STEREO_BOX, B_BOX = (30, 380), (395, 835), (850, 1075), (1090, 1530)      # the TEMPO panel is wider: it holds the MEMORY row
+TEMPO_CX = 205
+CX = [615, 1310]                            # delay A, delay B
+SPREAD = (962.5, ROW1)
+PING = [(912.5, ROW2), (1012.5, ROW2)]
+BPM, SYNC, TAPPAD, TIME = (TEMPO_CX, 376), (115, 468), (TEMPO_CX, 585), (290, 462)     # PluginEditor.cpp: kBpm, kSync, kTapSw, aTime
+# tab EFFECTS: BOOST | AMBIENCE | SHIMMER
+BOOST_BOX, FX_BOX, SHIM_BOX = (30, 390), (405, 925), (940, 1530)
+BOOST_CX, FX_CX, SHIM_CX = 210, 665, 1235
+DYE = -15                                  # tab EFFECTS: content moved up so it sits centred in the panels (PluginEditor.cpp: kEffDy)
+BOOST_SW = (BOOST_CX, 335 + DYE)
+ROUTE = (SHIM_CX + 186, ROW2 + DYE)
+KNOBS = []   # (cx, cy, r, name, kind, labels)
+if TAB == 0:
+    for i in (0, 1):
+        c = CX[i]
+        KNOBS += [(c - 110, ROW1, BIG, "DIVISION", "sel", DIV if i == 0 else DIV_B),
+                  (c + 50, ROW1, DSMALL, "LOW CUT", "knob", None), (c + 150, ROW1, DSMALL, "HI CUT", "knob", None),
+                  (c - 150, ROW2D, DSMALL, "REPEATS", "knob", None), (c - 50, ROW2D, DSMALL, "LEVEL", "knob", None),
+                  (c + 50, ROW2D, DSMALL, "MOD", "knob", None), (c + 150, ROW2D, DSMALL, "RATE", "knob", None)]
+    KNOBS.append((TIME[0], TIME[1], DSMALL, "TIME", "knob", None))      # the time of delay A lives in the tempo panel
+    KNOBS.append((SPREAD[0], SPREAD[1], BIG, "SPREAD", "knob", None))
+else:
+    KNOBS += [(BOOST_CX, 450 + DYE, SMALL, "DRIVE", "knob", None),
+              (BOOST_CX - 70, 590 + DYE, MINI, "TONE", "knob", None), (BOOST_CX + 70, 590 + DYE, MINI, "LEVEL", "knob", None)]
+    KNOBS += [(FX_CX - 150, ROW1 + DYE, FXR, "RATE", "knob", None), (FX_CX, ROW1 + DYE, FXR, "DEPTH", "knob", None), (FX_CX + 150, ROW1 + DYE, FXR, "LEVEL", "knob", None),
+              (FX_CX - 150, ROW2 + DYE, FXR, "DECAY", "knob", None), (FX_CX, ROW2 + DYE, FXR, "TONE", "knob", None), (FX_CX + 150, ROW2 + DYE, FXR, "LEVEL", "knob", None)]
+    KNOBS += [(SHIM_CX - 150, ROW1 + DYE, BIG, "INTERVAL", "sel", INT), (SHIM_CX + 150, ROW1 + DYE, BIG, "DECAY", "knob", None),
+              (SHIM_CX - 186, ROW2 + DYE, SMALL, "SHIMMER", "knob", None), (SHIM_CX - 62, ROW2 + DYE, SMALL, "TONE", "knob", None),
+              (SHIM_CX + 62, ROW2 + DYE, SMALL, "LEVEL", "knob", None)]
 
 FONT = '/System/Library/Fonts/Avenir Next.ttc'
 COND = '/System/Library/Fonts/Avenir Next Condensed.ttc'
@@ -142,97 +137,37 @@ def line(pts, fill=INK, width=2, alpha=190):
     comp(layer)
 
 # ----- printed panels -----
-for i, (cx, name, col) in enumerate(zip(CX, ["DELAY  A", "DELAY  B", "SHIMMER"], [INK, INK, AMBER])):
+def panel(xs, title, outline=INK):
+    box = [xs[0] * S, PANEL_T * S, xs[1] * S, PANEL_B * S]
     layer = new(); dr = ImageDraw.Draw(layer)
-    bl, br = cx - PANEL_HW - GH, (PANEL_R if i == 2 else cx + PANEL_HW + GH)
-    box = [bl * S, PANEL_T * S, br * S, PANEL_B * S]
-    cx = (bl + br) / 2                                  # title centred on the panel
-    pw = pill_width(name, 28, 2)
     dr.rounded_rectangle(box, radius=26 * S, fill=PANEL + (255,))
     comp(layer)
-    # outline with a gap for the header
     layer = new(); dr = ImageDraw.Draw(layer)
-    dr.rounded_rectangle(box, radius=26 * S, outline=col + (150,), width=2 * S)
-    gap = new(); gd = ImageDraw.Draw(gap)
-    layer_np = np.asarray(layer).copy()
+    dr.rounded_rectangle(box, radius=26 * S, outline=outline + (150,), width=2 * S)
     comp(layer)
-    # erase the line behind the header by re-drawing the surface strip: simple approach is a dark pill under the title
+    cx = (xs[0] + xs[1]) / 2                            # title centred on the panel, on a pill that hides the outline behind it
+    pw = pill_width(title, 28, 2)
     pill = new(); pd = ImageDraw.Draw(pill)
     pd.rounded_rectangle([(cx - pw / 2) * S, (PANEL_T - 17) * S, (cx + pw / 2) * S, (PANEL_T + 17) * S], radius=17 * S, fill=PANEL + (255,))
     comp(pill)
-    text(cx, PANEL_T + 1, name, font(28, 0), AMBER, spacing=2)
+    text(cx, PANEL_T + 1, title, font(28, 0), AMBER, spacing=2)
 
-# ----- stereo panel (spread + ping-pong) -----
-layer = new(); dr = ImageDraw.Draw(layer)
-box = [v * S for v in STEREO_BOX]
-dr.rounded_rectangle(box, radius=26 * S, fill=PANEL + (255,))
-comp(layer)
-layer = new(); dr = ImageDraw.Draw(layer)
-dr.rounded_rectangle(box, radius=26 * S, outline=INK + (150,), width=2 * S)
-comp(layer)
-pill = new(); pd = ImageDraw.Draw(pill)
-sx = (STEREO_BOX[0] + STEREO_BOX[2]) // 2
-pw = pill_width("STEREO", 28, 2)
-pd.rounded_rectangle([(sx - pw / 2) * S, (STEREO_BOX[1] - 17) * S, (sx + pw / 2) * S, (STEREO_BOX[1] + 17) * S], radius=17 * S, fill=PANEL + (255,))
-comp(pill)
-text(sx, STEREO_BOX[1] + 1, "STEREO", font(28, 0), AMBER, spacing=2)
-
-# ----- repeat filter legend (inside the delay B panel) -----
-for cxx in CX[:2]:
-    text(cxx + 120, 290, "REPEAT FILTER", font(14, 2), INK, spacing=2)
-    line([(cxx + 22, 301), (cxx + 218, 301)], INK, 1.2, 120)
-
-# ----- tempo panel (bpm, source switch, time, tap pad) -----
-layer = new(); dr = ImageDraw.Draw(layer)
-box = [v * S for v in TEMPO_BOX]
-dr.rounded_rectangle(box, radius=26 * S, fill=PANEL + (255,))
-comp(layer)
-layer = new(); dr = ImageDraw.Draw(layer)
-dr.rounded_rectangle(box, radius=26 * S, outline=INK + (150,), width=2 * S)
-comp(layer)
-tx = (TEMPO_BOX[0] + TEMPO_BOX[2]) // 2
-pill = new(); pd = ImageDraw.Draw(pill)
-pw = pill_width("TEMPO", 28, 2)
-pd.rounded_rectangle([(tx - pw / 2) * S, (TEMPO_BOX[1] - 17) * S, (tx + pw / 2) * S, (TEMPO_BOX[1] + 17) * S], radius=17 * S, fill=PANEL + (255,))
-comp(pill)
-text(tx, TEMPO_BOX[1] + 1, "TEMPO", font(28, 0), AMBER, spacing=2)
-
-# ----- boost panel -----
-layer = new(); dr = ImageDraw.Draw(layer)
-box = [v * S for v in BOOST_BOX]
-dr.rounded_rectangle(box, radius=26 * S, fill=PANEL + (255,))
-comp(layer)
-layer = new(); dr = ImageDraw.Draw(layer)
-dr.rounded_rectangle(box, radius=26 * S, outline=INK + (150,), width=2 * S)
-comp(layer)
-pill = new(); pd = ImageDraw.Draw(pill)
-pw = pill_width("BOOST", 28, 2)
-pd.rounded_rectangle([(BOOST_CX - pw / 2) * S, (BOOST_BOX[1] - 17) * S, (BOOST_CX + pw / 2) * S, (BOOST_BOX[1] + 17) * S], radius=17 * S, fill=PANEL + (255,))
-comp(pill)
-text(BOOST_CX, BOOST_BOX[1] + 1, "BOOST", font(28, 0), AMBER, spacing=2)
-
-# ----- chorus + reverb panel -----
-layer = new(); dr = ImageDraw.Draw(layer)
-box = [v * S for v in FX_BOX]
-dr.rounded_rectangle(box, radius=26 * S, fill=PANEL + (255,))
-comp(layer)
-layer = new(); dr = ImageDraw.Draw(layer)
-dr.rounded_rectangle(box, radius=26 * S, outline=INK + (150,), width=2 * S)
-comp(layer)
-pill = new(); pd = ImageDraw.Draw(pill)
-pw = pill_width("AMBIENCE", 28, 2)
-pd.rounded_rectangle([(FX_CX - pw / 2) * S, (FX_BOX[1] - 17) * S, (FX_CX + pw / 2) * S, (FX_BOX[1] + 17) * S], radius=17 * S, fill=PANEL + (255,))
-comp(pill)
-text(FX_CX, FX_BOX[1] + 1, "AMBIENCE", font(28, 0), AMBER, spacing=2)
-for label, ly in (("CHORUS", 268), ("REVERB", 492)):
-    text(FX_CX, ly, label, font(15, 2), INK, spacing=3)
-    line([(FX_BOX[0] + 24, ly), (FX_CX - 52, ly)], INK, 1.2, 120)
-    line([(FX_CX + 52, ly), (FX_BOX[2] - 24, ly)], INK, 1.2, 120)
+if TAB == 0:
+    panel(TEMPO_BOX, "TEMPO"); panel(A_BOX, "DELAY  A"); panel(STEREO_BOX, "STEREO"); panel(B_BOX, "DELAY  B")
+    for cxx in CX:                                      # repeat filter legend
+        text(cxx + 100, 290, "REPEAT FILTER", font(14, 2), INK, spacing=2)
+        line([(cxx + 4, 301), (cxx + 196, 301)], INK, 1.2, 120)
+else:
+    panel(BOOST_BOX, "BOOST"); panel(FX_BOX, "AMBIENCE"); panel(SHIM_BOX, "SHIMMER", AMBER)
+    for label, ly in (("CHORUS", 268 + DYE), ("REVERB", 492 + DYE)):
+        text(FX_CX, ly, label, font(15, 2), INK, spacing=3)
+        line([(FX_BOX[0] + 24, ly), (FX_CX - 52, ly)], INK, 1.2, 120)
+        line([(FX_CX + 52, ly), (FX_BOX[1] - 24, ly)], INK, 1.2, 120)
 
 # ----- title -----
 text(PANEL_L + 6, 84, "DD-1", font(108, 9), DARK, 'lm')
-text(PANEL_R - 146, 66, "DUAL DELAY  +  SHIMMER REVERB", font(31, 5), DARK, 'rm', spacing=5)       # description: two lines on the right, left of the power switch (as on the DM-1 and CE-1)
-text(PANEL_R - 146, 103, "ANALOG-STYLE DELAY MACHINE", font(26, 5), DARK, 'rm', spacing=5)
+text(PANEL_R - 146, 66, "DUAL DELAY", font(28, 5), DARK, 'rm', spacing=5)           # description: two lines on the right, left of the power switch (as on the DM-1 and CE-1)
+text(PANEL_R - 146, 103, "SHIMMERING ECHOES", font(22, 5), DARK, 'rm', spacing=5)
 line([(PANEL_L, 160), (PANEL_R, 160)], DARK, 1.5, 150)
 
 # ----- time displays (ms), one per delay -----
@@ -243,8 +178,9 @@ def lcd(cx, cy, w=DISP_W, h=DISP_H):
     dr.rounded_rectangle([(cx - w / 2 - 3) * S, (cy - h / 2 - 3) * S, (cx + w / 2 + 3) * S, (cy + h / 2 + 3) * S], radius=10 * S, fill=(0, 0, 0, 200))
     dr.rounded_rectangle([(cx - w / 2) * S, (cy - h / 2) * S, (cx + w / 2) * S, (cy + h / 2) * S], radius=8 * S, fill=(12, 6, 3, 255))
     comp(layer)
-for cx in CX[:2]:
-    lcd(cx, DISP_Y)
+if TAB == 0:
+    for cx in CX:
+        lcd(cx, DISP_Y)
 
 # ----- knobs: shadow, recess ring, scale, legends -----
 for (x, y, r, name, kind, labels) in KNOBS:
@@ -289,9 +225,11 @@ def lever(rx, ry, name, top, bottom, name_y, side=False):
         text(rx, ry - 51, top, font(14, 2), INK)
         text(rx, ry + 54, bottom, font(14, 2), INK)
 
-lever(ROUTE[0], ROUTE[1], "ROUTING", "SERIES", "PARALLEL", ROUTE[1] - 72)
-for (px, py), n in zip(PING, ("PING A", "PING B")):
-    lever(px, py, n, "ON", "OFF", py - 72)
+if TAB == 0:
+    for (px, py), n in zip(PING, ("PING A", "PING B")):
+        lever(px, py, n, "ON", "OFF", py - 72)
+else:
+    lever(ROUTE[0], ROUTE[1], "ROUTING", "SERIES", "PARALLEL", ROUTE[1] - 72)
 
 # ----- chrome footswitches + LED bezels -----
 def footswitch(fx, fy, k=1.0):
@@ -306,10 +244,18 @@ def footswitch(fx, fy, k=1.0):
     dr.ellipse([(fx - 49 * k) * S, (fy - 49 * k) * S, (fx + 49 * k) * S, (fy + 49 * k) * S], outline=(255, 255, 255, 110), width=int(2 * S))
     comp(layer)
 
-def led_bezel(lx, ly):
-    shadow(lx, ly, 20, 3, 6, 5, 160)
-    disc(lx, ly, 21, CHROME, (-0.4, -0.5), 1.6)
-    disc(lx, ly, 14, [(0, (20, 20, 22)), (1, (4, 4, 5))], (0, 0), 1.2)
+def led_bezel(lx, ly, k=1.0):
+    shadow(lx, ly, 20 * k, 3 * k, 6 * k, 5 * k, 160)
+    disc(lx, ly, 21 * k, CHROME, (-0.4, -0.5), 1.6)
+    disc(lx, ly, 14 * k, [(0, (20, 20, 22)), (1, (4, 4, 5))], (0, 0), 1.2)
+
+
+# flat memory lamp: a thin dark grey ring round a flat dark well (no bezel, no shading); the editor fills the well (PluginEditor.cpp: drawLamp)
+def flat_lamp(lx, ly, r=14):
+    layer = new(); dr = ImageDraw.Draw(layer)
+    dr.ellipse([(lx - r - 3) * S, (ly - r - 3) * S, (lx + r + 3) * S, (ly + r + 3) * S], fill=(52, 56, 68, 255))
+    dr.ellipse([(lx - r) * S, (ly - r) * S, (lx + r) * S, (ly + r) * S], fill=(12, 13, 15, 255))
+    comp(layer)
 
 
 # ----- power: horizontal slide switch (top right), ball left = OFF, right = ON -----
@@ -321,7 +267,8 @@ def power_switch(rx, ry):
     text(rx + 27, ry + 38, "OFF / ON", font(20, 2), DARK, 'rm', spacing=2)   # right-aligned with the panels and the rule
 power_switch(LED[0], LED[1])
 # tempo panel contents
-lcd(BPM[0], BPM[1], 168, 44)
+if TAB == 0:
+    lcd(BPM[0], BPM[1], 168, 44)
 def hswitch(rx, ry, name, left, right):
     """horizontal slide switch: ball left or right"""
     shadow(rx, ry, 30, 4, 8, 7, 150)
@@ -333,8 +280,10 @@ def hswitch(rx, ry, name, left, right):
     text(rx - 31, ry + 36, left, font(14, 2), INK)
     text(rx + 31, ry + 36, right, font(14, 2), INK)
 
-hswitch(SYNC[0], SYNC[1], "SOURCE", "HOST", "TAP")           # ball left = HOST, right = TAP
-hswitch(BOOST_SW[0], BOOST_SW[1], "ENGAGE", "OFF", "ON")     # ball left = off, right = on
+if TAB == 0:
+    hswitch(SYNC[0], SYNC[1], "SOURCE", "HOST", "TAP")           # ball left = HOST, right = TAP
+else:
+    hswitch(BOOST_SW[0], BOOST_SW[1], "ENGAGE", "OFF", "ON")     # ball left = off, right = on
 # tap pad: small rectangular chrome bezel round a black well; the editor draws the pad that lights up
 def rrect_grad(x0, y0, x1, y1, r, top, bot):
     m = Image.new('L', (W * S, H * S), 0)
@@ -345,14 +294,15 @@ def rrect_grad(x0, y0, x1, y1, r, top, bot):
     layer.putalpha(m)
     comp(layer)
 
-px, py = TAPPAD
-bw, bh = 112, 72
-m = Image.new('L', (W * S, H * S), 0)
-ImageDraw.Draw(m).rounded_rectangle([(px - bw / 2 + 4) * S, (py - bh / 2 + 9) * S, (px + bw / 2 + 4) * S, (py + bh / 2 + 9) * S], radius=15 * S, fill=170)
-m = m.filter(ImageFilter.GaussianBlur(8 * S)); lay = new(); lay.putalpha(m); comp(lay)                     # shadow
-rrect_grad(px - bw / 2, py - bh / 2, px + bw / 2, py + bh / 2, 15, (236, 238, 244), (92, 96, 106))          # chrome bezel
-rrect_grad(px - bw / 2 + 6, py - bh / 2 + 6, px + bw / 2 - 6, py + bh / 2 - 6, 10, (8, 8, 10), (3, 3, 4))   # well
-text(px, py + 62, "TAP", font(22, 0), INK, spacing=4)
+if TAB == 0:
+    px, py = TAPPAD
+    bw, bh = 90, 58                                      # smaller TAP pad
+    # flat: a thin dark grey ring (same as the memory lamps) round a flat dark well (no shadow, no bezel, no shading); the editor fills the pad
+    layer = new(); dr = ImageDraw.Draw(layer)
+    dr.rounded_rectangle([(px - bw / 2) * S, (py - bh / 2) * S, (px + bw / 2) * S, (py + bh / 2) * S], radius=12 * S, fill=(52, 56, 68, 255))
+    dr.rounded_rectangle([(px - bw / 2 + 3) * S, (py - bh / 2 + 3) * S, (px + bw / 2 - 3) * S, (py + bh / 2 - 3) * S], radius=9 * S, fill=(12, 13, 15, 255))
+    comp(layer)
+    text(px, py + 50, "TAP", font(22, 0), INK, spacing=4)
 
 # ----- presets panel (top, centred): replaced by the MEMORY panel below; kept here, commented out -----
 # PRE_BOX = (900, 30, 1790, 134)
@@ -374,47 +324,56 @@ text(px, py + 62, "TAP", font(22, 0), INK, spacing=4)
 #     comp(layer)
 #
 
-# ----- memory panel (top, centred, same box as the old presets panel): MANUAL / 1-4 lamps + MEMORY button (as on the RE-2) -----
-MEM_BOX = (900, 30, 1790, 134)
-MEM_Y = 70                                             # lamp / button row; captions sit below
-MEM_LED_X = [1150, 1255, 1360, 1465, 1570]             # PluginEditor.cpp: kMemLedX
-MEM_BTN = (1705, MEM_Y)                                # PluginEditor.cpp: kMemoryButton
-layer = new(); dr = ImageDraw.Draw(layer)
-dr.rounded_rectangle([v * S for v in MEM_BOX], radius=22 * S, fill=PANEL + (255,))
-comp(layer)
-layer = new(); dr = ImageDraw.Draw(layer)
-dr.rounded_rectangle([v * S for v in MEM_BOX], radius=22 * S, outline=INK + (150,), width=2 * S)
-comp(layer)
-text(MEM_BOX[0] + 100, (MEM_BOX[1] + MEM_BOX[3]) // 2, "MEMORY", font(22, 0), AMBER, spacing=3)
-for x, lab in zip(MEM_LED_X, ["MANUAL", "1", "2", "3", "4"]):
-    led_bezel(x, MEM_Y)                                # the editor lights the lamps
-    text(x, MEM_Y + 40, lab, font(17, 2), INK, spacing=1)
-layer = new()
-m = Image.new('L', (W * S, H * S), 0)
-ImageDraw.Draw(m).rounded_rectangle([(MEM_BTN[0] - 56 - 4) * S, (MEM_BTN[1] - 20) * S, (MEM_BTN[0] + 56 + 8) * S, (MEM_BTN[1] + 34) * S], radius=12 * S, fill=170)
-m = m.filter(ImageFilter.GaussianBlur(6 * S)); lay = new(); lay.putalpha(m); comp(lay)
-rrect_grad(MEM_BTN[0] - 48, MEM_BTN[1] - 24, MEM_BTN[0] + 48, MEM_BTN[1] + 24, 12, (236, 238, 244), (92, 96, 106))
-rrect_grad(MEM_BTN[0] - 43, MEM_BTN[1] - 19, MEM_BTN[0] + 43, MEM_BTN[1] + 19, 8, (30, 31, 34), (8, 8, 10))
-text(MEM_BTN[0], MEM_Y + 40, "HOLD = WRITE", font(15, 2), INK, spacing=1)
+# ----- MEMORY section: top of the TEMPO panel, a line under it (as on the DM-1): captions above the lamps / button -----
+MEM_Y = 270                                            # lamp / button row (PluginEditor.cpp: kMemY, kMemLedX, kMemoryButton)
+MEM_LED_X = [76, 120, 164, 208, 252]                   # MANUAL, 1, 2, 3, 4
+MEM_K = 0.8                                            # lamp bezel scale (PluginEditor.cpp: kMemLampScale)
+MEM_BTN = (326, MEM_Y)
+MEM_LINE_Y = 330                                       # separator under the memory row
+if TAB == 0:
+    for x, lab in zip(MEM_LED_X, ["MANUAL", "1", "2", "3", "4"]):
+        text(x, MEM_Y - 34, lab, font(15, 2), INK, spacing=1)
+        flat_lamp(x, MEM_Y)                            # a flat ring; the editor fills it
+    text(MEM_BTN[0], MEM_Y - 34, "MEMORY", font(15, 2), INK, spacing=1)
+    layer = new(); dr = ImageDraw.Draw(layer)                       # flat button (see style.md, "Flat style")
+    dr.rounded_rectangle([(MEM_BTN[0] - 38) * S, (MEM_BTN[1] - 24) * S, (MEM_BTN[0] + 38) * S, (MEM_BTN[1] + 24) * S], radius=12 * S, fill=(52, 56, 68, 255))
+    dr.rounded_rectangle([(MEM_BTN[0] - 35) * S, (MEM_BTN[1] - 21) * S, (MEM_BTN[0] + 35) * S, (MEM_BTN[1] + 21) * S], radius=9 * S, fill=(12, 13, 15, 255))
+    comp(layer)
+    text(MEM_BTN[0], MEM_Y + 38, "WRITE: HOLD", font(12, 2), INK, spacing=1)
+    line([(TEMPO_BOX[0] + 22, MEM_LINE_Y), (TEMPO_BOX[1] - 22, MEM_LINE_Y)], INK, 1.2, 120)
 
 # ----- standard margins (see ../style.md): more room under the rule and under the panels -----
 # body texture rows are mirror-tiled and inserted in two places that only contain plain body; everything below the
 # rule moves down by GAP_TOP (PluginEditor.cpp adds the same offset).
-GAP_TOP, GAP_BOT, CUT_TOP, CUT_BOT = 14, 46, 168, 694
+GAP_TOP, GAP_BOT, CUT_TOP, CUT_BOT = 79, 46, 168, 720
 def tiled(arr, y0, y1, n):
     src = arr[y0 * S:y1 * S]; r = len(src)
     idx = np.arange(n * S) % (2 * r)
     return src[np.where(idx >= r, 2 * r - 1 - idx, idx)]
 arr = np.asarray(img)
 arr = np.concatenate([arr[:CUT_TOP * S], tiled(arr, 164, 173, GAP_TOP), arr[CUT_TOP * S:(CUT_BOT) * S],
-                      tiled(arr, 688, 698, GAP_BOT), arr[CUT_BOT * S:]], axis=0)
+                      tiled(arr, 714, 724, GAP_BOT), arr[CUT_BOT * S:]], axis=0)
 H += GAP_TOP + GAP_BOT
 img = Image.fromarray(arr, 'RGBA')
 
+# ----- tab buttons: below the rule, centred on the window (final coordinates; PluginEditor.cpp: kTabBtn); the editor lights the selected one -----
+TAB_BTNS = [("DELAY", (695, 202)), ("EFFECTS", (865, 202))]
+for lab, (tx, ty) in TAB_BTNS:
+    layer = new(); dr = ImageDraw.Draw(layer)
+    dr.rounded_rectangle([(tx - 75) * S, (ty - 22) * S, (tx + 75) * S, (ty + 22) * S], radius=13 * S, fill=(6, 10, 18, 235))
+    dr.rounded_rectangle([(tx - 77) * S, (ty - 24) * S, (tx + 77) * S, (ty + 24) * S], radius=15 * S, outline=(255, 255, 255, 60), width=2 * S)
+    comp(layer)
+    text(tx, ty + 1, lab, font(21, 0), INK, spacing=3)
+
+line([(PANEL_L, 239), (PANEL_R, 239)], DARK, 1.5, 150)          # second rule: under the tab buttons
+
 # ----- credit, bottom right (right edge lined up with the panels) -----
-text(PANEL_R, PANEL_B + GAP_TOP + 54, "Made by Richard Leurs", font(21, 2), DARK, 'rm', spacing=2)
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'common'))
+from vibr_credit import credit
+credit(text, new, comp, S, PANEL_R, PANEL_B + GAP_TOP + 54, font(21, 2), DARK, 21)
 
 out = img.convert('RGB').resize((W, H), Image.LANCZOS)
 arr = np.asarray(out, np.float32) + rng.normal(0, 1.3, (H, W, 1)).astype(np.float32)          # fine photo grain
-Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8)).save(sys.argv[1] if len(sys.argv) > 1 else 'background.png')
+Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8)).save(sys.argv[2] if len(sys.argv) > 2 else 'background.png')
 print('ok')

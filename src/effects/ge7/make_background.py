@@ -23,7 +23,6 @@ TOP, BOT = 410, 750                           # slider travel: +15 dB at the top
 NAME_Y = 345
 BANDS = [(250 + 190 * k, n) for k, n in enumerate(["100", "200", "400", "800", "1.6k", "3.2k", "6.4k"])]
 LEVEL_X = 1640
-CHECK = (560, 87)
 LED = (P2[2] - 35, 87)                        # power slide switch (top right)
 
 FONT = '/System/Library/Fonts/Avenir Next.ttc'
@@ -180,7 +179,7 @@ def rrect_grad(x0, y0, x1, y1, r, top, bot):
 # ----- title -----
 text(P1[0] + 6, 110, "GE-7", font(140, 9), DARK, 'lm')
 text(P2[2] - 190, 86, "GRAPHIC EQUALIZER", font(40, 5), DARK, 'rm', spacing=6)
-text(P2[2] - 190, 134, "7 BANDS  \u00b7  \u00b1 15 dB  \u00b7  LEVEL", font(34, 5), DARK, 'rm', spacing=6)
+text(P2[2] - 190, 134, "TONE SHAPING", font(34, 5), DARK, 'rm', spacing=6)
 line([(P1[0], 208), (P2[2], 208)], DARK, 2, 150)
 
 # ----- black panels with a titled outline -----
@@ -233,15 +232,11 @@ for k, lab in ((0, "+15"), (3, "0"), (6, "-15")):               # dB scale at th
 text(118, (TOP + BOT) / 2, "dB", font(26, 2), INK, 'rm', spacing=1)
 text(P1[0] + 60, NAME_Y, "Hz", font(26, 2), INK, 'lm', spacing=1)
 
-# ----- CHECK lamp socket (the lamp is drawn live) -----
-shadow(CHECK[0], CHECK[1], 22, 3, 5, 5, 140)
-layer = new(); dr = ImageDraw.Draw(layer)
-dr.ellipse([(CHECK[0] - 22) * S, (CHECK[1] - 22) * S, (CHECK[0] + 22) * S, (CHECK[1] + 22) * S], fill=(20, 20, 22, 255), outline=(255, 255, 255, 70), width=2 * S)
-comp(layer)
-text(CHECK[0], CHECK[1] + 50, "CHECK", font(26, 2), DARK, 'mm', spacing=2)
-
 # ----- credit, bottom right (right edge lined up with the panels) -----
-text(P2[2], PB + 70, "Made by Richard Leurs", font(28, 2), DARK, 'rm', spacing=2)
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'common'))
+from vibr_credit import credit
+credit(text, new, comp, S, P2[2], PB + 70, font(28, 2), DARK, 28)
 
 out = img.convert('RGB').resize((W, H), Image.LANCZOS)
 arr = np.asarray(out, np.float32) + rng.normal(0, 1.3, (H, W, 1)).astype(np.float32)

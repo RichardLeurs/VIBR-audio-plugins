@@ -1,0 +1,36 @@
+{
+	"InstallScripts" : 
+	[
+		"/Users/richardleurs/Documents/Webserver/vst/build/cmake_install.cmake",
+		"/Users/richardleurs/Documents/Webserver/vst/build/_deps/juce-build/cmake_install.cmake",
+		"/Users/richardleurs/Documents/Webserver/vst/build/_deps/juce-build/modules/cmake_install.cmake",
+		"/Users/richardleurs/Documents/Webserver/vst/build/_deps/juce-build/extras/Build/cmake_install.cmake",
+		"/Users/richardleurs/Documents/Webserver/vst/build/_deps/juce-build/extras/Build/juceaide/cmake_install.cmake",
+		"/Users/richardleurs/Documents/Webserver/vst/build/src/common/cmake_install.cmake",
+		"/Users/richardleurs/Documents/Webserver/vst/build/src/effects/dd1/cmake_install.cmake",
+		"/Users/richardleurs/Documents/Webserver/vst/build/src/effects/dm1/cmake_install.cmake",
+		"/Users/richardleurs/Documents/Webserver/vst/build/src/effects/ce1/cmake_install.cmake",
+		"/Users/richardleurs/Documents/Webserver/vst/build/src/effects/re1/cmake_install.cmake",
+		"/Users/richardleurs/Documents/Webserver/vst/build/src/effects/re2/cmake_install.cmake",
+		"/Users/richardleurs/Documents/Webserver/vst/build/src/effects/ds1/cmake_install.cmake",
+		"/Users/richardleurs/Documents/Webserver/vst/build/src/effects/bf3/cmake_install.cmake",
+		"/Users/richardleurs/Documents/Webserver/vst/build/src/effects/cs3/cmake_install.cmake",
+		"/Users/richardleurs/Documents/Webserver/vst/build/src/effects/lm2/cmake_install.cmake",
+		"/Users/richardleurs/Documents/Webserver/vst/build/src/effects/ph2/cmake_install.cmake",
+		"/Users/richardleurs/Documents/Webserver/vst/build/src/effects/ge7/cmake_install.cmake",
+		"/Users/richardleurs/Documents/Webserver/vst/build/src/effects/eh2/cmake_install.cmake",
+		"/Users/richardleurs/Documents/Webserver/vst/build/src/effects/tr2/cmake_install.cmake",
+		"/Users/richardleurs/Documents/Webserver/vst/build/src/effects/hm1/cmake_install.cmake",
+		"/Users/richardleurs/Documents/Webserver/vst/build/src/effects/ir2/cmake_install.cmake",
+		"/Users/richardleurs/Documents/Webserver/vst/build/src/effects/sl2/cmake_install.cmake",
+		"/Users/richardleurs/Documents/Webserver/vst/build/src/effects/od2/cmake_install.cmake",
+		"/Users/richardleurs/Documents/Webserver/vst/build/src/effects/oc5/cmake_install.cmake",
+		"/Users/richardleurs/Documents/Webserver/vst/build/src/effects/bs1/cmake_install.cmake",
+		"/Users/richardleurs/Documents/Webserver/vst/build/src/effects/mm1/cmake_install.cmake",
+		"/Users/richardleurs/Documents/Webserver/vst/build/src/effects/sd1/cmake_install.cmake",
+		"/Users/richardleurs/Documents/Webserver/vst/build/src/effects/sd3/cmake_install.cmake",
+		"/Users/richardleurs/Documents/Webserver/vst/build/src/multieffect/dc1/cmake_install.cmake",
+		"/Users/richardleurs/Documents/Webserver/vst/build/src/drumcomputer/tr08/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

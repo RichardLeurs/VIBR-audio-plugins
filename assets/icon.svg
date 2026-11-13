@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <!-- the rainbow runs along the V: down the left arm, up the right arm -->
+    <linearGradient id="l" x1="10" y1="12" x2="32" y2="54" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ff2d55"/>
+      <stop offset=".34" stop-color="#ff8a00"/>
+      <stop offset=".67" stop-color="#ffd60a"/>
+      <stop offset="1" stop-color="#30e060"/>
+    </linearGradient>
+    <linearGradient id="r" x1="32" y1="54" x2="54" y2="12" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#30e060"/>
+      <stop offset=".34" stop-color="#00d4ff"/>
+      <stop offset=".67" stop-color="#3d7bff"/>
+      <stop offset="1" stop-color="#a259ff"/>
+    </linearGradient>
+  </defs>
+  <g fill="none" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M10 12 L32 54" stroke="url(#l)"/>
+    <path d="M32 54 L54 12" stroke="url(#r)"/>
+  </g>
+</svg>

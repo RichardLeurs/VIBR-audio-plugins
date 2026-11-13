@@ -25,7 +25,6 @@ KNOBS = [(900, "BASS", "MIN", "MAX"), (1170, "MIDDLE", "MIN", "MAX"), (1440, "TR
          (1810, "GAIN", "MIN", "MAX"), (2080, "LEVEL", "MIN", "MAX"), (2350, "AMBIENCE", "MIN", "MAX")]
 TYPE_X = 370
 TYPES = ["CLEAN", "TWN", "TWEED", "DIAMOND", "CRUNCH", "BRIT", "BROWN", "HI-GAIN", "SLDN", "MODDED", "RFIER"]
-CHECK = (560, 87)
 LED = (P3[2] - 35, 87)                        # power slide switch (top right)
 
 FONT = '/System/Library/Fonts/Avenir Next.ttc'
@@ -182,7 +181,7 @@ def rrect_grad(x0, y0, x1, y1, r, top, bot):
 # ----- title -----
 text(P1[0] + 6, 110, "IR-2", font(140, 9), DARK, 'lm')
 text(P3[2] - 190, 86, "AMP & CABINET", font(40, 5), DARK, 'rm', spacing=6)
-text(P3[2] - 190, 134, "11 AMP TYPES  \u00b7  3-BAND TONE  \u00b7  AMBIENCE", font(34, 5), DARK, 'rm', spacing=6)
+text(P3[2] - 190, 134, "AMP ESSENTIALS", font(34, 5), DARK, 'rm', spacing=6)
 line([(P1[0], 208), (P3[2], 208)], DARK, 2, 150)
 
 # ----- black panels with a titled outline -----
@@ -243,15 +242,11 @@ for k, nm in enumerate(TYPES):
     else:          x, y, anc = TYPE_X + 175 * sn, KY - 175 * cs - 8, 'mm'
     text(x + (8 if sn > 0.3 else -8 if sn < -0.3 else 0), y, nm, font(27, 2), INK, anc, spacing=1)
 
-# ----- CHECK lamp socket (the lamp is drawn live) -----
-shadow(CHECK[0], CHECK[1], 22, 3, 5, 5, 140)
-layer = new(); dr = ImageDraw.Draw(layer)
-dr.ellipse([(CHECK[0] - 22) * S, (CHECK[1] - 22) * S, (CHECK[0] + 22) * S, (CHECK[1] + 22) * S], fill=(20, 20, 22, 255), outline=(255, 255, 255, 70), width=2 * S)
-comp(layer)
-text(CHECK[0], CHECK[1] + 50, "CHECK", font(26, 2), DARK, 'mm', spacing=2)
-
 # ----- credit, bottom right (right edge lined up with the panels) -----
-text(P3[2], PB + 70, "Made by Richard Leurs", font(28, 2), DARK, 'rm', spacing=2)
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'common'))
+from vibr_credit import credit
+credit(text, new, comp, S, P3[2], PB + 70, font(28, 2), DARK, 28)
 
 out = img.convert('RGB').resize((W, H), Image.LANCZOS)
 arr = np.asarray(out, np.float32) + rng.normal(0, 1.3, (H, W, 1)).astype(np.float32)

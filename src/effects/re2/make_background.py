@@ -144,8 +144,8 @@ def rrect_grad(x0, y0, x1, y1, r, top, bot):
 
 # ----- title -----
 text(P1[0] + 6, 110, "RE-2", font(140, 9), DARK, 'lm')
-text(P3[2] - 190, 86, "TAPE ECHO  +  SATURATION", font(40, 5), DARK, 'rm', spacing=6)
-text(P3[2] - 190, 134, "ANALOG-STYLE SPACE ECHO", font(34, 5), DARK, 'rm', spacing=6)
+text(P3[2] - 190, 86, "TAPE ECHO", font(40, 5), DARK, 'rm', spacing=6)
+text(P3[2] - 190, 134, "MAGNETIC WARMTH", font(34, 5), DARK, 'rm', spacing=6)
 line([(P1[0], 208), (P3[2], 208)], DARK, 2, 150)
 
 def panel(box, title, pw):
@@ -172,23 +172,18 @@ panel(P3, "ECHO", 150)
 line([(P3[0] + 34, (ROW1 + ROW2) / 2 + 28), (P3[2] - 34, (ROW1 + ROW2) / 2 + 28)], INK, 1.5, 70)       # divider between the two knob rows
 
 def led_bezel(lx, ly, lit=None):
-    shadow(lx, ly, 20, 3, 6, 5, 160)
-    disc(lx, ly, 21, CHROME, (-0.4, -0.5), 1.6)
-    disc(lx, ly, 14, [(0, (20, 20, 22)), (1, (4, 4, 5))], (0, 0), 1.2)
-    if lit:
-        glow = new(); gd = ImageDraw.Draw(glow)
-        gd.ellipse([(lx - 36) * S, (ly - 36) * S, (lx + 36) * S, (ly + 36) * S], fill=lit + (70,))
-        comp(glow.filter(ImageFilter.GaussianBlur(10 * S)))
-        disc(lx, ly, 11, [(0, (210, 255, 220)), (0.5, lit), (1, tuple(int(c * 0.5) for c in lit))], (-0.3, -0.4), 1.4)
-    else:
-        disc(lx, ly, 11, [(0, (70, 74, 76)), (1, (22, 24, 25))], (-0.3, -0.4), 1.4)
+    # flat (see ../../../.claude/style.md, "Flat style"): a thin dark grey ring round a flat dark well; the editor fills the lamp
+    layer = new(); dr = ImageDraw.Draw(layer)
+    dr.ellipse([(lx - 17) * S, (ly - 17) * S, (lx + 17) * S, (ly + 17) * S], fill=(52, 56, 68, 255))
+    dr.ellipse([(lx - 14) * S, (ly - 14) * S, (lx + 14) * S, (ly + 14) * S], fill=(12, 13, 15, 255))
+    comp(layer)
 
 def pushbutton(bx, by, w=112, h=58):
-    m = Image.new('L', (W * S, H * S), 0)
-    ImageDraw.Draw(m).rounded_rectangle([(bx - w / 2 - 6) * S, (by - h / 2 - 2) * S, (bx + w / 2 + 10) * S, (by + h / 2 + 12) * S], radius=14 * S, fill=170)
-    m = m.filter(ImageFilter.GaussianBlur(8 * S)); lay = new(); lay.putalpha(m); comp(lay)
-    rrect_grad(bx - w / 2 - 6, by - h / 2 - 6, bx + w / 2 + 6, by + h / 2 + 6, 16, (236, 238, 244), (92, 96, 106))
-    rrect_grad(bx - w / 2, by - h / 2, bx + w / 2, by + h / 2, 11, (30, 31, 34), (8, 8, 10))
+    # flat (see style.md, "Flat style"): a thin dark grey ring round a flat dark well; no bezel, no shadow
+    layer = new(); dr = ImageDraw.Draw(layer)
+    dr.rounded_rectangle([(bx - w / 2 - 3) * S, (by - h / 2 - 3) * S, (bx + w / 2 + 3) * S, (by + h / 2 + 3) * S], radius=14 * S, fill=(52, 56, 68, 255))
+    dr.rounded_rectangle([(bx - w / 2) * S, (by - h / 2) * S, (bx + w / 2) * S, (by + h / 2) * S], radius=11 * S, fill=(12, 13, 15, 255))
+    comp(layer)
 
 
 # ----- power: horizontal slide switch (top right), ball left = OFF, right = ON -----
@@ -276,7 +271,10 @@ for deg in (54, 180):
 comp(layer)
 
 # ----- credit, bottom right (right edge lined up with the panels) -----
-text(P3[2], PB + 70, "Made by Richard Leurs", font(28, 2), DARK, 'rm', spacing=2)
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'common'))
+from vibr_credit import credit
+credit(text, new, comp, S, P3[2], PB + 70, font(28, 2), DARK, 28)
 
 out = img.convert('RGB').resize((W, H), Image.LANCZOS)
 arr = np.asarray(out, np.float32) + rng.normal(0, 1.3, (H, W, 1)).astype(np.float32)

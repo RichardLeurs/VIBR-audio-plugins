@@ -41,12 +41,12 @@ private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
 
     std::atomic<float>* pLevel, *pTime, *pFactor, *pFeedback, *pHiCut, *pModInt, *pModFreq, *pDirect, *pEffect,
-                       *pHold, *pBypass, *pPower;
+                       *pBypass, *pPower;
 
     double sr = 44100.0;
     sdd1000::Channel channels[2];
 
-    juce::SmoothedValue<float> sDelayMs, sFeedback, sHoldIn, sInGain, sDirect, sEffect, sActive, sModInt, sModRate, sCutHz;
+    juce::SmoothedValue<float> sDelayMs, sFeedback, sInGain, sDirect, sEffect, sActive, sModInt, sModRate, sCutHz;
     float phase = 0.0f, meter = 0.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SDD1000AudioProcessor)

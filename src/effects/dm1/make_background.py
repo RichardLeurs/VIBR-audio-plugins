@@ -136,8 +136,8 @@ def rrect_grad(x0, y0, x1, y1, r, top, bot):
 
 # ----- title -----
 text(LP[0] + 6, 110, "DM-1", font(140, 9), DARK, 'lm')
-text(RP[2] - 190, 86, "12-MODE MODULATION DELAY", font(40, 5), DARK, 'rm', spacing=6)
-text(RP[2] - 190, 134, "TAP TEMPO  \u00b7  DELAY MACHINE", font(34, 5), DARK, 'rm', spacing=6)
+text(RP[2] - 190, 86, "MODULATION DELAY", font(40, 5), DARK, 'rm', spacing=6)
+text(RP[2] - 190, 134, "MODULATED ECHOES", font(34, 5), DARK, 'rm', spacing=6)
 line([(LP[0], 208), (RP[2], 208)], DARK, 2, 150)
 
 # ----- black panels with a titled outline -----
@@ -162,23 +162,18 @@ panel(MP, "MODE", 170)
 panel(RP, "DELAY", 190)
 
 def led_bezel(lx, ly, lit=None):
-    shadow(lx, ly, 20, 3, 6, 5, 160)
-    disc(lx, ly, 21, CHROME, (-0.4, -0.5), 1.6)
-    disc(lx, ly, 14, [(0, (20, 20, 22)), (1, (4, 4, 5))], (0, 0), 1.2)
-    if lit:
-        glow = new(); gd = ImageDraw.Draw(glow)
-        gd.ellipse([(lx - 36) * S, (ly - 36) * S, (lx + 36) * S, (ly + 36) * S], fill=lit + (70,))
-        comp(glow.filter(ImageFilter.GaussianBlur(10 * S)))
-        disc(lx, ly, 11, [(0, (210, 255, 220)), (0.5, lit), (1, tuple(int(c * 0.5) for c in lit))], (-0.3, -0.4), 1.4)
-    else:
-        disc(lx, ly, 11, [(0, (70, 74, 76)), (1, (22, 24, 25))], (-0.3, -0.4), 1.4)
+    # flat (see ../../../.claude/style.md, "Flat style"): a thin dark grey ring round a flat dark well; the editor fills the lamp
+    layer = new(); dr = ImageDraw.Draw(layer)
+    dr.ellipse([(lx - 17) * S, (ly - 17) * S, (lx + 17) * S, (ly + 17) * S], fill=(52, 56, 68, 255))
+    dr.ellipse([(lx - 14) * S, (ly - 14) * S, (lx + 14) * S, (ly + 14) * S], fill=(12, 13, 15, 255))
+    comp(layer)
 
 def pushbutton(bx, by, w=112, h=58):
-    m = Image.new('L', (W * S, H * S), 0)
-    ImageDraw.Draw(m).rounded_rectangle([(bx - w / 2 - 6) * S, (by - h / 2 - 2) * S, (bx + w / 2 + 10) * S, (by + h / 2 + 12) * S], radius=14 * S, fill=170)
-    m = m.filter(ImageFilter.GaussianBlur(8 * S)); lay = new(); lay.putalpha(m); comp(lay)
-    rrect_grad(bx - w / 2 - 6, by - h / 2 - 6, bx + w / 2 + 6, by + h / 2 + 6, 16, (236, 238, 244), (92, 96, 106))
-    rrect_grad(bx - w / 2, by - h / 2, bx + w / 2, by + h / 2, 11, (30, 31, 34), (8, 8, 10))
+    # flat (see style.md, "Flat style"): a thin dark grey ring round a flat dark well; no bezel, no shadow
+    layer = new(); dr = ImageDraw.Draw(layer)
+    dr.rounded_rectangle([(bx - w / 2 - 3) * S, (by - h / 2 - 3) * S, (bx + w / 2 + 3) * S, (by + h / 2 + 3) * S], radius=14 * S, fill=(52, 56, 68, 255))
+    dr.rounded_rectangle([(bx - w / 2) * S, (by - h / 2) * S, (bx + w / 2) * S, (by + h / 2) * S], radius=11 * S, fill=(12, 13, 15, 255))
+    comp(layer)
 
 # ----- ON/OFF lamp (top right, a bypass switch) and the TAP pad bezel (MODE panel) -----
 LED = (RP[2] - 35, 87)
@@ -192,13 +187,13 @@ def power_switch(rx, ry):
     text(rx + 35, ry + 50, "OFF / ON", font(26, 2), DARK, 'rm', spacing=2)   # right-aligned with the panels and the rule
 power_switch(LED[0], LED[1])
 px, py = TAPPAD
-bw, bh = 112, 72
-m = Image.new('L', (W * S, H * S), 0)
-ImageDraw.Draw(m).rounded_rectangle([(px - bw / 2 + 4) * S, (py - bh / 2 + 9) * S, (px + bw / 2 + 4) * S, (py + bh / 2 + 9) * S], radius=15 * S, fill=170)
-m = m.filter(ImageFilter.GaussianBlur(8 * S)); lay = new(); lay.putalpha(m); comp(lay)
-rrect_grad(px - bw / 2, py - bh / 2, px + bw / 2, py + bh / 2, 15, (236, 238, 244), (92, 96, 106))
-rrect_grad(px - bw / 2 + 6, py - bh / 2 + 6, px + bw / 2 - 6, py + bh / 2 - 6, 10, (8, 8, 10), (3, 3, 4))
-text(px, SUBY, "TAP", font(30, 0), INK, spacing=4)
+bw, bh = 118, 64                                          # the same outer size as the MEMORY and TAP DIVISION buttons (112 x 58 well + 3 px ring)
+# flat TAP pad (see style.md, "Flat style"): a thin dark grey ring round a flat dark well; the editor fills the pad
+layer = new(); dr = ImageDraw.Draw(layer)
+dr.rounded_rectangle([(px - bw / 2) * S, (py - bh / 2) * S, (px + bw / 2) * S, (py + bh / 2) * S], radius=15 * S, fill=(52, 56, 68, 255))
+dr.rounded_rectangle([(px - bw / 2 + 3) * S, (py - bh / 2 + 3) * S, (px + bw / 2 - 3) * S, (py + bh / 2 - 3) * S], radius=12 * S, fill=(12, 13, 15, 255))
+comp(layer)
+text(px, CAPY, "TAP", font(30, 2), INK, spacing=1)               # caption above the button, as MEMORY and TAP DIVISION
 
 # ----- left panel: memory strip -----
 for i, (x, lab) in enumerate(zip(MEM_X, ["MANUAL", "1", "2", "3", "4"])):
@@ -211,6 +206,7 @@ text(840, SUBY, "(WRITE: HOLD)", font(27, 2), INK)
 # ----- right panel: tap-division strip (LEDs are drawn live by the editor) -----
 for x, lab in zip(DIV_X, ["1/2", "1/4", "1/8", "TRI", "DOT"]):
     text(x, CAPY, lab, font(30, 2), INK, spacing=1)
+    led_bezel(x, LEDY)                                        # flat ring; the editor lights the tap-division lamps (red)
 line([(2002, LEDY - 38), (2002, LEDY + 38)], INK, 2, 170)
 text(2370, CAPY, "TAP DIVISION", font(30, 2), INK, spacing=1)
 pushbutton(2370, LEDY)
@@ -240,7 +236,10 @@ for lab, offs, anc in MODES:
         text(MODE[0] + dx, MODE[1] + dy, part, font(27, 2), INK, anc, spacing=1)
 
 # ----- credit, bottom right (right edge lined up with the panels) -----
-text(RP[2], PB + 70, "Made by Richard Leurs", font(28, 2), DARK, 'rm', spacing=2)
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'common'))
+from vibr_credit import credit
+credit(text, new, comp, S, RP[2], PB + 70, font(28, 2), DARK, 28)
 
 out = img.convert('RGB').resize((W, H), Image.LANCZOS)
 arr = np.asarray(out, np.float32) + rng.normal(0, 1.3, (H, W, 1)).astype(np.float32)

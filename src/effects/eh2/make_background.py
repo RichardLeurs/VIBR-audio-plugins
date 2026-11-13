@@ -18,12 +18,11 @@ CHROME = [(0, (250, 250, 252)), (0.35, (190, 194, 202)), (0.7, (110, 114, 124)),
 
 # ----- layout (shared with PluginEditor.cpp); same margins and gaps as the DM-1 (see ../style.md) -----
 PT, PB = 268, 752
-P1, P2, P3 = (40, PT, 660, PB), (680, PT, 1300, PB), (1320, PT, 1800, PB)      # side margins 40, panel gaps 20
+P1, P2, P3 = (40, PT, 613, PB), (633, PT, 1207, PB), (1227, PT, 1800, PB)      # side margins 40, panel gaps 20; the three panels are the same width
 KY, KR = 532, 100                             # knob row and knob radius
 NAME_Y = 348                                  # knob name above the knob
-KNOBS = [(350, "MIX", "INV", "NOR"), (990, "FREQ", "LO", "HI"), (1560, "SENS", "MIN", "MAX")]
+KNOBS = [(326, "MIX", "INV", "NOR"), (920, "FREQ", "LO", "HI"), (1514, "SENS", "MIN", "MAX")]
 SENS_LAMP = (1722, 348)
-CHECK = (560, 87)
 LED = (P3[2] - 35, 87)                        # power slide switch (top right)
 
 FONT = '/System/Library/Fonts/Avenir Next.ttc'
@@ -180,7 +179,7 @@ def rrect_grad(x0, y0, x1, y1, r, top, bot):
 # ----- title -----
 text(P1[0] + 6, 110, "EH-2", font(140, 9), DARK, 'lm')
 text(P3[2] - 190, 86, "ENHANCER", font(40, 5), DARK, 'rm', spacing=6)
-text(P3[2] - 190, 134, "MIX  \u00b7  FREQ  \u00b7  SENS", font(34, 5), DARK, 'rm', spacing=6)
+text(P3[2] - 190, 134, "SONIC CLARITY", font(34, 5), DARK, 'rm', spacing=6)
 line([(P1[0], 208), (P3[2], 208)], DARK, 2, 150)
 
 # ----- black panels with a titled outline -----
@@ -238,15 +237,11 @@ layer = new(); dr = ImageDraw.Draw(layer)
 dr.ellipse([(SENS_LAMP[0] - 22) * S, (SENS_LAMP[1] - 22) * S, (SENS_LAMP[0] + 22) * S, (SENS_LAMP[1] + 22) * S], fill=(20, 20, 22, 255), outline=(255, 255, 255, 70), width=2 * S)
 comp(layer)
 
-# ----- CHECK lamp socket (the lamp is drawn live) -----
-shadow(CHECK[0], CHECK[1], 22, 3, 5, 5, 140)
-layer = new(); dr = ImageDraw.Draw(layer)
-dr.ellipse([(CHECK[0] - 22) * S, (CHECK[1] - 22) * S, (CHECK[0] + 22) * S, (CHECK[1] + 22) * S], fill=(20, 20, 22, 255), outline=(255, 255, 255, 70), width=2 * S)
-comp(layer)
-text(CHECK[0], CHECK[1] + 50, "CHECK", font(26, 2), DARK, 'mm', spacing=2)
-
 # ----- credit, bottom right (right edge lined up with the panels) -----
-text(P3[2], PB + 70, "Made by Richard Leurs", font(28, 2), DARK, 'rm', spacing=2)
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'common'))
+from vibr_credit import credit
+credit(text, new, comp, S, P3[2], PB + 70, font(28, 2), DARK, 28)
 
 out = img.convert('RGB').resize((W, H), Image.LANCZOS)
 arr = np.asarray(out, np.float32) + rng.normal(0, 1.3, (H, W, 1)).astype(np.float32)

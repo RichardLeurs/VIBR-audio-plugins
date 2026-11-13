@@ -7,7 +7,8 @@ juce_add_binary_data(RE2Assets
 )
 
 juce_add_plugin(RE-2
-  COMPANY_NAME "Richard Leurs"
+  COMPANY_NAME "VIBR"
+  ICON_BIG "${RL_ICON}"
   BUNDLE_ID com.richardleurs.re2
   IS_SYNTH FALSE
   NEEDS_MIDI_INPUT FALSE

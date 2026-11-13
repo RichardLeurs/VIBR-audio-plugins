@@ -1,0 +1,2 @@
+/usr/bin/ar qc libBS1Assets.a CMakeFiles/BS1Assets.dir/juce_binarydata_BS1Assets/JuceLibraryCode/BinaryData1.cpp.o
+/usr/bin/ranlib libBS1Assets.a
