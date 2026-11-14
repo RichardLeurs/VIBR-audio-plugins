@@ -6,11 +6,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout SR1AudioProcessor::createLay
 {
     using namespace juce;
     AudioProcessorValueTreeState::ParameterLayout layout;
-    const auto pct = [&layout] (const char* id, const char* name, float def)
+    const auto pct = [&layout] (const char* id, const char* name, float def, const char* unit = "%")
     {
-        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id, 1 }, name, NormalisableRange<float> (0.0f, 100.0f, 1.0f), def));
+        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id, 1 }, name, NormalisableRange<float> (0.0f, 100.0f, 1.0f), def, AudioParameterFloatAttributes().withLabel (unit)));
     };
     layout.add (std::make_unique<AudioParameterBool>   (ParameterID { "power", 1 }, "Power", true));
+    layout.add (vibr::makeBypassParam());
     layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "root", 1 }, "Root",
                                                         StringArray { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" }, 0));
     layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "scale", 1 }, "Scale",
@@ -21,9 +22,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout SR1AudioProcessor::createLay
     pct ("damping", "Damping", 40.0f);
     pct ("tension", "Tension", 25.0f);
     pct ("motion", "Motion", 30.0f);
-    pct ("fine", "Fine", 50.0f);
+    pct ("fine", "Fine", 50.0f, "");
     pct ("mix", "Blend", 50.0f);
-    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "level", 1 }, "Level", NormalisableRange<float> (-24.0f, 12.0f, 1.0f), 0.0f));
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "level", 1 }, "Level", NormalisableRange<float> (-24.0f, 12.0f, 1.0f), 0.0f, AudioParameterFloatAttributes().withLabel ("dB")));
     return layout;
 }
 

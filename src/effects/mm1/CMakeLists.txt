@@ -42,6 +42,7 @@ target_compile_definitions(MM-1
 
 target_link_libraries(MM-1
   PRIVATE
+    rl_common
     MM1Assets
     juce::juce_audio_utils
     juce::juce_dsp

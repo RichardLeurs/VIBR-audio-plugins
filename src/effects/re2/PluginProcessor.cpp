@@ -35,6 +35,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout RE2AudioProcessor::createLay
     l.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "tapeAged", 1 }, "Tape Aged (off = New)", false));
     l.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "inputLine", 1 }, "Input Line (off = Guitar)", false));
     l.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "power", 1 }, "Power", true));
+    l.add (vibr::makeBypassParam());
     return l;
 }
 

@@ -6,11 +6,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout PT1AudioProcessor::createLay
 {
     using namespace juce;
     AudioProcessorValueTreeState::ParameterLayout layout;
-    const auto pct = [&layout] (const juce::String& id, const juce::String& name, float def)
+    const auto pct = [&layout] (const juce::String& id, const juce::String& name, float def, const char* unit = "%")
     {
-        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id, 1 }, name, NormalisableRange<float> (0.0f, 100.0f, 1.0f), def));
+        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id, 1 }, name, NormalisableRange<float> (0.0f, 100.0f, 1.0f), def, AudioParameterFloatAttributes().withLabel (unit)));
     };
     layout.add (std::make_unique<AudioParameterBool>   (ParameterID { "power", 1 }, "Power", true));
+    layout.add (vibr::makeBypassParam());
     layout.add (std::make_unique<AudioParameterBool>   (ParameterID { "intel", 1 }, "Intelligent", true));
     layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "root", 1 }, "Key",
                                                         StringArray { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" }, 0));
@@ -21,12 +22,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout PT1AudioProcessor::createLay
     {
         const String n (v + 1);
         layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "int" + n, 1 }, "Interval " + n, NormalisableRange<float> (0.0f, 100.0f, 1.0f), 100.0f * pt1::intervalValue (pt1::chordSemis (0, v))));
-        pct ("det" + n, "Detune " + n, det[v]);
+        pct ("det" + n, "Detune " + n, det[v], "");
         pct ("lvl" + n, "Level " + n, lvl[v]);
     }
     pct ("spread", "Spread", 70.0f);
     pct ("mix", "Mix", 50.0f);
-    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "level", 1 }, "Level", NormalisableRange<float> (-24.0f, 12.0f, 1.0f), 0.0f));
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "level", 1 }, "Level", NormalisableRange<float> (-24.0f, 12.0f, 1.0f), 0.0f, AudioParameterFloatAttributes().withLabel ("dB")));
     return layout;
 }
 

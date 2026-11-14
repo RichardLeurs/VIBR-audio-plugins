@@ -14,7 +14,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout MA1AudioProcessor::createLay
     {
         layout.add (std::make_unique<AudioParameterBool> (ParameterID { id, 1 }, name, def));
     };
-    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "inGain", 1 }, "Input", NormalisableRange<float> (-18.0f, 18.0f, 0.1f), 0.0f));
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "inGain", 1 }, "Input", NormalisableRange<float> (-18.0f, 18.0f, 0.1f), 0.0f, AudioParameterFloatAttributes().withLabel ("dB")));
     toggle ("gateOn", "Gate On", true);
     knob ("gateThresh", "Gate Threshold", 4.0f);
     knob ("gateRelease", "Gate Release", 3.0f);

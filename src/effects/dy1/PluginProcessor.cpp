@@ -6,9 +6,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout DY1AudioProcessor::createLay
 {
     using namespace juce;
     AudioProcessorValueTreeState::ParameterLayout layout;
-    const auto flt = [&layout] (const char* id, const char* name, float lo, float hi, float step, float def)
+    const auto flt = [&layout] (const char* id, const char* name, float lo, float hi, float step, float def, const char* unit = "")
     {
-        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id, 1 }, name, NormalisableRange<float> (lo, hi, step), def));
+        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id, 1 }, name, NormalisableRange<float> (lo, hi, step), def, AudioParameterFloatAttributes().withLabel (unit)));
     };
     const auto flag = [&layout] (const char* id, const char* name, bool def)
     {
@@ -19,21 +19,22 @@ juce::AudioProcessorValueTreeState::ParameterLayout DY1AudioProcessor::createLay
     {
         NormalisableRange<float> r (10.0f, 800.0f, 1.0f);
         r.setSkewForCentre (90.0f);
-        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id, 1 }, name, r, def));
+        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id, 1 }, name, r, def, AudioParameterFloatAttributes().withLabel ("ms")));
     };
     flag ("power", "Power", true);
+    flag ("bypass", "Bypass", false);
     flag ("gateOn", "Gate On", true);
-    flt ("gateThresh", "Gate Threshold", -80.0f, -10.0f, 1.0f, -50.0f);
+    flt ("gateThresh", "Gate Threshold", -80.0f, -10.0f, 1.0f, -50.0f, "dB");
     rel ("gateRelease", "Gate Release", 120.0f);
     flag ("expOn", "Expander On", false);
-    flt ("expThresh", "Expander Threshold", -80.0f, -10.0f, 1.0f, -45.0f);
+    flt ("expThresh", "Expander Threshold", -80.0f, -10.0f, 1.0f, -45.0f, "dB");
     flt ("expRatio", "Expander Ratio", 1.0f, 10.0f, 0.1f, 2.0f);
     rel ("expRelease", "Expander Release", 150.0f);
     flag ("transOn", "Transient Shaper On", true);
-    flt ("attack", "Attack", -100.0f, 100.0f, 1.0f, 0.0f);
-    flt ("sustain", "Sustain", -100.0f, 100.0f, 1.0f, 0.0f);
-    flt ("mix", "Mix", 0.0f, 100.0f, 1.0f, 100.0f);
-    flt ("level", "Level", -24.0f, 12.0f, 1.0f, 0.0f);
+    flt ("attack", "Attack", -100.0f, 100.0f, 1.0f, 0.0f, "%");
+    flt ("sustain", "Sustain", -100.0f, 100.0f, 1.0f, 0.0f, "%");
+    flt ("mix", "Mix", 0.0f, 100.0f, 1.0f, 100.0f, "%");
+    flt ("level", "Level", -24.0f, 12.0f, 1.0f, 0.0f, "dB");
     return layout;
 }
 

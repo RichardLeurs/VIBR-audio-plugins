@@ -2,15 +2,38 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
+namespace
+{
+// host label and readable text for a float parameter (the stored value is the shown value; Hz above 1000 reads as kHz)
+juce::AudioParameterFloatAttributes unitAttrs (const juce::String& unit, int decimals)
+{
+    return juce::AudioParameterFloatAttributes()
+        .withLabel (unit)
+        .withStringFromValueFunction ([unit, decimals] (float v, int)
+        {
+            if (unit == "Hz" && std::abs (v) >= 1000.0f) return juce::String (v / 1000.0f, 2) + " kHz";
+            return juce::String (v, decimals) + (unit.isEmpty() ? juce::String() : " " + unit);
+        })
+        .withValueFromStringFunction ([unit] (const juce::String& s)
+        {
+            const float v = s.retainCharacters ("0123456789.-+").getFloatValue();
+            return (unit == "Hz" && s.containsIgnoreCase ("k")) ? v * 1000.0f : v;
+        });
+}
+
+
+} // namespace
+
 juce::AudioProcessorValueTreeState::ParameterLayout ML1AudioProcessor::createLayout()
 {
     using namespace juce;
     AudioProcessorValueTreeState::ParameterLayout layout;
     const auto pct = [&layout] (const char* id, const char* name, float def)
     {
-        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id, 1 }, name, NormalisableRange<float> (0.0f, 100.0f, 1.0f), def));
+        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id, 1 }, name, NormalisableRange<float> (0.0f, 100.0f, 1.0f), def, unitAttrs ("%", 0)));
     };
     layout.add (std::make_unique<AudioParameterBool>   (ParameterID { "power", 1 }, "Power", true));
+    layout.add (vibr::makeBypassParam());
     layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "mode", 1 }, "Mode", StringArray { "Chorus", "Vibrato", "Flanger", "Phaser" }, 0));
     layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "variant", 1 }, "Type (2-4 voices, Sine / Triangle, Positive / Negative feedback, 4-8 stages)",
                                                         StringArray { "Type 1", "Type 2", "Type 3" }, 0));
@@ -19,7 +42,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout ML1AudioProcessor::createLay
     pct ("depth", "Depth", 50.0f);
     pct ("extra", "Width (Chorus, Vibrato) / Feedback (Flanger, Phaser)", 50.0f);
     pct ("mix", "Mix", 100.0f);
-    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "level", 1 }, "Level", NormalisableRange<float> (-24.0f, 12.0f, 1.0f), 0.0f));
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "level", 1 }, "Level", NormalisableRange<float> (-24.0f, 12.0f, 1.0f), 0.0f, unitAttrs ("dB", 0)));
     return layout;
 }
 
@@ -47,7 +70,7 @@ ML1AudioProcessor::ML1AudioProcessor()
                           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       apvts (*this, &undoManager, "ML1", createLayout()),
-      presets (*this, apvts, undoManager, "ML-1 Presets", ml1FactoryPresets(), { "power" })
+      presets (*this, apvts, undoManager, "ML-1 Presets", ml1FactoryPresets(), { "power", "bypass" })
 {
     pPower   = apvts.getRawParameterValue ("power");
     pMode    = apvts.getRawParameterValue ("mode");

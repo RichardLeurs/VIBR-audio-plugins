@@ -50,7 +50,7 @@ build_arch() {
   mkdir -p "$tree"
   echo "==> configure  ($a: $SRC -> $tree)"
   local gen=()
-  if [ "$IS_WIN" = 1 ] && [ -z "${CMAKE_GENERATOR:-}" ]; then gen=(-G "Visual Studio 17 2022" -A x64); fi      # set CMAKE_GENERATOR to use another (e.g. Ninja)
+  if [ "$IS_WIN" = 1 ] && [ -z "${CMAKE_GENERATOR:-}" ]; then gen=(-A x64); fi      # no -G: CMake picks the newest Visual Studio it finds (2022, 2026 ...); set CMAKE_GENERATOR to use another (e.g. Ninja)
   cmake -S "$SRC" -B "$tree" ${gen[@]+"${gen[@]}"} -DRL_ARCH="$a" -DRELEASES_DIR="$OUT/releases/$a"
   [ "$configure_only" = 1 ] && return 0
 

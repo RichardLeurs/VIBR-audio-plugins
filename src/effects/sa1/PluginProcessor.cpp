@@ -6,34 +6,35 @@ juce::AudioProcessorValueTreeState::ParameterLayout SA1AudioProcessor::createLay
 {
     using namespace juce;
     AudioProcessorValueTreeState::ParameterLayout layout;
-    const auto flt = [&layout] (const char* id, const char* name, float lo, float hi, float step, float def)
+    const auto flt = [&layout] (const char* id, const char* name, float lo, float hi, float step, float def, const char* unit = "")
     {
-        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id, 1 }, name, NormalisableRange<float> (lo, hi, step), def));
+        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id, 1 }, name, NormalisableRange<float> (lo, hi, step), def, AudioParameterFloatAttributes().withLabel (unit)));
     };
     const auto flag = [&layout] (const char* id, const char* name, bool def)
     {
         layout.add (std::make_unique<AudioParameterBool> (ParameterID { id, 1 }, name, def));
     };
     flag ("power", "Power", true);
+    flag ("bypass", "Bypass", false);
     flag ("boostOn", "Boost On", false);
-    flt ("boostGain", "Boost Gain", 0.0f, 24.0f, 0.5f, 10.0f);
-    flt ("boostTone", "Boost Tone", 0.0f, 100.0f, 1.0f, 50.0f);
+    flt ("boostGain", "Boost Gain", 0.0f, 24.0f, 0.5f, 10.0f, "dB");
+    flt ("boostTone", "Boost Tone", 0.0f, 100.0f, 1.0f, 50.0f, "%");
     flag ("tubeOn", "Tube On", true);
-    flt ("tubeDrive", "Tube Drive", 0.0f, 100.0f, 1.0f, 40.0f);
-    flt ("tubeBias", "Tube Bias", 0.0f, 100.0f, 1.0f, 40.0f);
+    flt ("tubeDrive", "Tube Drive", 0.0f, 100.0f, 1.0f, 40.0f, "%");
+    flt ("tubeBias", "Tube Bias", 0.0f, 100.0f, 1.0f, 40.0f, "%");
     flag ("tapeOn", "Tape On", true);
-    flt ("tapeDrive", "Tape Drive", 0.0f, 100.0f, 1.0f, 40.0f);
-    flt ("tapeWarmth", "Tape Warmth", 0.0f, 100.0f, 1.0f, 50.0f);
+    flt ("tapeDrive", "Tape Drive", 0.0f, 100.0f, 1.0f, 40.0f, "%");
+    flt ("tapeWarmth", "Tape Warmth", 0.0f, 100.0f, 1.0f, 50.0f, "%");
     flag ("crushOn", "Crush On", false);
     flt ("bits", "Crush Bits", 1.0f, 16.0f, 1.0f, 8.0f);
     {
         NormalisableRange<float> r (500.0f, 48000.0f, 1.0f);
         r.setSkewForCentre (6000.0f);
-        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "rate", 1 }, "Crush Rate", r, 12000.0f));
+        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "rate", 1 }, "Crush Rate", r, 12000.0f, AudioParameterFloatAttributes().withLabel ("Hz")));
     }
-    flt ("crushMix", "Crush Mix", 0.0f, 100.0f, 1.0f, 100.0f);
-    flt ("mix", "Mix", 0.0f, 100.0f, 1.0f, 100.0f);
-    flt ("level", "Level", -24.0f, 12.0f, 1.0f, 0.0f);
+    flt ("crushMix", "Crush Mix", 0.0f, 100.0f, 1.0f, 100.0f, "%");
+    flt ("mix", "Mix", 0.0f, 100.0f, 1.0f, 100.0f, "%");
+    flt ("level", "Level", -24.0f, 12.0f, 1.0f, 0.0f, "dB");
     return layout;
 }
 

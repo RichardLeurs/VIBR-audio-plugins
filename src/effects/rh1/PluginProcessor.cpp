@@ -33,6 +33,35 @@ std::vector<vibr::PresetManager::Factory> rh1FactoryPresets()
 }
 } // namespace
 
+namespace
+{
+// host label and readable text for a float parameter (the stored value is the shown value; Hz above 1000 reads as kHz)
+juce::AudioParameterFloatAttributes unitAttrs (const juce::String& unit, int decimals)
+{
+    return juce::AudioParameterFloatAttributes()
+        .withLabel (unit)
+        .withStringFromValueFunction ([unit, decimals] (float v, int)
+        {
+            if (unit == "Hz" && std::abs (v) >= 1000.0f) return juce::String (v / 1000.0f, 2) + " kHz";
+            return juce::String (v, decimals) + (unit.isEmpty() ? juce::String() : " " + unit);
+        })
+        .withValueFromStringFunction ([unit] (const juce::String& s)
+        {
+            const float v = s.retainCharacters ("0123456789.-+").getFloatValue();
+            return (unit == "Hz" && s.containsIgnoreCase ("k")) ? v * 1000.0f : v;
+        });
+}
+
+int decimalsFor (float step) { return step >= 1.0f ? 0 : step >= 0.1f ? 1 : 2; }
+
+juce::String unitFor (const juce::String& id, float hi)
+{
+    static const std::pair<const char*, const char*> table[] = { { "tempo", "bpm" }, { "rate", "Hz" }, { "level", "dB" } };
+    for (const auto& [k, u] : table) if (id == k) return u;
+    return (hi == 100.0f || hi == 75.0f) ? "%" : "";
+}
+} // namespace
+
 juce::AudioProcessorValueTreeState::ParameterLayout RH1AudioProcessor::createLayout()
 {
     using namespace juce;
@@ -41,10 +70,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout RH1AudioProcessor::createLay
     {
         NormalisableRange<float> r (lo, hi, step);
         if (centre > 0.0f) r.setSkewForCentre (centre);
-        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id, 1 }, name, r, def));
+        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id, 1 }, name, r, def, unitAttrs (unitFor (id, hi), decimalsFor (step))));
     };
     const auto flag = [&layout] (const char* id, const char* name, bool def) { layout.add (std::make_unique<AudioParameterBool> (ParameterID { id, 1 }, name, def)); };
     flag ("power", "Power", true);
+    flag ("bypass", "Bypass", false);
     layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "mode", 1 }, "Destination", StringArray { "Filter", "Tremolo", "Slicer" }, 0));
     layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "variant", 1 }, "Type (filter type, tremolo type, slicer mode)", StringArray { "Type 1", "Type 2", "Type 3", "Type 4", "Type 5" }, 0));
     layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "source", 1 }, "Source", StringArray { "LFO", "Envelope", "Steps" }, 0));
@@ -81,7 +111,7 @@ RH1AudioProcessor::RH1AudioProcessor()
                           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       apvts (*this, &undoManager, "RH1", createLayout()),
-      presets (*this, apvts, undoManager, "RH-1 Presets", rh1FactoryPresets(), { "power" })
+      presets (*this, apvts, undoManager, "RH-1 Presets", rh1FactoryPresets(), { "power", "bypass" })
 {
     const auto get = [this] (const char* id) { return apvts.getRawParameterValue (id); };
     pPower = get ("power"); pMode = get ("mode"); pVariant = get ("variant"); pSource = get ("source"); pSync = get ("sync"); pDivision = get ("division"); pFollow = get ("followHost"); pTempo = get ("tempo");

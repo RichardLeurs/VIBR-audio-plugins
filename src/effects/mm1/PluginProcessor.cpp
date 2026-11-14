@@ -26,6 +26,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout MemoryManAudioProcessor::cre
     knob ("depth",    "Depth",         2.0f);   // modulation depth
     knob ("delay",    "Delay",         5.0f);
     l.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "effect", 1 }, "Effect On", true));   // footswitch
+    l.add (vibr::makeBypassParam());
     return l;
 }
 

@@ -6,11 +6,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout GR1AudioProcessor::createLay
 {
     using namespace juce;
     AudioProcessorValueTreeState::ParameterLayout layout;
-    const auto pct = [&layout] (const char* id, const char* name, float def)
+    const auto pct = [&layout] (const char* id, const char* name, float def, const char* unit = "%")
     {
-        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id, 1 }, name, NormalisableRange<float> (0.0f, 100.0f, 1.0f), def));
+        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id, 1 }, name, NormalisableRange<float> (0.0f, 100.0f, 1.0f), def, AudioParameterFloatAttributes().withLabel (unit)));
     };
     layout.add (std::make_unique<AudioParameterBool>   (ParameterID { "power", 1 }, "Power", true));
+    layout.add (vibr::makeBypassParam());
     layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "shape", 1 }, "Envelope",
                                                         StringArray { "Soft", "Sharp", "Percussive", "Swell" }, 0));
     layout.add (std::make_unique<AudioParameterBool>   (ParameterID { "freeze", 1 }, "Freeze", false));
@@ -19,12 +20,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout GR1AudioProcessor::createLay
     pct ("density", "Density", 55.0f);
     pct ("position", "Position", 20.0f);
     pct ("spray", "Spray", 30.0f);
-    pct ("pitch", "Pitch", 50.0f);
+    pct ("pitch", "Pitch", 50.0f, "");
     pct ("random", "Random", 0.0f);
     pct ("reverse", "Reverse", 0.0f);
     pct ("spread", "Spread", 60.0f);
     pct ("mix", "Mix", 60.0f);
-    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "level", 1 }, "Level", NormalisableRange<float> (-24.0f, 12.0f, 1.0f), 0.0f));
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "level", 1 }, "Level", NormalisableRange<float> (-24.0f, 12.0f, 1.0f), 0.0f, AudioParameterFloatAttributes().withLabel ("dB")));
     return layout;
 }
 

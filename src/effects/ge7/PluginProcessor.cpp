@@ -8,7 +8,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout GE7AudioProcessor::createLay
     AudioProcessorValueTreeState::ParameterLayout layout;
     const auto fader = [&] (const char* id, const char* name)
     {
-        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id, 1 }, name, NormalisableRange<float> (-15.0f, 15.0f, 0.1f), 0.0f));
+        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id, 1 }, name, NormalisableRange<float> (-15.0f, 15.0f, 0.1f), 0.0f, AudioParameterFloatAttributes().withLabel ("dB")));
     };
     fader ("f100", "100 Hz");
     fader ("f200", "200 Hz");

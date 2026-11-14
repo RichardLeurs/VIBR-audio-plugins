@@ -23,6 +23,35 @@ std::vector<vibr::PresetManager::Factory> rb1FactoryPresets()
 }
 } // namespace
 
+namespace
+{
+// host label and readable text for a float parameter (the stored value is the shown value; Hz above 1000 reads as kHz)
+juce::AudioParameterFloatAttributes unitAttrs (const juce::String& unit, int decimals)
+{
+    return juce::AudioParameterFloatAttributes()
+        .withLabel (unit)
+        .withStringFromValueFunction ([unit, decimals] (float v, int)
+        {
+            if (unit == "Hz" && std::abs (v) >= 1000.0f) return juce::String (v / 1000.0f, 2) + " kHz";
+            return juce::String (v, decimals) + (unit.isEmpty() ? juce::String() : " " + unit);
+        })
+        .withValueFromStringFunction ([unit] (const juce::String& s)
+        {
+            const float v = s.retainCharacters ("0123456789.-+").getFloatValue();
+            return (unit == "Hz" && s.containsIgnoreCase ("k")) ? v * 1000.0f : v;
+        });
+}
+
+int decimalsFor (float step) { return step >= 1.0f ? 0 : step >= 0.1f ? 1 : 2; }
+
+juce::String unitFor (const juce::String& id, float hi)
+{
+    static const std::pair<const char*, const char*> table[] = { { "preDelay", "ms" }, { "level", "dB" } };
+    for (const auto& [k, u] : table) if (id == k) return u;
+    return (hi == 100.0f || hi == 75.0f) ? "%" : "";
+}
+} // namespace
+
 juce::AudioProcessorValueTreeState::ParameterLayout RB1AudioProcessor::createLayout()
 {
     using namespace juce;
@@ -31,10 +60,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout RB1AudioProcessor::createLay
     {
         NormalisableRange<float> r (lo, hi, step);
         if (centre > 0.0f) r.setSkewForCentre (centre);
-        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id, 1 }, name, r, def));
+        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id, 1 }, name, r, def, unitAttrs (unitFor (id, hi), decimalsFor (step))));
     };
     const auto flag = [&layout] (const char* id, const char* name, bool def) { layout.add (std::make_unique<AudioParameterBool> (ParameterID { id, 1 }, name, def)); };
     flag ("power", "Power", true);
+    flag ("bypass", "Bypass", false);
     layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "mode", 1 }, "Mode", StringArray { "Classic", "Space", "Resonate" }, 0));
     {
         StringArray names;
@@ -74,7 +104,7 @@ RB1AudioProcessor::RB1AudioProcessor()
                           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       apvts (*this, &undoManager, "RB1", createLayout()),
-      presets (*this, apvts, undoManager, "RB-1 Presets", rb1FactoryPresets(), { "power" })
+      presets (*this, apvts, undoManager, "RB-1 Presets", rb1FactoryPresets(), { "power", "bypass" })
 {
     const auto get = [this] (const char* id) { return apvts.getRawParameterValue (id); };
     pPower = get ("power"); pMode = get ("mode"); pVariant = get ("variant"); pDecay = get ("decay"); pSize = get ("size"); pTone = get ("tone"); pMotion = get ("motion"); pPreDelay = get ("preDelay");

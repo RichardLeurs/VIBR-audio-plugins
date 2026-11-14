@@ -6,26 +6,27 @@ juce::AudioProcessorValueTreeState::ParameterLayout SU1AudioProcessor::createLay
 {
     using namespace juce;
     AudioProcessorValueTreeState::ParameterLayout layout;
-    const auto flt = [&layout] (const char* id, const char* name, float lo, float hi, float step, float def)
+    const auto flt = [&layout] (const char* id, const char* name, float lo, float hi, float step, float def, const char* unit = "")
     {
-        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id, 1 }, name, NormalisableRange<float> (lo, hi, step), def));
+        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id, 1 }, name, NormalisableRange<float> (lo, hi, step), def, AudioParameterFloatAttributes().withLabel (unit)));
     };
     const auto flag = [&layout] (const char* id, const char* name, bool def)
     {
         layout.add (std::make_unique<AudioParameterBool> (ParameterID { id, 1 }, name, def));
     };
     flag ("power", "Power", true);
-    flt ("gain", "Gain", -60.0f, 12.0f, 0.5f, 0.0f);
+    flag ("bypass", "Bypass", false);
+    flt ("gain", "Gain", -60.0f, 12.0f, 0.5f, 0.0f, "dB");
     flt ("pan", "Pan", -100.0f, 100.0f, 1.0f, 0.0f);
     {
         NormalisableRange<float> r (0.1f, 10.0f, 0.01f);
         r.setSkewForCentre (1.0f);
-        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "autoRate", 1 }, "Auto-Pan Rate", r, 1.0f));
+        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "autoRate", 1 }, "Auto-Pan Rate", r, 1.0f, AudioParameterFloatAttributes().withLabel ("Hz")));
     }
-    flt ("autoDepth", "Auto-Pan Depth", 0.0f, 100.0f, 1.0f, 0.0f);
-    flt ("width", "Width", 0.0f, 200.0f, 1.0f, 100.0f);
-    flt ("spread", "Spread", 0.0f, 100.0f, 1.0f, 0.0f);
-    flt ("bassMono", "Bass Mono (Hz, 0 = off)", 0.0f, 300.0f, 1.0f, 0.0f);
+    flt ("autoDepth", "Auto-Pan Depth", 0.0f, 100.0f, 1.0f, 0.0f, "%");
+    flt ("width", "Width", 0.0f, 200.0f, 1.0f, 100.0f, "%");
+    flt ("spread", "Spread", 0.0f, 100.0f, 1.0f, 0.0f, "%");
+    flt ("bassMono", "Bass Mono (Hz, 0 = off)", 0.0f, 300.0f, 1.0f, 0.0f, "Hz");
     flag ("invL", "Invert Left", false);
     flag ("invR", "Invert Right", false);
     flag ("swap", "Swap Left / Right", false);

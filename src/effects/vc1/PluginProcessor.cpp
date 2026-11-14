@@ -8,9 +8,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout VC1AudioProcessor::createLay
     AudioProcessorValueTreeState::ParameterLayout layout;
     const auto pct = [&layout] (const juce::String& id, const juce::String& name, float def)
     {
-        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id, 1 }, name, NormalisableRange<float> (0.0f, 100.0f, 1.0f), def));
+        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id, 1 }, name, NormalisableRange<float> (0.0f, 100.0f, 1.0f), def, AudioParameterFloatAttributes().withLabel ("%")));
     };
     layout.add (std::make_unique<AudioParameterBool>   (ParameterID { "power", 1 }, "Power", true));
+    layout.add (vibr::makeBypassParam());
     layout.add (std::make_unique<AudioParameterBool>   (ParameterID { "sync", 1 }, "Sync (rates follow the host tempo)", false));
     layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "type", 1 }, "Filter", StringArray { "Low pass", "Band pass", "High pass" }, 0));
     layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "shape1", 1 }, "LFO 1 shape", StringArray { "Sine", "Triangle", "Square", "Ramp" }, 0));
@@ -32,7 +33,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout VC1AudioProcessor::createLay
             if (s == vc1::Env && d == vc1::Filter) def = 70.0f;
             pct ("m" + String (s) + String (d), String (vc1::sourceName (s)) + " > " + vc1::destName (d), def);
         }
-    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "level", 1 }, "Level", NormalisableRange<float> (-24.0f, 12.0f, 1.0f), 0.0f));
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "level", 1 }, "Level", NormalisableRange<float> (-24.0f, 12.0f, 1.0f), 0.0f, AudioParameterFloatAttributes().withLabel ("dB")));
     return layout;
 }
 

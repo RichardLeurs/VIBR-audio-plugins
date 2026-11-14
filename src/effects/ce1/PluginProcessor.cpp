@@ -26,6 +26,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout CE1AudioProcessor::createLay
     l.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "vibrato", 1 },   "Effect (off = Chorus, on = Vibrato)", false));
     l.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "inputHigh", 1 }, "Input (off = Low, on = High)", true));
     l.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "power", 1 },     "Power", true));
+    l.add (vibr::makeBypassParam());
     return l;
 }
 
