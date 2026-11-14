@@ -109,12 +109,13 @@ inline juce::Rectangle<float> abRect (int i, float y)
     static const float x[3] = { 0.0f, 40.0f, 80.0f }, w[3] = { 36.0f, 36.0f, 44.0f };
     return { kBarX + kChipW + 8.0f + x[i], y, w[i], 32.0f };
 }
-inline juce::Rectangle<float> undoRect (bool redo, float y) { return { kBarX + kChipW + 8.0f + (redo ? 188.0f : 132.0f), y, 54.0f, 32.0f }; }
+// showAB false (the Labs): no A / B / copy buttons, UNDO and REDO follow the chip directly
+inline juce::Rectangle<float> undoRect (bool redo, float y, bool showAB = true) { return { kBarX + kChipW + 8.0f + (showAB ? (redo ? 188.0f : 132.0f) : (redo ? 56.0f : 0.0f)), y, 54.0f, 32.0f }; }
 
 // state the bar needs between paints: when the copy button was pressed (it shows COPIED for a moment, the editor's timer repaints)
 struct PresetBarState { juce::uint32 copiedAt = 0; bool copiedRecently() const { return juce::Time::getMillisecondCounter() - copiedAt < 1200u && copiedAt != 0; } };
 
-inline void paintPresetBar (juce::Graphics& g, const Palette& pal, const vibr::PresetManager& mgr, const juce::UndoManager& undo, float y, const PresetBarState& state = {})
+inline void paintPresetBar (juce::Graphics& g, const Palette& pal, const vibr::PresetManager& mgr, const juce::UndoManager& undo, float y, const PresetBarState& state = {}, bool showAB = true)
 {
     const auto chip = presetChipRect (y);
     g.setColour (pal.panel);
@@ -124,7 +125,7 @@ inline void paintPresetBar (juce::Graphics& g, const Palette& pal, const vibr::P
     drawText (g, "PRESET", chip.getX() + 14.0f, chip.getCentreY(), 11.0f, pal.ink.withAlpha (0.5f), true, 0.2f, juce::Justification::centredLeft);
     drawText (g, mgr.name().toUpperCase(), chip.getX() + 78.0f, chip.getCentreY(), 13.0f, pal.body, true, 0.06f, juce::Justification::centredLeft);
     const int slot = mgr.abSlot();
-    for (int i = 0; i < 3; ++i)
+    for (int i = 0; i < (showAB ? 3 : 0); ++i)
     {
         const auto b = abRect (i, y);
         const bool selected = i < 2 && slot == i;                                          // the selected slot is a lit pill: the plugin colour with a dark border
@@ -148,7 +149,7 @@ inline void paintPresetBar (juce::Graphics& g, const Palette& pal, const vibr::P
     }
     for (int redo = 0; redo < 2; ++redo)
     {
-        const auto b = undoRect (redo != 0, y);
+        const auto b = undoRect (redo != 0, y, showAB);
         const bool can = redo ? undo.canRedo() : undo.canUndo();
         g.setColour (pal.panel);
         g.fillRoundedRectangle (b, 10.0f);
@@ -194,13 +195,13 @@ inline void showPresetMenu (juce::Component& owner, vibr::PresetManager& mgr, fl
 
 // a click at `p` (layout units): true when the bar took it
 inline bool presetBarMouseDown (juce::Point<float> p, juce::Component& owner, vibr::PresetManager& mgr, juce::UndoManager& undo, float y, float scale, PresetBarState& state,
-                                std::function<void()> done)
+                                std::function<void()> done, bool showAB = true)
 {
     if (presetChipRect (y).contains (p)) { showPresetMenu (owner, mgr, y, scale, done); return true; }
-    for (int i = 0; i < 3; ++i)
+    for (int i = 0; i < (showAB ? 3 : 0); ++i)
         if (abRect (i, y).contains (p)) { if (i < 2) mgr.switchAB (i); else { mgr.copyToOtherSlot(); state.copiedAt = juce::Time::getMillisecondCounter(); } done(); return true; }
-    if (undoRect (false, y).contains (p)) { undo.undo(); done(); return true; }
-    if (undoRect (true, y).contains (p)) { undo.redo(); done(); return true; }
+    if (undoRect (false, y, showAB).contains (p)) { undo.undo(); done(); return true; }
+    if (undoRect (true, y, showAB).contains (p)) { undo.redo(); done(); return true; }
     return false;
 }
 } // namespace vibr::ui

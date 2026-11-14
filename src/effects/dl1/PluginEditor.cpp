@@ -218,7 +218,7 @@ void DL1AudioProcessorEditor::paint (juce::Graphics& g)
     g.addTransform (juce::AffineTransform::scale (scale()));
     ui::paintBody (g, kPal, kW, kH, grain);
     ui::paintHeader (g, kPal, "DL-1", "DELAY LAB", "ECHO EVOLUTION", isOn ("power"));
-    ui::paintPresetBar (g, kPal, proc.presets, proc.undoManager, kBarY, barState);
+    ui::paintPresetBar (g, kPal, proc.presets, proc.undoManager, kBarY, barState, false);
 
     const int m = mode();
     ui::paintPanel (g, kPal, panelRect (0), {});
@@ -286,7 +286,7 @@ void DL1AudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
     const auto p = e.position / scale();
     proc.undoManager.beginNewTransaction();
     if (ui::powerRect().contains (p)) { toggle ("power"); return; }
-    if (ui::presetBarMouseDown (p, *this, proc.presets, proc.undoManager, kBarY, scale(), barState, [this] { repaint(); })) { layoutKnobs(); return; }
+    if (ui::presetBarMouseDown (p, *this, proc.presets, proc.undoManager, kBarY, scale(), barState, [this] { repaint(); }, false)) { layoutKnobs(); return; }
     const auto tabs = ui::tabRects (panelRect (0), kModeTabs);
     for (int i = 0; i < (int) tabs.size(); ++i)
         if (tabs[(size_t) i].expanded (3.0f).contains (p)) { setChoice ("mode", i); setChoice ("variant", 0); layoutKnobs(); repaint(); return; }
