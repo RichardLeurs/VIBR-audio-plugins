@@ -118,6 +118,31 @@ The window has a strip of tiles at the top (one per module, coloured by group, w
 
 You can find the web page for the project on this [`website`](https://vibr.richardleurs.nl).
 
+## If macOS blocks the plugins
+
+When you download an unsigned or unofficially distributed app or plugin, macOS may attach a quarantine attribute (`com.apple.quarantine`). This can trigger Gatekeeper warnings such as:
+
+- "App is damaged and can't be opened."
+- "Apple could not verify that this app is free of malware."
+
+Running `xattr -cr` removes that metadata and allows the app to launch:
+
+```
+xattr -cr /Applications/MyApp.app
+```
+
+If you only want to remove the quarantine flag:
+
+```
+xattr -dr com.apple.quarantine /Applications/MyApp.app
+```
+
+For the plugins, run it on the unzipped bundles, for example on the VST3 and AU folders in `~/Library/Audio/Plug-Ins`:
+
+```
+xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3 ~/Library/Audio/Plug-Ins/Components
+```
+
 ## Build
 
 ### What you need
