@@ -1,0 +1,50 @@
+name: macOS build
+
+# Builds all VIBR plugins (VST3, AU and Standalone) for Apple Silicon (arm64) and Intel (x86_64) with ./build.sh,
+# using the groups in plugins.conf, and attaches the zips (<group>-<format>-<arch>.zip) to the workflow run.
+# Start it from the Actions tab, or push a tag like v1.0: the zips are then also uploaded to the GitHub release of that tag.
+# Both builds run on an Apple Silicon runner; the Intel build is cross-compiled. The bundles are signed ad-hoc
+# (the local signing identity does not exist on the runner), so macOS may ask the user to allow them.
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  mac:
+    runs-on: macos-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [arm64, x86_64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build (VST3 + AU + Standalone)
+        env:
+          JOBS: 4
+        run: ./build.sh --arch ${{ matrix.arch }}
+
+      - name: List zips
+        run: ls -l ~/Developer/VIBR/zip
+
+      - name: Collect zips
+        run: |
+          mkdir -p dist
+          cp ~/Developer/VIBR/zip/*-${{ matrix.arch }}.zip dist/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vibr-${{ matrix.arch }}
+          path: dist/*.zip
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.zip
