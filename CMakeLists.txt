@@ -239,3 +239,5 @@ add_subdirectory(src/mastering/ms1)       # MS-1: the mastering suite (src/maste
 
 # Screenshot tools for the website (not part of the normal build): tools/screenshot
 add_subdirectory(tools/screenshot)
+# Unit test for the shared MIDI map (not part of the normal build): tools/midi-test
+add_subdirectory(tools/midi-test)
