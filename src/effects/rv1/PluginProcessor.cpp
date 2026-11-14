@@ -2,7 +2,7 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
-juce::AudioProcessorValueTreeState::ParameterLayout RL1AudioProcessor::createLayout()
+juce::AudioProcessorValueTreeState::ParameterLayout RV1AudioProcessor::createLayout()
 {
     using namespace juce;
     AudioProcessorValueTreeState::ParameterLayout layout;
@@ -25,11 +25,30 @@ juce::AudioProcessorValueTreeState::ParameterLayout RL1AudioProcessor::createLay
     return layout;
 }
 
-RL1AudioProcessor::RL1AudioProcessor()
+namespace
+{
+// the factory presets (values are plain host values; length / speed / smooth / random / repeats / mix 0 .. 100)
+std::vector<vibr::PresetManager::Factory> rv1FactoryPresets()
+{
+    return {
+        { "Init", "Reverse at its defaults", {} },
+        { "Reverse Echo", "Short reversed slices", { { "mode", 0 }, { "length", 45 }, { "speed", 50 }, { "smooth", 50 }, { "repeats", 35 }, { "mix", 60 } } },
+        { "Half-Speed Reverse", "Slow, dark reversed swells", { { "mode", 0 }, { "length", 70 }, { "speed", 25 }, { "smooth", 60 }, { "mix", 70 } } },
+        { "Tape Scrub", "The read position wanders", { { "mode", 1 }, { "length", 55 }, { "random", 45 }, { "repeats", 40 }, { "mix", 70 } } },
+        { "Stutter Gate", "A short repeat", { { "mode", 2 }, { "length", 20 }, { "random", 10 }, { "repeats", 60 }, { "mix", 80 } } },
+        { "Glitch Machine", "Chopped, random slices", { { "mode", 3 }, { "length", 30 }, { "random", 70 }, { "repeats", 60 }, { "mix", 85 } } },
+        { "Beat Repeat", "A repeat locked to the tempo", { { "mode", 4 }, { "sync", 1 }, { "length", 50 }, { "repeats", 50 }, { "mix", 90 } } },
+        { "Frozen Slice", "Freeze what just played", { { "mode", 0 }, { "freeze", 1 }, { "length", 60 }, { "mix", 100 } } },
+    };
+}
+} // namespace
+
+RV1AudioProcessor::RV1AudioProcessor()
     : AudioProcessor (BusesProperties()
                           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts (*this, nullptr, "RL1", createLayout())
+      apvts (*this, &undoManager, "RL1", createLayout()),
+      presets (*this, apvts, undoManager, "RV-1 Presets", rv1FactoryPresets(), { "power" })
 {
     pPower   = apvts.getRawParameterValue ("power");
     pMode    = apvts.getRawParameterValue ("mode");
@@ -44,12 +63,12 @@ RL1AudioProcessor::RL1AudioProcessor()
     pLevel   = apvts.getRawParameterValue ("level");
 }
 
-bool RL1AudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
+bool RV1AudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
     return layouts.getMainOutputChannelSet() == juce::AudioChannelSet::stereo() && layouts.getMainInputChannelSet() == juce::AudioChannelSet::stereo();
 }
 
-void RL1AudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
+void RV1AudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     engine.prepare ((float) sampleRate);
     powerSmooth.reset (sampleRate, 0.02);
@@ -57,7 +76,7 @@ void RL1AudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     dryBuf.setSize (2, juce::jmax (samplesPerBlock, 8192));
 }
 
-void RL1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
+void RV1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
     juce::ScopedNoDenormals noDenormals;
     const int n = buffer.getNumSamples();
@@ -70,8 +89,8 @@ void RL1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
 
     for (int c = 0; c < 2; ++c) dryBuf.copyFrom (c, 0, buffer, c, 0, n);
 
-    rl1::Params p;
-    p.mode = juce::jlimit (0, rl1::kNumModes - 1, (int) std::lround (pMode->load()));
+    rv1::Params p;
+    p.mode = juce::jlimit (0, rv1::kNumModes - 1, (int) std::lround (pMode->load()));
     p.freeze = pFreeze->load() > 0.5f;
     p.sync = pSync->load() > 0.5f;
     p.bpm = 120.0f;                                                  // the host tempo (120 when the host gives none)
@@ -98,17 +117,17 @@ void RL1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
         }
 }
 
-juce::AudioProcessorEditor* RL1AudioProcessor::createEditor() { return new RL1AudioProcessorEditor (*this); }
+juce::AudioProcessorEditor* RV1AudioProcessor::createEditor() { return new RV1AudioProcessorEditor (*this); }
 
-void RL1AudioProcessor::getStateInformation (juce::MemoryBlock& dest)
+void RV1AudioProcessor::getStateInformation (juce::MemoryBlock& dest)
 {
     if (auto xml = apvts.copyState().createXml()) copyXmlToBinary (*xml, dest);
 }
 
-void RL1AudioProcessor::setStateInformation (const void* data, int size)
+void RV1AudioProcessor::setStateInformation (const void* data, int size)
 {
     if (auto xml = getXmlFromBinary (data, size))
         if (xml->hasTagName (apvts.state.getType())) apvts.replaceState (juce::ValueTree::fromXml (*xml));
 }
 
-juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new RL1AudioProcessor(); }
+juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new RV1AudioProcessor(); }

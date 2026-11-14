@@ -1,2 +1,0 @@
-/usr/bin/ar qc libRE1Assets.a CMakeFiles/RE1Assets.dir/juce_binarydata_RE1Assets/JuceLibraryCode/BinaryData1.cpp.o
-/usr/bin/ranlib libRE1Assets.a

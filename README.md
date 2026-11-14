@@ -15,7 +15,7 @@ A collection of Vintage effects pedals (and some new) redesigned as audio plugin
 | RE-2 Space Echo | tape echo + spring reverb, saturation, guitar / line, new / aged tape, 4 panel memories |
 | MM-1 Analog Delay | analog-style delay, chorus and vibrato |
 | SD-1 Digital Delay | digital delay: time, factor, regeneration, hi-cut, modulation, headroom meter |
-| RL-1 Reverse Lab | creative time manipulation: reverse, tape scrub, stutter, glitch and repeat modes, freeze; length (free or synced to the host tempo), speed, smooth, random, repeats, mix, level |
+| RV-1 Reverse Lab | creative time manipulation: reverse, tape scrub, stutter, glitch and repeat modes, freeze; length (free or synced to the host tempo), speed, smooth, random, repeats, mix, level; on the shared Lab UI with presets, A / B and undo |
 
 ### Modulation
 
@@ -27,12 +27,19 @@ A collection of Vintage effects pedals (and some new) redesigned as audio plugin
 | TR-2 Tremolo | tremolo: rate, depth, wave (sine to square) |
 | VC-1 Voltage Controller | modulation matrix: envelope follower, two LFOs, random and MIDI (mod wheel / expression) sources routed to filter, amp, vibrato and pan with cross-modulation; the rates can sync to the host tempo |
 | VR-1 Vibe and Rotary | three swirling modulation effects: uni-vibe (chorus / vibrato type, tempo sync), a rotary speaker (slow / fast horn and drum) and ring mod (sine / triangle / square carrier), with a live picture of the effect |
+| ML-1 Modulation Lab | chorus, vibrato, flanger and phaser in one plugin, driven by one LFO with tempo sync, with a live picture of the effect (the delay of every voice, the pitch bend, the comb of the flanger, the notches of the phaser); on the shared Lab UI with presets, A / B and undo |
+| DL-1 Delay Lab | the first Lab: the SD-1 digital delay, the MM-1 analog delay, a new tape delay (1 to 3 heads, wow and flutter, saturation, age) a dual delay (A and B, parallel or series) and the 12 DM-1 modulation voicings as modes of one plugin, tempo sync, low cut and hi cut in the loop, ping-pong spread, hold, tap tempo, a display of the repeats where the first one is dragged to set the time, presets, A / B and undo; built on the shared UI of `src/common/ui` |
+| DN-1 Dynamics Lab | the second Lab, as modes of one plugin: the DY-1 shaper (gate, expander, transient shaper), a compressor (SUSTAIN = the CS-3, a clean VCA, a program-dependent OPTO) and a limiter (PEAK = the LM-2, TRUE PEAK with lookahead from the MS-1); side-chain high-pass, stereo link, parallel mix, auto level, a constant latency in every mode, and a display of the input level and the gain over five seconds |
+| DV-1 Drive Lab | the third Lab, as modes of one plugin: the OD-2 overdrive (12 types, 3-band tone, gate), the DS-1 distortion (classic and modern), tube (single and push-pull), tape (new and aged), fold (transistor and foldback) and crush (hard and smooth); boost, auto level, mix, 4x oversampling with a constant latency, and a display of the transfer curve and the waveform |
+| RH-1 Rhythm Lab | the fourth Lab: one control engine (LFO, envelope follower, 16-step lane with glide and swing, host tempo and position sync) that moves a filter (the MF-1: low / band / high pass, notch, vowel), a tremolo (the TR-2, harmonic and panner variants) or a slicer (the SL-2: single, dual, tremolo, SFX, harmonic, 11 patterns); a paintable step lane and a display of the control signal and its target |
+| RB-1 Reverb Lab | the fifth and last Lab: the BS-1 reverb (12 types), the SP-1 space engine (shimmer, infinite, spectral, modulated, rooms) and the SR-1 sympathetic resonator (strings tuned to a scale; wood, metal, glass) as modes of one plugin, with a shared pre-delay, ducking, freeze, mix and level and a display of the tail |
 
 ### Drive
 
 | Plugin | What it is |
 |---|---|
 | DS-1 Distortion | stompbox distortion: tone, level, dist |
+| SA-1 Lo-Fi Saturator | boost, tube, tape and bit crusher in one chain, each with its own on / off switch: boost gain and tone, tube drive and bias, tape drive and warmth, bits, sample rate and mix, with a live picture of the transfer curve and the waveform |
 | OD-2 Hybrid Drive | 12 drive types, 3-band tone, boost, noise gate, 4 panel memories |
 
 ### Dynamics
@@ -41,6 +48,7 @@ A collection of Vintage effects pedals (and some new) redesigned as audio plugin
 |---|---|
 | CS-3 Compression Sustainer | compressor / sustainer: level, tone, attack, sustain |
 | LM-2 Limiter | peak limiter: level, tone, release, threshold |
+| DY-1 Dynamic Shaper | noise gate, expander and transient shaper in one chain, each with its own on / off switch: thresholds, ratio, releases, attack and sustain, with a live display of the input level and the gain of the chain |
 
 ### EQ
 
@@ -73,13 +81,13 @@ A collection of Vintage effects pedals (and some new) redesigned as audio plugin
 | BS-1 Reverb | 12 reverb types (room, hall, plate, spring, swell, bloom, cloud, chorale, shimmer, magneto, nonlinear, reflections) |
 | SP-1 Space Engine | experimental spaces: shimmer, infinite, spectral, modulated and rooms modes, freeze; size, decay, diffusion, tone, motion, texture, mix, level |
 | SR-1 Sympathetic Resonator | up to 12 virtual strings tuned to a scale that ring along with the playing; wood / metal / glass textures, decay, damping, tension, motion |
+| SU-1 Stereo Utility | invert, swap, mono and mid / side solo; width, spread and bass mono; pan with an auto-pan; gain; a live field display with level bars, a goniometer and the phase correlation |
 
 ### Rhythm
 
 | Plugin | What it is |
 |---|---|
 | SL-2 Slicer | rhythmic slicer: 11 patterns, 5 modes, tempo from the knob or the host |
-| TR-8 Drum Machine | instrument: 11 voices or sampled kits, 16-step A/B sequencer, host sync |
 
 ### Multi effect
 
@@ -87,7 +95,13 @@ A collection of Vintage effects pedals (and some new) redesigned as audio plugin
 |---|---|
 | ME-1 Multi Effect | build your own chain from 39 basic effect modules with 2-3 knobs each: any number in a chain, drag to reorder, bypass, replace, tempo sync on the time and rate knobs; self-contained (it does not use the pedals above) |
 
-**ME-1 modules** (full list with knob ranges and DSP notes: [`src/multieffect/me1/ME-1 specs.md`](src/multieffect/me1/ME-1%20specs.md)):
+### Mastering
+
+| Plugin | What it is |
+|---|---|
+| MS-1 Mastering Suite | version 0.8 of the mastering suite (`src/mastering`): an 8-band minimum-phase corrective EQ (low shelf, six bells, high shelf; each band Stereo / Left / Right / Mid / Side, optional dynamic gain, minimum or linear phase; draggable nodes over the spectrum; match EQ fits it to a reference), a 4-band multiband compressor (Linkwitz-Riley crossovers, per band threshold / ratio / attack / release or auto / make-up / solo), a 3-band stereo imager (width per band, mono-below, mid / side balance, auto safe width, goniometer and correlation meter), a colour stage (tape / tube / transformer saturation in 4x oversampling, tone, mid / side, mix), a VCA-style stereo-linked bus compressor (ratio 1.5 - 10:1, attack 0.1 - 30 ms, release 0.1 - 1.2 s or auto, make-up, parallel mix, sidechain high-pass, gain reduction history), a true-peak-safe lookahead limiter with a loudness target (auto gain to a LUFS value), input trim (gain, polarity, rumble high-pass, mono check), dither with noise shaping, and honest meters: momentary / short-term / integrated loudness and loudness range (ITU-R BS.1770-4, checked against the EBU Tech 3341 / 3342 signals), sample peak, RMS, crest, PLR, PSR and a DR value, short-term and integrated phase correlation, a goniometer, 8x true peak and a before / after spectrum; target presets for streaming, CD, broadcast and more. The multiband compressor, stereo imager, saturation follow; a reference track (WAV / AIFF / FLAC / MP3, level matched, A / B switch, spectrum overlay, own transport that can follow the host) is built in, with factory and user presets, A / B slots and 100-step undo / redo (see `.claude/mastering_specs.md`) |
+
+**ME-1 modules** 
 
 | Group | Modules |
 |---|---|
@@ -134,6 +148,7 @@ The build on macOS is placed outside the iCloud synced folders in `~/Developer/V
 ```bash
 ./build.sh                  # everything, for this Mac's architecture
 ./build.sh --arch x86_64    # everything for Intel Macs (arm64 and x86_64 are separate builds, so each bundle stays small)
+./build.sh --arch win64     # on Windows (Git Bash, Visual Studio 2022, CMake): VST3 and Standalone in ~/Developer/VIBR/releases/win64 and zips in ~/Developer/VIBR/zip (no AU on Windows)
 ./build.sh --arch all       # both, one after the other
 ./build.sh DD-1 SD-1        # only these plugins
 ./build.sh --clean          # rebuild from scratch
@@ -148,7 +163,19 @@ cmake -S . -B ~/Developer/VIBR -DRL_ARCH=arm64 -DRELEASES_DIR=~/Developer/VIBR/r
 cmake --build ~/Developer/VIBR --config Release -j8
 ```
 
-One plugin: `--target DD-1_All` (or `DM-1_All`, `CE-1_All`, `RE-2_All`, `DS-1_All`, `BF-3_All`, `CS-3_All`, `LM-2_All`, `PH-2_All`, `TR-2_All`, `GE-7_All`, `EH-2_All`, `IR-2_All`, `MA-1_All`, `ME-1_All`, `TR-8_All`, `SL-2_All`, `OD-2_All`, `OC-5_All`, `BS-1_All`, `MM-1_All`, `SD-1_All`, `SP-1_All`, `RL-1_All`, `MF-1_All`, `HM-2_All`, `GR-1_All`, `SR-1_All`, `VC-1_All`, `PT-1_All`, `VR-1_All`, ...).
+One plugin: `--target DD-1_All` (or `DM-1_All`, `CE-1_All`, `RE-2_All`, `DS-1_All`, `BF-3_All`, `CS-3_All`, `LM-2_All`, `PH-2_All`, `TR-2_All`, `GE-7_All`, `EH-2_All`, `IR-2_All`, `MA-1_All`, `ME-1_All`, `TR-8_All`, `SL-2_All`, `OD-2_All`, `OC-5_All`, `BS-1_All`, `MM-1_All`, `SD-1_All`, `SP-1_All`, `RV-1_All`, `MF-1_All`, `HM-2_All`, `GR-1_All`, `SR-1_All`, `VC-1_All`, `PT-1_All`, `VR-1_All`, `DY-1_All`, `SA-1_All`, `SU-1_All`, `ML-1_All`, `DL-1_All`, `DN-1_All`, `DV-1_All`, `RH-1_All`, `RB-1_All`, `MS-1_All`, ...).
+
+### Screenshots for the website
+
+`tools/screenshot` has a small app per plugin (`Shot-DY-1`, `Shot-SU-1`, `Shot-SA-1`, `Shot-MS-1`, `Shot-ML-1`, `Shot-VR-1`; add a plugin to the list in `tools/screenshot/CMakeLists.txt`). It loads the plugin, sets parameters, plays a test signal into it (so the meters and displays show something) and writes the editor to a PNG at its own size, the same size as the images in `website/img`:
+
+```bash
+cmake --build ~/Developer/VIBR --target Shot-DY-1
+~/Developer/VIBR/tools/screenshot/Shot-DY-1_artefacts/Release/Shot-DY-1.app/Contents/MacOS/Shot-DY-1 website/img/dy-1.png stepTone 6 gateOn=1 expOn=0 transOn=1
+~/Developer/VIBR/tools/screenshot/Shot-SU-1_artefacts/Release/Shot-SU-1.app/Contents/MacOS/Shot-SU-1 website/img/su-1.png lissajous 6 pan=-20 autoDepth=30 spread=40 bassMono=120
+```
+
+Signals: `silence`, `tone`, `stepTone`, `lissajous`, `noise` (see `ScreenshotTool.cpp`); arguments after the seconds are `parameterID=value` in the plain (host) range.
 
 ## License
 

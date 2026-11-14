@@ -1,2 +1,0 @@
-/usr/bin/ar qc libSD3Assets.a CMakeFiles/SD3Assets.dir/juce_binarydata_SD3Assets/JuceLibraryCode/BinaryData1.cpp.o
-/usr/bin/ranlib libSD3Assets.a

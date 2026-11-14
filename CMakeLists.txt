@@ -12,14 +12,25 @@ if(NOT CMAKE_OSX_DEPLOYMENT_TARGET)
   set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "Minimum macOS version of the built plugins" FORCE)
 endif()
 
+# A single-config generator (Unix Makefiles, which build.sh uses) ignores `cmake --build --config Release`, and an empty CMAKE_BUILD_TYPE means no optimisation
+# flags at all. Default to Release (-O3) unless the build type is given (-DCMAKE_BUILD_TYPE=Debug) or the generator has several configurations (Xcode).
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+  set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type (Release by default: the plugins are built with -O3)" FORCE)
+endif()
+
 # One CPU architecture per build (smaller bundles than a universal binary): arm64 (Apple Silicon) or x86_64 (Intel).
 # Default: the architecture of this Mac. Configure a second build tree for the other one, see build.sh (--arch).
-set(RL_ARCH "" CACHE STRING "CPU architecture of this build: arm64 or x86_64 (empty = this Mac's)")
-execute_process(COMMAND uname -m OUTPUT_VARIABLE _host_arch OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+# On Windows the architecture is win64 (64-bit Intel / AMD); build.sh --arch win64 runs on a Windows machine (Git Bash with Visual Studio 2022 and CMake).
+set(RL_ARCH "" CACHE STRING "CPU architecture of this build: arm64 or x86_64 on a Mac, win64 on Windows (empty = this machine's)")
+if(CMAKE_HOST_WIN32)
+  set(_host_arch "win64")
+else()
+  execute_process(COMMAND uname -m OUTPUT_VARIABLE _host_arch OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+endif()
 if(NOT RL_ARCH)
   set(RL_ARCH "${_host_arch}")
 endif()
-if(NOT RL_ARCH STREQUAL _host_arch)       # this Mac's own architecture is the compiler default
+if(APPLE AND NOT RL_ARCH STREQUAL _host_arch)       # this Mac's own architecture is the compiler default
   set(CMAKE_OSX_ARCHITECTURES "${RL_ARCH}" CACHE STRING "Architecture of the built plugins (follows RL_ARCH)" FORCE)
 endif()
 
@@ -48,7 +59,7 @@ FetchContent_MakeAvailable(JUCE)
 
 # A build for the other architecture must not be installed on this Mac: JUCE's own post-build copy would overwrite the plugins of
 # this Mac's architecture in ~/Library/Audio/Plug-Ins, so it is redirected into the build tree, and the install / share steps below are skipped.
-if(RL_ARCH STREQUAL _host_arch)
+if(RL_ARCH STREQUAL _host_arch AND NOT WIN32)        # Windows builds are only collected in the releases folder (win64), never installed
   set(RL_INSTALL ON)
 else()
   set(RL_INSTALL OFF)
@@ -100,7 +111,7 @@ endif()
 #      Ableton can reject the bare linker signature JUCE leaves behind;
 #   2. re-installs the signed VST3 and AU into ~/Library/Audio/Plug-Ins (JUCE's own install step runs before signing);
 #   3. collects the signed VST3 / AU / Standalone bundles in RELEASES_DIR/<group>/{VST3,AU,Standalone}, where <group> is the
-#      source folder of the plugin: effects (src/effects), drumcomputer (src/drumcomputer) or multieffect (src/multieffect);
+#      source folder of the plugin: effects (src/effects), drumcomputer (src/drumcomputer), multieffect (src/multieffect) or mastering (src/mastering);
 #   4. copies the signed VST3 into each folder in VST_COPY_DIRS (none by default).
 function(copy_vst3_after_build plugin)
   # releases are split like src/: effects, drumcomputer, multieffect
@@ -109,6 +120,8 @@ function(copy_vst3_after_build plugin)
     set(_group drumcomputer)
   elseif(CMAKE_CURRENT_SOURCE_DIR MATCHES "/src/multieffect/")
     set(_group multieffect)
+  elseif(CMAKE_CURRENT_SOURCE_DIR MATCHES "/src/mastering/")
+    set(_group mastering)
   endif()
   set(_rel "${RELEASES_DIR}/${_group}")
   if(APPLE)
@@ -162,6 +175,24 @@ function(copy_vst3_after_build plugin)
         COMMENT "Installing signed ${plugin} AU"
         VERBATIM)
     endif()
+  elseif(WIN32)
+    # Windows: the VST3 is a folder (<name>.vst3/Contents/x86_64-win/<name>.vst3) and the standalone a single .exe; both are collected in RELEASES_DIR/<group>/{VST3,Standalone}
+    # (RELEASES_DIR = <BUILD_OUTPUT_DIR>/releases/win64). There is no AU on Windows. The bundles are not code-signed.
+    if(TARGET ${plugin}_VST3)
+      add_custom_command(TARGET ${plugin}_VST3 POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${_rel}/VST3"
+        COMMAND ${CMAKE_COMMAND} -E remove_directory "${_rel}/VST3/$<TARGET_FILE_NAME:${plugin}_VST3>"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory "$<TARGET_FILE_DIR:${plugin}_VST3>/../.." "${_rel}/VST3/$<TARGET_FILE_NAME:${plugin}_VST3>"
+        COMMENT "Collecting ${plugin} VST3 in ${_rel}/VST3"
+        VERBATIM)
+    endif()
+    if(TARGET ${plugin}_Standalone)
+      add_custom_command(TARGET ${plugin}_Standalone POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${_rel}/Standalone"
+        COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:${plugin}_Standalone>" "${_rel}/Standalone/"
+        COMMENT "Collecting ${plugin} Standalone in ${_rel}/Standalone"
+        VERBATIM)
+    endif()
   endif()
 
   if(TARGET ${plugin}_VST3)
@@ -184,7 +215,7 @@ endfunction()
 #   src/drumcomputer/  the TR-08 drum machine (src/drumcomputer/tr08; an instrument, not a pedal)
 add_subdirectory(src/common)
 
-set(EFFECTS dd1 dm1 ce1 re1 re2 ds1 bf3 cs3 lm2 ph2 ge7 eh2 tr2 ma1 ir2 sl2 od2 oc5 bs1 mm1 sd1 sd3 sp1 rl1 mf1 hm2 gr1 sr1 vc1 pt1 vr1)
+set(EFFECTS dd1 dm1 ce1 re1 re2 ds1 bf3 cs3 lm2 ph2 ge7 eh2 tr2 ma1 ir2 sl2 od2 oc5 bs1 mm1 sd1 sd3 sp1 rv1 mf1 hm2 gr1 sr1 vc1 pt1 vr1 dy1 sa1 su1 ml1 dl1 dn1 dv1 rh1 rb1)
 foreach(effect IN LISTS EFFECTS)
   if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/src/effects/${effect}/CMakeLists.txt)     # a pedal whose folder was removed is skipped
     add_subdirectory(src/effects/${effect})
@@ -192,4 +223,8 @@ foreach(effect IN LISTS EFFECTS)
 endforeach()
 
 add_subdirectory(src/multieffect/me1)      # ME-1: self-contained, its own effect modules
+add_subdirectory(src/mastering/ms1)       # MS-1: the mastering suite (src/mastering)
 add_subdirectory(src/drumcomputer/tr08)
+
+# Screenshot tools for the website (not part of the normal build): tools/screenshot
+add_subdirectory(tools/screenshot)

@@ -9,7 +9,7 @@ constexpr float kW = 1200.0f, kH = 690.0f, kMargin = 20.0f, kRuleY = 104.0f, kPa
 constexpr float kMatX = 20.0f, kMatY = 134.0f, kMatW = 740.0f, kMatH = 486.0f;
 constexpr float kRowY0 = 222.0f, kRowPitch = 82.0f, kColX0 = 350.0f, kColPitch = 100.0f;
 
-const juce::Colour kBody (154, 143, 184), kDark (28, 24, 40), kPanel (26, 27, 30), kInk (238, 238, 232);
+const juce::Colour kBody (82, 201, 107), kDark (11, 35, 18), kPanel (26, 27, 30), kInk (238, 238, 232);
 
 juce::Font font (float h, bool bold = false, bool italic = false)
 {

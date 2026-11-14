@@ -1,2 +1,0 @@
-/usr/bin/ar qc libLM2Assets.a CMakeFiles/LM2Assets.dir/juce_binarydata_LM2Assets/JuceLibraryCode/BinaryData1.cpp.o
-/usr/bin/ranlib libLM2Assets.a

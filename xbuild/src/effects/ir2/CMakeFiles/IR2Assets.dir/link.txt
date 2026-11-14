@@ -1,2 +1,0 @@
-/usr/bin/ar qc libIR2Assets.a CMakeFiles/IR2Assets.dir/juce_binarydata_IR2Assets/JuceLibraryCode/BinaryData1.cpp.o
-/usr/bin/ranlib libIR2Assets.a

@@ -1,2 +1,0 @@
-/usr/bin/ar qc libEH2Assets.a CMakeFiles/EH2Assets.dir/juce_binarydata_EH2Assets/JuceLibraryCode/BinaryData1.cpp.o
-/usr/bin/ranlib libEH2Assets.a

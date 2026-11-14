@@ -1,2 +1,0 @@
-/usr/bin/ar qc libPH2Assets.a CMakeFiles/PH2Assets.dir/juce_binarydata_PH2Assets/JuceLibraryCode/BinaryData1.cpp.o
-/usr/bin/ranlib libPH2Assets.a
