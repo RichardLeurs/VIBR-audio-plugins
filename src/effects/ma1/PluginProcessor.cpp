@@ -61,6 +61,7 @@ MA1AudioProcessor::MA1AudioProcessor()
     pCabOn = p ("cabOn"); pIrALevel = p ("irALevel"); pIrBLevel = p ("irBLevel"); pLowCut = p ("lowCut"); pHighCut = p ("highCut");
     pEqLow = p ("eqLow"); pEqMid = p ("eqMid"); pEqFreq = p ("eqFreq"); pEqHigh = p ("eqHigh"); pOut = p ("out"); pLimiter = p ("limiter");
     bypassParam = dynamic_cast<juce::AudioParameterBool*> (apvts.getParameter ("bypass"));
+    midiMap.setDefault ("gain", 11);
 }
 
 bool MA1AudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -131,8 +132,9 @@ void MA1AudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     init (outSmooth, pOut->load()); init (sagSmooth, pSag->load()); init (wetSmooth, bypassParam->get() ? 0.0f : 1.0f, 0.01);
 }
 
-void MA1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
+void MA1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
+    midiMap.process (midi);
     juce::ScopedNoDenormals noDenormals;
     const int total = buffer.getNumSamples();
     const int channels = juce::jmin (buffer.getNumChannels(), kMaxChannels);
@@ -290,6 +292,7 @@ void MA1AudioProcessor::getStateInformation (juce::MemoryBlock& dest)
         state.setProperty (key + "Name", irName[s], nullptr);
         state.setProperty (key + "Data", irData[s].getSize() > 0 ? irData[s].toBase64Encoding() : juce::String(), nullptr);
     }
+    state.appendChild (midiMap.toTree(), nullptr);
     if (auto xml = state.createXml())
         copyXmlToBinary (*xml, dest);
 }
@@ -299,6 +302,8 @@ void MA1AudioProcessor::setStateInformation (const void* data, int size)
     auto xml = getXmlFromBinary (data, size);
     if (xml == nullptr || ! xml->hasTagName (apvts.state.getType())) return;
     auto state = juce::ValueTree::fromXml (*xml);
+    midiMap.fromTree (state.getChildWithName ("MIDIMAP"));
+    state.removeChild (state.getChildWithName ("MIDIMAP"), nullptr);
     apvts.replaceState (state);
     for (int s = 0; s < 2; ++s)
     {

@@ -25,6 +25,7 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
     void mouseDown (const juce::MouseEvent&) override;
+    void paintOverChildren (juce::Graphics&) override;
 
 private:
     void timerCallback() override;
@@ -46,6 +47,7 @@ private:
     };
 
     GR1AudioProcessor& proc;
+    MidiLearnUI midiUI { proc.midiMap };       // right-click a knob: MIDI learn
     GR1LookAndFeel laf;
     juce::ComponentBoundsConstrainer constrainer;
     juce::Image grain;

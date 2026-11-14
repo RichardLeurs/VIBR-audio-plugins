@@ -72,8 +72,14 @@ DN1AudioProcessorEditor::~DN1AudioProcessorEditor()
     setLookAndFeel (nullptr);
 }
 
+void DN1AudioProcessorEditor::paintOverChildren (juce::Graphics& g)
+{
+    if (midiUI != nullptr) midiUI->paintMarks (g, kPal.body);
+}
+
 void DN1AudioProcessorEditor::timerCallback()
 {
+    if (midiUI != nullptr && midiUI->needsRepaint()) { midiUI->tick(); repaint(); }
     repaint (panelRect (2).expanded (4.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer());
     if (barState.copiedAt != 0) { repaint (juce::Rectangle<float> (0.0f, 30.0f, 900.0f, 50.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer()); if (! barState.copiedRecently()) barState.copiedAt = 0; }
 }
@@ -103,6 +109,15 @@ void DN1AudioProcessorEditor::layoutKnobs()
         auto& k = knobs[(size_t) i];
         k.slider.setBounds (juce::Rectangle<float> (d, d).withCentre (knobCentre (k.panel, k.index, k.count) * sc).toNearestInt());
         k.slider.setVisible (knobShown (i));
+    }
+
+    juce::uint64 shown = 0;                                          // MIDI learn marks only for the knobs that are on screen
+    for (int i = 0; i < (int) knobs.size(); ++i) if (knobShown (i)) shown |= (juce::uint64) 1 << i;
+    if (midiUI == nullptr || shown != midiShown)
+    {
+        midiShown = shown;
+        midiUI = std::make_unique<MidiLearnUI> (proc.midiMap);
+        for (int i = 0; i < (int) knobs.size(); ++i) if (knobShown (i)) midiUI->add (knobs[(size_t) i].slider, knobs[(size_t) i].id);
     }
 }
 void DN1AudioProcessorEditor::resized() { layoutKnobs(); }

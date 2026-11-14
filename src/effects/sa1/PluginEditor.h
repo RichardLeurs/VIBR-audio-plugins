@@ -2,6 +2,7 @@
 #pragma once
 
 #include "PluginProcessor.h"
+#include "MidiTarget.h"
 
 // Black knob of the VIBR look (see style.md): matt body with a knurled edge, raised cap, white pointer bar.
 // The knob is drawn 5 px inside its component so the shadow is not clipped.
@@ -22,6 +23,7 @@ public:
     ~SA1AudioProcessorEditor() override;
 
     void paint (juce::Graphics&) override;
+    void paintOverChildren (juce::Graphics&) override;
     void resized() override;
     void mouseDown (const juce::MouseEvent&) override;
 
@@ -50,6 +52,8 @@ private:
     juce::ComponentBoundsConstrainer constrainer;
     juce::Image grain;
     std::array<Knob, 11> knobs;
+    MidiTarget stageTarget[4];                 // over the stage pills (BOOST, TUBE, TAPE, CRUSH switches): MIDI learn targets
+    MidiLearnUI midiUI { proc.midiMap };       // right-click a knob: MIDI learn
     juce::ParameterAttachment powerAtt, boostAtt, tubeAtt, tapeAtt, crushAtt;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SA1AudioProcessorEditor)

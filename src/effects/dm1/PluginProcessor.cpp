@@ -14,6 +14,25 @@ float delaySecToKnob (float s)
     return 10.0f * std::log (s / dm1::kMinDelaySec) / std::log (100.0f);
 }
 
+// Sync: delay time = one note division at the host tempo, limited to 20 ms .. 2 s. A division longer than 2 s (e.g. 1 BAR below
+// 120 bpm) falls back to the longest division that still fits, so the repeats stay on the grid instead of being cut to a free 2 s.
+float syncedDelaySec (double bpm, int division)
+{
+    double s = vibr::sync::seconds (bpm, division);
+    if (s > (double) dm1::kMaxDelaySec + 1.0e-6)
+    {
+        double best = 0.0;
+        for (int i = 0; i < vibr::sync::kNumDivisions; ++i)
+        {
+            const double si = vibr::sync::seconds (bpm, i);
+            if (si <= (double) dm1::kMaxDelaySec + 1.0e-6 && si > best)
+                best = si;
+        }
+        s = best > 0.0 ? best : (double) dm1::kMaxDelaySec;
+    }
+    return juce::jlimit (dm1::kMinDelaySec, dm1::kMaxDelaySec, (float) s);
+}
+
 const juce::StringArray& modeNames()
 {
     static const juce::StringArray names { "Classic", "Vintage", "Modern", "Multi-head", "Non-linear", "Ambience",
@@ -87,6 +106,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout DM1AudioProcessor::createLay
 
     l.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "power", 1 }, "Power", true));
 
+    // Host tempo sync (new): off = the Delay Time knob / TAP work as before; on = delay time = division at the host tempo
+    l.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "sync", 1 }, "Sync (delay time follows the host tempo)", false));
+    l.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "division", 1 }, "Division", vibr::sync::divisionNames(),
+                                                         juce::jmax (0, vibr::sync::divisionNames().indexOf ("1/8"))));
+
     l.add (vibr::makeBypassParam());
     return l;
 }
@@ -106,6 +130,13 @@ DM1AudioProcessor::DM1AudioProcessor()
     pMode        = apvts.getRawParameterValue ("mode");
     pTapDivision = apvts.getRawParameterValue ("tapDivision");
     pPower       = apvts.getRawParameterValue ("power");
+    pSync        = apvts.getRawParameterValue ("sync");
+    pDivision    = apvts.getRawParameterValue ("division");
+
+    midiMap.setDefault ("modDepth", 1);               // mod wheel
+    midiMap.setDefault ("delayTime", 11);             // expression pedal
+    midiMap.setSyncAlias ("delayTime", "sync", "division");
+    midiMap.enableTap (85);                          // MIDI tap tempo: any note-on or CC85
 }
 
 bool DM1AudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -145,15 +176,31 @@ dm1::Params DM1AudioProcessor::readParams() const
     return p;
 }
 
+// With sync on the delay time comes from the host tempo (read once per call; no host = the tapped tempo, 120 bpm until tapped)
+// and the division. It goes through the same engine smoother as the knob, so tempo changes glide instead of clicking.
+dm1::Params DM1AudioProcessor::readParamsSynced()
+{
+    auto p = readParams();
+    if (syncOn())
+    {
+        const double bpm = vibr::sync::hostBpm (*this, (double) tappedBpm.load());
+        const int div = juce::jlimit (0, vibr::sync::kNumDivisions - 1, (int) std::lround (pDivision->load()));
+        p.delaySec = syncedDelaySec (bpm, div);
+    }
+    return p;
+}
+
 void DM1AudioProcessor::prepareToPlay (double sampleRate, int)
 {
     engine.prepare (sampleRate);
-    engine.setParams (readParams(), true);
+    engine.setParams (readParamsSynced(), true);
     meterOut = 0.0f;
 }
 
-void DM1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
+void DM1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
+    midiMap.process (midi);
+    if (midiMap.consumeTap()) midiTap.hit();
     juce::ScopedNoDenormals noDenormals;
     const int numCh = juce::jmin (2, buffer.getNumChannels());
     const int numSamples = buffer.getNumSamples();
@@ -164,7 +211,7 @@ void DM1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     if (numCh == 0 || numSamples == 0)
         return;
 
-    engine.setParams (readParams());
+    engine.setParams (readParamsSynced());
     engine.process (buffer.getWritePointer (0), numCh > 1 ? buffer.getWritePointer (1) : nullptr, numSamples);
 
     // tap LED: lit for the first 20 % of each delay period
@@ -180,12 +227,15 @@ void DM1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
 }
 
 //==============================================================================
-void DM1AudioProcessor::tapTempo()
+void DM1AudioProcessor::tapTempo (double nowSec)
 {
     constexpr double kTimeoutSec = 2.5;   // longer gap starts a new tap sequence
     constexpr double kDebounceSec = 0.06; // ignore switch bounce / double clicks
 
-    const double now = juce::Time::getMillisecondCounterHiRes() * 0.001;
+    if (syncOn())
+        return;   // the host tempo sets the time
+
+    const double now = nowSec >= 0.0 ? nowSec : juce::Time::getMillisecondCounterHiRes() * 0.001;
     const double dt = now - lastTapSec;
 
     if (dt < kDebounceSec)
@@ -208,6 +258,7 @@ void DM1AudioProcessor::tapTempo()
     for (int i = 0; i < numTapIntervals; ++i)
         sum += tapIntervals[i];
     const double beat = sum / (double) numTapIntervals;
+    tappedBpm.store ((float) vibr::sync::bpmClamp (60.0 / beat));   // the sync tempo when there is no host tempo (standalone)
 
     const int division = juce::jlimit (1, 5, (int) std::lround (pTapDivision->load()));
     const float seconds = (float) beat * divisionMultiplier (division);   // clamped to 20 ms .. 2 s below
@@ -228,7 +279,9 @@ juce::AudioProcessorEditor* DM1AudioProcessor::createEditor()
 
 void DM1AudioProcessor::getStateInformation (juce::MemoryBlock& dest)
 {
-    if (auto xml = apvts.copyState().createXml())
+    auto state = apvts.copyState();
+    state.appendChild (midiMap.toTree(), nullptr);
+    if (auto xml = state.createXml())
         copyXmlToBinary (*xml, dest);
 }
 
@@ -236,7 +289,10 @@ void DM1AudioProcessor::setStateInformation (const void* data, int size)
 {
     if (auto xml = getXmlFromBinary (data, size))
         if (xml->hasTagName (apvts.state.getType()))
-            apvts.replaceState (juce::ValueTree::fromXml (*xml));
+            { auto st = juce::ValueTree::fromXml (*xml);
+              midiMap.fromTree (st.getChildWithName ("MIDIMAP"));
+              st.removeChild (st.getChildWithName ("MIDIMAP"), nullptr);
+              vibr::BypassLink::normalise (st); apvts.replaceState (st); }
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()

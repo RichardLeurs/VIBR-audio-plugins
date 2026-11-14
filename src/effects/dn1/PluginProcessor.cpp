@@ -105,6 +105,7 @@ DN1AudioProcessor::DN1AudioProcessor()
     pCompSustain = get ("compSustain"); pCompAttack = get ("compAttack"); pCompThresh = get ("compThresh"); pCompRatio = get ("compRatio"); pCompAttackMs = get ("compAttackMs");
     pCompRelease = get ("compRelease"); pCompMakeup = get ("compMakeup"); pCompMix = get ("compMix"); pTone = get ("tone");
     pLimThresh = get ("limThresh"); pLimRelease = get ("limRelease"); pLimCeiling = get ("limCeiling"); pScHp = get ("scHp"); pLink = get ("link"); pMix = get ("mix"); pLevel = get ("level"); pAutoLevel = get ("autoLevel");
+    midiMap.setDefault ("gateThresh", 11);
 }
 
 bool DN1AudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -123,8 +124,9 @@ void DN1AudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     delayPos = 0;
 }
 
-void DN1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
+void DN1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
+    midiMap.process (midi);
     juce::ScopedNoDenormals noDenormals;
     const int n = buffer.getNumSamples();
     if (n == 0 || buffer.getNumChannels() < 2 || n > dryBuf.getNumSamples()) return;
@@ -181,13 +183,23 @@ juce::AudioProcessorEditor* DN1AudioProcessor::createEditor() { return new DN1Au
 
 void DN1AudioProcessor::getStateInformation (juce::MemoryBlock& dest)
 {
-    if (auto xml = apvts.copyState().createXml()) copyXmlToBinary (*xml, dest);
+    auto state = apvts.copyState();
+    state.appendChild (midiMap.toTree(), nullptr);
+    if (auto xml = state.createXml())
+        copyXmlToBinary (*xml, dest);
 }
 
 void DN1AudioProcessor::setStateInformation (const void* data, int size)
 {
     if (auto xml = getXmlFromBinary (data, size))
-        if (xml->hasTagName (apvts.state.getType())) apvts.replaceState (juce::ValueTree::fromXml (*xml));
+        if (xml->hasTagName (apvts.state.getType()))
+        {
+            auto st = juce::ValueTree::fromXml (*xml);
+            midiMap.fromTree (st.getChildWithName ("MIDIMAP"));
+            st.removeChild (st.getChildWithName ("MIDIMAP"), nullptr);
+            vibr::BypassLink::normalise (st);
+            apvts.replaceState (st);
+        }
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new DN1AudioProcessor(); }

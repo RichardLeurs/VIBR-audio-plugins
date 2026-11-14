@@ -22,11 +22,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout CE1AudioProcessor::createLay
     knob ("level",           "Level Control",    6.0f);
     knob ("chorusIntensity", "Chorus Intensity", 5.0f);
     knob ("vibratoDepth",    "Vibrato Depth",    5.0f);
-    knob ("vibratoRate",     "Vibrato Rate",     5.0f);
+    knob ("vibratoRate",     "Vibrato Rate",     5.0f);   // 0..10 -> 0.4 .. 10 Hz, exponential (ce1::vibratoRateHz); ignored while sync is on
     l.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "vibrato", 1 },   "Effect (off = Chorus, on = Vibrato)", false));
     l.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "inputHigh", 1 }, "Input (off = Low, on = High)", true));
     l.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "power", 1 },     "Power", true));
     l.add (vibr::makeBypassParam());
+    // tempo sync of the vibrato rate (the chorus rate is fixed): on = one LFO cycle per division of the host tempo, clamped to 0.4 .. 10 Hz
+    l.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "sync", 1 }, "Sync", false));
+    l.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "division", 1 }, "Division", vibr::sync::divisionNames(),
+                                                         vibr::sync::divisionNames().indexOf ("1/4")));
     return l;
 }
 
@@ -43,6 +47,12 @@ CE1AudioProcessor::CE1AudioProcessor()
     pVibrato   = apvts.getRawParameterValue ("vibrato");
     pInputHigh = apvts.getRawParameterValue ("inputHigh");
     pPower     = apvts.getRawParameterValue ("power");
+    pSync      = apvts.getRawParameterValue ("sync");
+    pDivision  = apvts.getRawParameterValue ("division");
+
+    midiMap.setDefault ("vibratoDepth", 1);           // mod wheel
+    midiMap.setDefault ("vibratoRate", 11);           // expression pedal
+    midiMap.setSyncAlias ("vibratoRate", "sync", "division");
 }
 
 bool CE1AudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -73,8 +83,9 @@ void CE1AudioProcessor::prepareToPlay (double sampleRate, int)
 }
 
 //==============================================================================
-void CE1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
+void CE1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
+    midiMap.process (midi);
     juce::ScopedNoDenormals noDenormals;
     const int numCh = juce::jmin (2, buffer.getNumChannels());
     const int numSamples = buffer.getNumSamples();
@@ -86,6 +97,8 @@ void CE1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     const float depthK = knobRange (*pDepth);
     const float rateK = knobRange (*pRate);
     const float level = knobRange (*pLevel);
+    const double bpm = vibr::sync::hostBpm (*this, 120.0);          // host tempo, once per block (120 without a host)
+    const bool synced = *pSync > 0.5f;
 
     if (! vibrato)
     {
@@ -98,10 +111,12 @@ void CE1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     }
     else
     {
-        // Vibrato: 100% wet pitch modulation; Depth up to 3 ms, Rate 0.4 .. 10 Hz (Chorus Intensity is not used)
+        // Vibrato: 100% wet pitch modulation; Depth up to 3 ms, Rate 0.4 .. 10 Hz (Chorus Intensity is not used).
+        // SYNC: one LFO cycle per division of the host tempo, clamped to the same range; sRateHz glides (80 ms) so tempo changes do not click
         sCentreMs.setTargetValue (4.0f);
         sDepthMs.setTargetValue (3.0f * depthK);
-        sRateHz.setTargetValue (0.4f * std::pow (25.0f, rateK));
+        sRateHz.setTargetValue (synced ? juce::jlimit (ce1::kVibratoMinHz, ce1::kVibratoMaxHz, (float) vibr::sync::hz (bpm, (int) pDivision->load()))
+                                     : ce1::vibratoRateHz (rateK));
         sDry.setTargetValue (0.0f);
         sWet.setTargetValue (1.0f);
     }
@@ -154,7 +169,9 @@ juce::AudioProcessorEditor* CE1AudioProcessor::createEditor()
 
 void CE1AudioProcessor::getStateInformation (juce::MemoryBlock& dest)
 {
-    if (auto xml = apvts.copyState().createXml())
+    auto state = apvts.copyState();
+    state.appendChild (midiMap.toTree(), nullptr);
+    if (auto xml = state.createXml())
         copyXmlToBinary (*xml, dest);
 }
 
@@ -162,7 +179,13 @@ void CE1AudioProcessor::setStateInformation (const void* data, int size)
 {
     if (auto xml = getXmlFromBinary (data, size))
         if (xml->hasTagName (apvts.state.getType()))
-            apvts.replaceState (juce::ValueTree::fromXml (*xml));
+            {
+                auto st = juce::ValueTree::fromXml (*xml);
+                midiMap.fromTree (st.getChildWithName ("MIDIMAP"));
+                st.removeChild (st.getChildWithName ("MIDIMAP"), nullptr);
+                vibr::BypassLink::normalise (st);
+                apvts.replaceState (st);
+            }
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()

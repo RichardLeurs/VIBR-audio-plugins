@@ -8,6 +8,10 @@
 // Delay line with 4-point Hermite interpolation, used by the chorus/vibrato (a BBD in the real CE-1).
 namespace ce1
 {
+// vibrato LFO: RATE knob 0..10 -> 0.4 .. 10 Hz, exponential; with SYNC on, one cycle per note division, clamped to the same range
+constexpr float kVibratoMinHz = 0.4f, kVibratoMaxHz = 10.0f;
+inline float vibratoRateHz (float rate01) { return kVibratoMinHz * std::pow (25.0f, rate01); }     // 25 = 10 / 0.4 (same expression as before sync existed)
+
 class ModDelay
 {
 public:

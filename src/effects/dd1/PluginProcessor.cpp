@@ -87,6 +87,22 @@ DD1AudioProcessor::DD1AudioProcessor()
     pPingA = apvts.getRawParameterValue ("pingA");
     pPingB = apvts.getRawParameterValue ("pingB");
     bypassParam = dynamic_cast<juce::AudioParameterBool*> (apvts.getParameter ("bypass"));
+
+    midiMap.setDefault ("aRep", 1);
+    midiMap.setDefault ("aTime", 11);
+    midiMap.enableTap (85);                          // MIDI tap tempo: any note-on or CC85
+}
+
+void DD1AudioProcessor::tapAt (double ms)
+{
+    double iv = 0.0;
+    if (! tapAvg.add (ms, iv)) return;
+    const auto setP = [this] (const char* id, float v)
+    {
+        if (auto* p = apvts.getParameter (id)) { p->beginChangeGesture(); p->setValueNotifyingHost (p->convertTo0to1 (v)); p->endChangeGesture(); }
+    };
+    if (apvts.getRawParameterValue ("hostSync")->load() > 0.5f) setP ("hostSync", 0.0f);   // tapping selects the tapped tempo
+    setP ("tempo", juce::jlimit (30.0f, 300.0f, (float) (60000.0 / iv)));
 }
 
 bool DD1AudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -123,8 +139,10 @@ void DD1AudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     engage = bypassParam->get() ? 0.0f : 1.0f;
 }
 
-void DD1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
+void DD1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
+    midiMap.process (midi);
+    if (midiMap.consumeTap()) midiTap.hit();
     juce::ScopedNoDenormals noDenormals;
     const int total = buffer.getNumSamples();
     const int channels = juce::jmin (buffer.getNumChannels(), 2);
@@ -376,7 +394,9 @@ juce::AudioProcessorEditor* DD1AudioProcessor::createEditor() { return new DD1Au
 void DD1AudioProcessor::getStateInformation (juce::MemoryBlock& dest)
 {
     apvts.state.setProperty ("preset", presetIndex.load(), nullptr);
-    if (auto xml = apvts.copyState().createXml())
+    auto state = apvts.copyState();
+    state.appendChild (midiMap.toTree(), nullptr);
+    if (auto xml = state.createXml())
         copyXmlToBinary (*xml, dest);
 }
 
@@ -385,7 +405,10 @@ void DD1AudioProcessor::setStateInformation (const void* data, int size)
     if (auto xml = getXmlFromBinary (data, size))
         if (xml->hasTagName (apvts.state.getType()))
         {
-            apvts.replaceState (juce::ValueTree::fromXml (*xml));
+            auto st = juce::ValueTree::fromXml (*xml);
+            midiMap.fromTree (st.getChildWithName ("MIDIMAP"));
+            st.removeChild (st.getChildWithName ("MIDIMAP"), nullptr);
+            apvts.replaceState (st);
             presetIndex.store (juce::jlimit (0, getNumPresets() - 1, (int) apvts.state.getProperty ("preset", 0)));
             seedFactoryMemories();                             // sessions saved before the memory panel
         }

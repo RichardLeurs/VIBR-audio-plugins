@@ -1,6 +1,8 @@
 // VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
 #pragma once
 
+#include "MidiMap.h"
+
 #include <JuceHeader.h>
 #include "TR2DSP.h"
 
@@ -19,7 +21,7 @@ public:
     bool hasEditor() const override { return true; }
 
     const juce::String getName() const override { return JucePlugin_Name; }
-    bool acceptsMidi() const override { return false; }
+    bool acceptsMidi() const override { return true; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
     double getTailLengthSeconds() const override { return 0.0; }
@@ -37,6 +39,8 @@ public:
 
     juce::AudioProcessorValueTreeState apvts;
 
+    MidiMap midiMap { apvts, { "rate", "depth", "wave" } };   // CC -> knob, MIDI learn
+
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
 
@@ -44,6 +48,9 @@ private:
 
     std::atomic<float>* pRate = nullptr, *pDepth = nullptr, *pWave = nullptr;
     juce::AudioParameterBool* bypassParam = nullptr;
+    std::atomic<float>* pSync = nullptr, *pDivision = nullptr;
+    juce::SmoothedValue<float> syncMix { 0.0f };                                              // 0 = RATE knob, 1 = tempo synced
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Multiplicative> syncHzSmooth { 1.0f }; // synced LFO frequency (Hz)
 
     juce::SmoothedValue<float> rateSmooth { 3.0f }, depthSmooth { 5.0f }, waveSmooth { 0.0f }, wetSmooth { 1.0f };
     double sr = 44100.0;

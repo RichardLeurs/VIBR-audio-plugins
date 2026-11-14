@@ -55,6 +55,21 @@ public:
         return false;
     }
 
+    // the parameters in neverReset keep their current value when a user preset or the other A / B slot is loaded
+    void keepCurrent (juce::ValueTree& tree) const
+    {
+        for (const auto& id : keepIds)
+        {
+            auto* raw = apvts.getRawParameterValue (id);
+            if (raw == nullptr) continue;
+            juce::ValueTree child;
+            for (int i = 0; i < tree.getNumChildren(); ++i)
+                if (tree.getChild (i).getProperty ("id").toString() == id) { child = tree.getChild (i); break; }
+            if (! child.isValid()) { child = juce::ValueTree ("PARAM"); child.setProperty ("id", id, nullptr); tree.appendChild (child, nullptr); }
+            child.setProperty ("value", raw->load(), nullptr);
+        }
+    }
+
     bool loadUser (const juce::File& file)
     {
         auto xml = juce::XmlDocument::parse (file);
@@ -63,6 +78,7 @@ public:
         auto tree = juce::ValueTree::fromXml (*xml);
         for (const auto& p : keepProperties) tree.removeProperty (p, nullptr);
         resetToDefaults();
+        keepCurrent (tree);
         apvts.replaceState (tree);
         apvts.state.setProperty ("presetName", file.getFileNameWithoutExtension(), nullptr);
         return true;
@@ -80,6 +96,7 @@ public:
             undo.beginNewTransaction ("A / B");
             auto tree = abState[slot].createCopy();
             for (const auto& p : keepProperties) tree.setProperty (p, apvts.state.getProperty (p), nullptr);
+            keepCurrent (tree);
             apvts.replaceState (tree);
         }
     }

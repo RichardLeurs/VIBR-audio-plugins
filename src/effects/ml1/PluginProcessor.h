@@ -2,6 +2,7 @@
 #pragma once
 
 #include "BypassLink.h"
+#include "MidiMap.h"
 
 #include <JuceHeader.h>
 #include "ModEngine.h"
@@ -9,11 +10,12 @@
 
 // ML-1 Modulation Lab: chorus, vibrato, flanger and phaser (see ModEngine.h).
 // Host parameters: power, mode, variant, sync, rate, depth, extra (width / feedback), mix, level.
-class ML1AudioProcessor : public juce::AudioProcessor
+class ML1AudioProcessor : public juce::AudioProcessor,
+      private juce::AsyncUpdater
 {
 public:
     ML1AudioProcessor();
-    ~ML1AudioProcessor() override = default;
+    ~ML1AudioProcessor() override { cancelPendingUpdate(); }
 
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
     void releaseResources() override {}
@@ -24,7 +26,7 @@ public:
     bool hasEditor() const override { return true; }
 
     const juce::String getName() const override { return "ML-1"; }
-    bool acceptsMidi() const override { return false; }
+    bool acceptsMidi() const override { return true; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
     double getTailLengthSeconds() const override { return 0.5; }
@@ -32,19 +34,14 @@ public:
 
     // the factory presets are the host's programs (the preset menu in the editor stays in step through the preset name)
     int getNumPrograms() override { return juce::jmax (1, (int) presets.factory().size()); }
-    int getCurrentProgram() override
-    {
-        const auto& list = presets.factory();
-        for (int i = 0; i < (int) list.size(); ++i)
-            if (list[(size_t) i].name == presets.name()) return currentProgram = i;
-        return currentProgram;
-    }
+    int getCurrentProgram() override { return currentProgram.load(); }
     void setCurrentProgram (int index) override
     {
-        if (index < 0 || index >= (int) presets.factory().size()) return;
-        currentProgram = index;
+        index = juce::jlimit (0, getNumPrograms() - 1, index);
+        if (index == currentProgram.load()) return;   // a host re-sending the current program must not reset the user's edits
+        currentProgram.store (index);
         if (juce::MessageManager::getInstance()->isThisTheMessageThread()) presets.applyFactory (index);
-        else juce::MessageManager::callAsync ([weak = juce::WeakReference<ML1AudioProcessor> (this), index] { if (weak != nullptr) weak->presets.applyFactory (index); });
+        else { pendingProgram.store (index); triggerAsyncUpdate(); }
     }
     const juce::String getProgramName (int index) override
     {
@@ -59,12 +56,14 @@ public:
     juce::UndoManager undoManager { 30000, 100 };
     juce::AudioProcessorValueTreeState apvts;
     vibr::BypassLink bypassLink { apvts };                // host bypass <-> OFF / ON switch
+    MidiMap midiMap { apvts, { "rate", "depth", "extra", "mix", "level" } };   // CC -> knob, MIDI learn
     vibr::PresetManager presets;
-    int currentProgram = 0;
-    JUCE_DECLARE_WEAK_REFERENCEABLE (ML1AudioProcessor)
+    std::atomic<int> currentProgram { 0 };
+    std::atomic<int> pendingProgram { -1 };
     const ml1::Engine& getEngine() const { return engine; }       // for the MOTION display of the editor
 
 private:
+    void handleAsyncUpdate() override { const int i = pendingProgram.exchange (-1); if (i >= 0) presets.applyFactory (i); }
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
 
     ml1::Engine engine;

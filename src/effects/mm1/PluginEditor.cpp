@@ -4,9 +4,9 @@
 
 namespace
 {
-// Positions are in the 1980 x 890 coordinates of the rendered background (make_background.py). The editor is resizable at a
+// Positions are in the 1980 x 968 coordinates of the rendered background (make_background.py). The editor is resizable at a
 // fixed aspect ratio; paint() scales image pixels to the window.
-constexpr float kImgW = 1980.0f, kImgH = 890.0f;
+constexpr float kImgW = 1980.0f, kImgH = 968.0f;
 constexpr int kBaseW = 990;
 
 constexpr float kKnobRadius = 78.0f;                       // black knob; the printed scale sits outside it
@@ -18,6 +18,15 @@ const KnobSpec kKnobs[6] = { { "blend", 207.0f }, { "level", 493.0f }, { "feedba
 constexpr float kStartDeg = -154.0f, kEndDeg = 154.0f;     // 11 ticks over 308 degrees
 
 const juce::Point<float> kLed { 1905.0f, 87.0f };          // power slide switch (top right) = the effect on / off switch (ball right = on)
+
+// Tempo sync: a SYNC button in the ECHO panel, under the DELAY knob, below a divider line (drawn in the background). SYNC toggles the
+// "sync" parameter. While sync is on the DELAY knob selects the note division instead of the time (the same knob: it is attached to the
+// "division" parameter) and the chosen division is shown next to the button.
+const juce::Rectangle<float> kSyncPill = juce::Rectangle<float> (116.0f, 46.0f).withCentre ({ 1062.0f, 776.0f });
+const juce::Rectangle<float> kDivisionText = juce::Rectangle<float> (130.0f, 46.0f).withCentre ({ 1204.0f, 776.0f });
+const juce::Colour kBody (0xff4b91d1);      // the plugin's body colour (make_background.py BODY)
+constexpr int kDelayKnob = 3;                               // index of "delay" in kKnobs; while sync is on it picks the division
+const juce::Colour kInk (0xffeeeee8), kPanel (0xff1b1c1f), kLedGreen (0xff40d070);
 
 juce::Point<float> polar (juce::Point<float> c, float r, float a)
 {
@@ -67,16 +76,24 @@ void MemoryManLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, in
                                              juce::Colour (0xff000000), c.x + capR, c.y + capR, false));
     g.drawEllipse (circle (capR), 1.2f);
 
-    // pointer: white bar from the rim toward the centre
+    // pointer: white bar from the rim toward the centre (grey and the knob shaded when "dimmed", i.e. DELAY while sync is on)
+    const bool dimmed = (bool) s.getProperties().getWithDefault ("dimmed", false);
     juce::Path p;
     p.addRoundedRectangle (-capR * 0.055f, -capR * 0.94f, capR * 0.11f, capR * 0.50f, capR * 0.05f);
-    g.setColour (juce::Colour (0xfff2f2ee));
+    g.setColour (dimmed ? juce::Colour (0xff5c5d5a) : juce::Colour (0xfff2f2ee));
     g.fillPath (p, juce::AffineTransform::rotation (angle).translated (c));
+    if (dimmed)
+    {
+        g.setColour (juce::Colours::black.withAlpha (0.35f));
+        g.fillEllipse (circle (R));
+    }
 }
 
 //==============================================================================
 MemoryManAudioProcessorEditor::MemoryManAudioProcessorEditor (MemoryManAudioProcessor& p)
-    : AudioProcessorEditor (&p), proc (p)
+    : AudioProcessorEditor (&p), proc (p),
+      syncAtt (*p.apvts.getParameter ("sync"), [this] (float v) { syncOn = v > 0.5f; syncChanged(); }, nullptr),
+      divisionAtt (*p.apvts.getParameter ("division"), [this] (float v) { division = (int) std::lround (v); repaint(); }, nullptr)
 {
     setLookAndFeel (&laf);
     background = juce::ImageFileFormat::loadFrom (MM1Data::background_png, (size_t) MM1Data::background_pngSize);
@@ -91,13 +108,15 @@ MemoryManAudioProcessorEditor::MemoryManAudioProcessorEditor (MemoryManAudioProc
         addAndMakeVisible (k.slider);
         k.attachment = std::make_unique<juce::SliderParameterAttachment> (*proc.apvts.getParameter (spec.id), k.slider, nullptr);
     };
-    for (int i = 0; i < 6; ++i) add (knobs[i], kKnobs[i]);
+    for (int i = 0; i < 6; ++i) { add (knobs[i], kKnobs[i]); midiUI.add (knobs[i].slider, kKnobs[i].id); }
 
     constrainer.setFixedAspectRatio ((double) kImgW / (double) kImgH);
-    constrainer.setSizeLimits (495, 222, 1980, 890);
+    constrainer.setSizeLimits (495, 242, 1980, 968);
     setConstrainer (&constrainer);
     setResizable (true, true);
     setSize (kBaseW, (int) std::round ((float) kBaseW * kImgH / kImgW));
+    syncAtt.sendInitialUpdate();
+    divisionAtt.sendInitialUpdate();
     startTimerHz (20);
 }
 
@@ -114,10 +133,24 @@ void MemoryManAudioProcessorEditor::resized()
     for (int i = 0; i < 6; ++i) place (knobs[i], kKnobs[i]);
 }
 
+void MemoryManAudioProcessorEditor::syncChanged()
+{
+    // the DELAY knob is the delay time, or the note division while sync is on (the attachment sets the slider range from the parameter)
+    auto& k = knobs[kDelayKnob];
+    k.attachment.reset();
+    divisionKnobAtt.reset();
+    if (syncOn) divisionKnobAtt = std::make_unique<juce::SliderParameterAttachment> (*proc.apvts.getParameter ("division"), k.slider, nullptr);
+    else        k.attachment    = std::make_unique<juce::SliderParameterAttachment> (*proc.apvts.getParameter ("delay"), k.slider, nullptr);
+    repaint();
+}
+
 void MemoryManAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 {
-    // the power slide switch is the bypass switch
     const float S = (float) getWidth() / kImgW;
+    const auto scaled = [S] (juce::Rectangle<float> r) { return r.expanded (4.0f).transformedBy (juce::AffineTransform::scale (S)); };
+    if (scaled (kSyncPill).contains (e.position))     { syncAtt.setValueAsCompleteGesture (syncOn ? 0.0f : 1.0f); return; }
+
+    // the power slide switch is the bypass switch
     if (juce::Rectangle<float> (110.0f * S, 70.0f * S).withCentre (kLed * S).contains (e.position))
     {
         auto* prm = proc.apvts.getParameter ("effect");
@@ -127,8 +160,14 @@ void MemoryManAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
     }
 }
 
+void MemoryManAudioProcessorEditor::paintOverChildren (juce::Graphics& g)
+{
+    midiUI.paintMarks (g, kBody);
+}
+
 void MemoryManAudioProcessorEditor::timerCallback()
 {
+    if (midiUI.needsRepaint()) { midiUI.tick(); repaint(); }
     const bool on = proc.apvts.getRawParameterValue ("effect")->load() > 0.5f;
     if (on != lastOn) { lastOn = on; repaint(); }
 }
@@ -161,4 +200,23 @@ void MemoryManAudioProcessorEditor::paint (juce::Graphics& g)
     g.setGradientFill (juce::ColourGradient (juce::Colour (0xfffafbfd), c.x - 6.0f, c.y - 8.0f,
                                              juce::Colour (0xff6b6f7a), c.x + 9.0f, c.y + 11.0f, true));
     g.fillEllipse (circle (14.0f));
+
+    // SYNC: a flat rounded button, dark with a blue border when off, filled blue when on
+    const float rad = kSyncPill.getHeight() * 0.5f;
+    const juce::Colour blue (0xff4b91d1);
+    g.setColour (syncOn ? blue : kPanel.darker (0.4f));
+    g.fillRoundedRectangle (kSyncPill, rad);
+    g.setColour (blue);
+    g.drawRoundedRectangle (kSyncPill.reduced (1.0f), rad, 2.0f);
+    g.setFont (juce::Font (juce::FontOptions ("Avenir Next", 24.0f, juce::Font::bold)));
+    g.setColour (syncOn ? juce::Colours::white : blue);
+    g.drawText ("SYNC", kSyncPill, juce::Justification::centred, false);
+
+    // the chosen note division (the DELAY knob sets it) next to the button while sync is on
+    if (syncOn)
+    {
+        g.setColour (juce::Colours::white);
+        g.setFont (juce::Font (juce::FontOptions ("Avenir Next", 34.0f, juce::Font::bold)));
+        g.drawText (vibr::sync::divisionNames()[juce::jlimit (0, vibr::sync::kNumDivisions - 1, division)], kDivisionText, juce::Justification::centredLeft, false);
+    }
 }

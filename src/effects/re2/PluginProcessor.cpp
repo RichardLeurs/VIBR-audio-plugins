@@ -36,6 +36,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout RE2AudioProcessor::createLay
     l.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "inputLine", 1 }, "Input Line (off = Guitar)", false));
     l.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "power", 1 }, "Power", true));
     l.add (vibr::makeBypassParam());
+
+    // SYNC (added after the original parameters; their ids, ranges and defaults are unchanged). Off = Repeat Rate sets the
+    // head spacing as before. On = the head spacing is one division of the host tempo (head 2 = 2 x, head 3 = 3 x the division),
+    // shortened when the longest head of the mode would run off the tape (see re2::syncedHeadSpacing).
+    l.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "sync", 1 }, "Sync (head spacing follows the host tempo)", false));
+    l.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "division", 1 }, "Division",
+                                                         vibr::sync::divisionNames(), vibr::sync::divisionNames().indexOf ("1/8")));
     return l;
 }
 
@@ -57,6 +64,26 @@ RE2AudioProcessor::RE2AudioProcessor()
     pTapeAged   = apvts.getRawParameterValue ("tapeAged");
     pInputLine  = apvts.getRawParameterValue ("inputLine");
     pPower     = apvts.getRawParameterValue ("power");
+    pSync       = apvts.getRawParameterValue ("sync");
+    pDivision   = apvts.getRawParameterValue ("division");
+
+    midiMap.setDefault ("intensity", 1);              // mod wheel
+    midiMap.setDefault ("repeatRate", 11);            // expression pedal
+    midiMap.setSyncAlias ("repeatRate", "sync", "division");
+    midiMap.enableTap (85);                          // MIDI tap tempo: any note-on or CC85
+}
+
+void RE2AudioProcessor::tapAt (double ms)
+{
+    double iv = 0.0;
+    if (! tapAvg.add (ms, iv)) return;
+    // the tapped beat sets the head spacing: halved until it fits the 45 .. 180 ms range of Repeat Rate
+    double spacing = iv * 0.001;
+    while (spacing > 0.18) spacing *= 0.5;
+    spacing = juce::jmax (0.045, spacing);
+    const float knob = (float) (std::log (spacing / 0.18) / std::log (0.25)) * 10.0f;
+    if (auto* p = apvts.getParameter ("sync")) if (p->getValue() > 0.5f) { p->beginChangeGesture(); p->setValueNotifyingHost (0.0f); p->endChangeGesture(); }
+    if (auto* p = apvts.getParameter ("repeatRate")) { p->beginChangeGesture(); p->setValueNotifyingHost (p->convertTo0to1 (juce::jlimit (0.0f, 10.0f, knob))); p->endChangeGesture(); }
 }
 
 bool RE2AudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -81,7 +108,10 @@ void RE2AudioProcessor::prepareToPlay (double sampleRate, int)
 
     // ~250 ms time constant: turning Repeat Rate bends pitch like the real tape motor
     tapeUnitCoef = 1.0f - std::exp (-1.0f / (0.25f * (float) sr));
-    tapeUnit = 0.18f * std::pow (0.045f / 0.18f, knobRange (*pRate));
+    tapeUnit = *pSync > 0.5f
+                 ? (float) syncedHeadSpacing (hostTempo, (int) std::lround (pDivision->load()),
+                                              kModes[juce::jlimit (1, 12, (int) std::round (*pMode)) - 1].headMask)
+                 : 0.18f * std::pow (0.045f / 0.18f, knobRange (*pRate));
 
     lastBass = lastTreble = lastAge = -1.0f;
     updateFilters (*pBass, *pTreble, ageValue());
@@ -116,8 +146,10 @@ void RE2AudioProcessor::updateFilters (float bass, float treble, float age)
 }
 
 //==============================================================================
-void RE2AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
+void RE2AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
+    midiMap.process (midi);
+    if (midiMap.consumeTap()) midiTap.hit();
     juce::ScopedNoDenormals noDenormals;
     const int numCh = juce::jmin (2, buffer.getNumChannels());
     const int numSamples = buffer.getNumSamples();
@@ -133,7 +165,14 @@ void RE2AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     const float age = knobRange (ageValue());
     const float wf = knobRange (*pWowFlutter);
 
-    const float tapeUnitTarget = 0.18f * std::pow (0.045f / 0.18f, rate); // 180 ms .. 45 ms per head
+    // Repeat Rate (0-10, exponential taper): 180 ms .. 45 ms between heads (head 3 = 540 .. 135 ms).
+    // SYNC on: one division of the host tempo between heads, clamped so the longest active head stays on the tape
+    // (re2::syncedHeadSpacing); the same tape-motor glide below bends the pitch when the tempo or division changes.
+    hostTempo = vibr::sync::hostBpm (*this, 120.0);
+    const bool synced = *pSync > 0.5f;
+    const float tapeUnitTarget = synced
+        ? (float) syncedHeadSpacing (hostTempo, (int) std::lround (pDivision->load()), mode.headMask)
+        : 0.18f * std::pow (0.045f / 0.18f, rate);
     const int numHeads = (mode.headMask & 1) + ((mode.headMask >> 1) & 1) + ((mode.headMask >> 2) & 1);
     const float headWeight = numHeads <= 1 ? 1.0f : (numHeads == 2 ? 0.75f : 0.6f);
 
@@ -153,6 +192,9 @@ void RE2AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     const float modeCoef = 1.0f - std::exp (-1.0f / (0.005f * (float) sr));
 
     const float maxUnitStep = 0.6f / (3.0f * (float) sr);
+    // hard limit for a head read: never further back than the tape holds (reached only while a synced head glides back after
+    // a mode change to a further head; with SYNC off the furthest read is 0.54 s plus wow, far below it)
+    const float maxReadSamples = (float) (kTapeSeconds * sr) - 4.0f;
     float peakIn = 0.0f, peakOut = 0.0f;
     auto* data = buffer.getArrayOfWritePointers();
 
@@ -196,7 +238,7 @@ void RE2AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
             float tap = 0.0f;
             for (int h = 0; h < 3; ++h)
                 if (headGain[h] > 1.0e-4f)
-                    tap += headGain[h] * ch.tape.read (juce::jmax (2.0f, unitSamples * (float) (h + 1)));
+                    tap += headGain[h] * ch.tape.read (juce::jlimit (2.0f, maxReadSamples, unitSamples * (float) (h + 1)));
 
             tap = ch.tapeLP.processSample (ch.tapeHP.processSample (tap));
             tap = softSat (tap * satDrive) / satDrive;
@@ -235,7 +277,9 @@ juce::AudioProcessorEditor* RE2AudioProcessor::createEditor()
 
 void RE2AudioProcessor::getStateInformation (juce::MemoryBlock& dest)
 {
-    if (auto xml = apvts.copyState().createXml())
+    auto state = apvts.copyState();
+    state.appendChild (midiMap.toTree(), nullptr);
+    if (auto xml = state.createXml())
         copyXmlToBinary (*xml, dest);
 }
 
@@ -243,7 +287,13 @@ void RE2AudioProcessor::setStateInformation (const void* data, int size)
 {
     if (auto xml = getXmlFromBinary (data, size))
         if (xml->hasTagName (apvts.state.getType()))
-            apvts.replaceState (juce::ValueTree::fromXml (*xml));
+            {
+                auto st = juce::ValueTree::fromXml (*xml);
+                midiMap.fromTree (st.getChildWithName ("MIDIMAP"));
+                st.removeChild (st.getChildWithName ("MIDIMAP"), nullptr);
+                vibr::BypassLink::normalise (st);
+                apvts.replaceState (st);
+            }
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()

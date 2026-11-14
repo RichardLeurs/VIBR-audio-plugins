@@ -6,14 +6,21 @@
 //   DEPTH  sweep width (in octaves round the centre)
 //   RES    feedback (resonance)
 //   MODE   I: 4 stages (classic), II: 8 stages (deeper notches, stronger resonance)
+//   SYNC   (plugin extension, not on the hardware) one LFO cycle per host-tempo DIVISION instead of the RATE knob,
+//          clamped to the same 0.1 .. 10 Hz range the knob covers
 #include <JuceHeader.h>
 #include <cmath>
+#include "TempoSync.h"
 
 namespace ph2
 {
 constexpr int kModeI = 0, kModeII = 1, kMaxStages = 8;
 
-inline float rateHz (float rate01) { return 0.1f * std::pow (100.0f, rate01); }                 // 0.1 .. 10 Hz
+constexpr float kMinHz = 0.1f, kMaxHz = 10.0f;                                                  // LFO range of the RATE knob
+inline float rateHz (float rate01) { return 0.1f * std::pow (100.0f, rate01); }                 // RATE 0..10 (as 0..1): 0.1 .. 10 Hz, exponential taper
+
+// tempo-synced LFO frequency: one cycle per division at `bpm`, kept inside the knob's range (e.g. 1/32 at 180 bpm = 12 Hz -> 10 Hz)
+inline float syncedHz (double bpm, int division) { return juce::jlimit (kMinHz, kMaxHz, (float) vibr::sync::hz (bpm, division)); }
 inline float feedbackAmount (float res01, int mode) { return res01 * (mode == kModeII ? 0.92f : 0.85f); }
 
 class PhaserChannel

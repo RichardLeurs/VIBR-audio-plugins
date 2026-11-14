@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
-"""Renders the BF-3 flanger front panel (1840 x 890) used as the plugin background: magenta satin body, three black panels
+"""Renders the BF-3 flanger front panel (1840 x 968) used as the plugin background: magenta satin body, three black panels
 (FLANGE, SWEEP, MODE), printed legends. Control positions match PluginEditor.cpp. Needs numpy + Pillow.
 Usage: make_background.py out.png"""
 import math, sys
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-W, H, S = 1840, 890, 2
+W, H, S = 1840, 968, 2
 rng = np.random.default_rng(15)
 BODY = (54, 183, 121)                          # green #36B779 (palette)
 ACC = BODY                                    # panel titles use the plugin's body colour
@@ -17,7 +17,7 @@ PANEL = (24, 25, 28)
 CHROME = [(0, (250, 250, 252)), (0.35, (190, 194, 202)), (0.7, (110, 114, 124)), (1, (60, 62, 70))]
 
 # ----- layout (shared with PluginEditor.cpp); same margins and gaps as the DM-1 (see ../style.md) -----
-PT, PB = 268, 752
+PT, PB = 268, 830
 P1, P2, P3 = (40, PT, 630, PB), (650, PT, 1240, PB), (1260, PT, 1800, PB)      # side margins 40, panel gaps 20; MODE is wider (more room for its legends)
 KY, KR = 532, 78                              # knob row and knob radius
 NAME_Y = 348                                  # knob name above the knob
@@ -201,6 +201,7 @@ def panel(box, title):
 panel(P1, "FLANGE")
 panel(P2, "SWEEP")
 panel(P3, "MODE")
+line([(P2[0] + 40, 731), (P2[2] - 40, 731)], INK, 2, 90)      # divider above the tempo SYNC row of the SWEEP panel (the SYNC button is drawn by the editor)
 
 # ----- power: horizontal slide switch (top right), ball left = OFF, right = ON -----
 def power_switch(rx, ry):

@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
-"""Renders the PH-2 phaser front panel (1840 x 890) used as the plugin background: green satin body, three black panels
+"""Renders the PH-2 phaser front panel (1840 x 968) used as the plugin background: green satin body, three black panels
 (SWEEP, RESONANCE, MODE), printed legends. Control positions match PluginEditor.cpp. Needs numpy + Pillow.
 Usage: make_background.py out.png"""
 import math, sys
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-W, H, S = 1840, 890, 2
+W, H, S = 1840, 968, 2
 rng = np.random.default_rng(15)
 BODY = (120, 200, 60)                          # green #78C83C (palette: Phaser)
 ACC = BODY                                    # panel titles use the plugin's body colour
@@ -17,7 +17,7 @@ PANEL = (24, 25, 28)
 CHROME = [(0, (250, 250, 252)), (0.35, (190, 194, 202)), (0.7, (110, 114, 124)), (1, (60, 62, 70))]
 
 # ----- layout (shared with PluginEditor.cpp); same margins and gaps as the DM-1 (see ../style.md) -----
-PT, PB = 268, 752
+PT, PB = 268, 830
 P1, P2, P3 = (40, PT, 960, PB), (980, PT, 1380, PB), (1400, PT, 1800, PB)      # side margins 40, panel gaps 20; RESONANCE and MODE are the same size, SWEEP takes the rest
 KY, KR = 532, 100                             # knob row and knob radius
 NAME_Y = 348                                  # knob name above the knob
@@ -201,6 +201,7 @@ def panel(box, title):
 panel(P1, "SWEEP")
 panel(P2, "RESONANCE")
 panel(P3, "MODE")
+line([(P1[0] + 40, 730), (P1[2] - 40, 730)], INK, 2, 90)      # divider above the tempo SYNC row of the SWEEP panel (the SYNC button is drawn by the editor)
 
 # ----- power: horizontal slide switch (top right), ball left = OFF, right = ON -----
 def power_switch(rx, ry):

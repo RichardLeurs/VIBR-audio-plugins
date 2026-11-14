@@ -88,6 +88,7 @@ CS3AudioProcessorEditor::CS3AudioProcessorEditor (CS3AudioProcessor& p)
         k.slider.setMouseDragSensitivity (180);
         k.slider.setScrollWheelEnabled (false);
         addAndMakeVisible (k.slider);
+        midiUI.add (k.slider, spec.id);
         k.attachment = std::make_unique<juce::SliderParameterAttachment> (*proc.apvts.getParameter (spec.id), k.slider, nullptr);
     };
     add (level, kLevel);
@@ -132,8 +133,14 @@ void CS3AudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
     }
 }
 
+void CS3AudioProcessorEditor::paintOverChildren (juce::Graphics& g)
+{
+    midiUI.paintMarks (g, juce::Colour(216, 190, 53));
+}
+
 void CS3AudioProcessorEditor::timerCallback()
 {
+    if (midiUI.needsRepaint()) { midiUI.tick(); repaint(); }
     const bool on = proc.apvts.getRawParameterValue ("bypass")->load() < 0.5f;
     if (on != lastOn) { lastOn = on; repaint(); }
 }

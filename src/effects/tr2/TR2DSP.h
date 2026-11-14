@@ -5,12 +5,19 @@
 //   RATE   0.5 .. 20 Hz
 //   DEPTH  how far the level dips (0 = no effect, max = down to silence)
 //   WAVE   sine (min) .. square (max): the sine is driven harder and harder into a limiter
+//   SYNC   (plugin extension, not on the hardware) one LFO cycle per host-tempo DIVISION instead of the RATE knob,
+//          clamped to the same 0.5 .. 20 Hz range the knob covers
 #include <JuceHeader.h>
 #include <cmath>
+#include "TempoSync.h"
 
 namespace tr2
 {
-inline float rateHz (float rate01) { return 0.5f * std::pow (40.0f, rate01); }              // 0.5 .. 20 Hz
+constexpr float kMinHz = 0.5f, kMaxHz = 20.0f;                                               // LFO range of the RATE knob
+inline float rateHz (float rate01) { return 0.5f * std::pow (40.0f, rate01); }              // RATE 0..10 (as 0..1): 0.5 .. 20 Hz, exponential taper
+
+// tempo-synced LFO frequency: one cycle per division at `bpm`, kept inside the knob's range (e.g. 2 BARS at 120 bpm = 0.25 Hz -> 0.5 Hz)
+inline float syncedHz (double bpm, int division) { return juce::jlimit (kMinHz, kMaxHz, (float) vibr::sync::hz (bpm, division)); }
 
 // LFO value -1 .. 1 for phase 0 .. 1 and shape 0 (sine) .. 1 (square)
 inline float lfo (float phase, float shape01)

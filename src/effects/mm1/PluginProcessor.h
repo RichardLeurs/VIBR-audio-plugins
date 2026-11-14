@@ -2,6 +2,9 @@
 #pragma once
 
 #include "BypassLink.h"
+#include "TempoSync.h"
+#include "MidiMap.h"
+#include "TapTempo.h"
 
 #include <JuceHeader.h>
 #include "MemoryManDSP.h"
@@ -21,7 +24,7 @@ public:
     bool hasEditor() const override { return true; }
 
     const juce::String getName() const override { return JucePlugin_Name; }
-    bool acceptsMidi() const override { return false; }
+    bool acceptsMidi() const override { return true; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
     double getTailLengthSeconds() const override { return 10.0; }
@@ -39,12 +42,16 @@ public:
     juce::AudioProcessorValueTreeState apvts;
 
     vibr::BypassLink bypassLink { apvts, "effect" };                // host bypass <-> OFF / ON switch
+    MidiMap midiMap { apvts, { "blend", "level", "feedback", "chrsVibr", "depth", "delay" } };   // CC -> knob, MIDI learn
+    void tapAt (double ms);                      // one tap (ms: juce::Time::getMillisecondCounterHiRes); message thread
+    vibr::TapAverager tapAvg;
+    vibr::TapTempo midiTap { [this] (double ms) { tapAt (ms); } };   // MIDI tap (note-on or CC85) and the TAP button
 
 
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
 
-    std::atomic<float>* pBlend, *pLevel, *pFeedback, *pRate, *pDepth, *pDelay, *pEffect;
+    std::atomic<float>* pBlend, *pLevel, *pFeedback, *pRate, *pDepth, *pDelay, *pEffect, *pSync, *pDivision;
 
     double sr = 44100.0;
     memoryman::Channel channels[2];

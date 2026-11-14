@@ -88,6 +88,7 @@ LM2AudioProcessorEditor::LM2AudioProcessorEditor (LM2AudioProcessor& p)
         k.slider.setMouseDragSensitivity (180);
         k.slider.setScrollWheelEnabled (false);
         addAndMakeVisible (k.slider);
+        midiUI.add (k.slider, spec.id);
         k.attachment = std::make_unique<juce::SliderParameterAttachment> (*proc.apvts.getParameter (spec.id), k.slider, nullptr);
     };
     add (level, kLevel);
@@ -132,8 +133,14 @@ void LM2AudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
     }
 }
 
+void LM2AudioProcessorEditor::paintOverChildren (juce::Graphics& g)
+{
+    midiUI.paintMarks (g, juce::Colour(233, 185, 63));
+}
+
 void LM2AudioProcessorEditor::timerCallback()
 {
+    if (midiUI.needsRepaint()) { midiUI.tick(); repaint(); }
     const bool on = proc.apvts.getRawParameterValue ("bypass")->load() < 0.5f;
     if (on != lastOn) { lastOn = on; repaint(); }
 }

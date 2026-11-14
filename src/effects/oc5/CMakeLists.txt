@@ -11,7 +11,7 @@ juce_add_plugin(OC-5
   ICON_BIG "${RL_ICON}"
   BUNDLE_ID com.richardleurs.oc5
   IS_SYNTH FALSE
-  NEEDS_MIDI_INPUT FALSE
+  NEEDS_MIDI_INPUT TRUE
   NEEDS_MIDI_OUTPUT FALSE
   IS_MIDI_EFFECT FALSE
   EDITOR_WANTS_KEYBOARD_FOCUS FALSE
@@ -43,6 +43,7 @@ target_compile_definitions(OC-5
 target_link_libraries(OC-5
   PRIVATE
     OC5Assets
+    rl_common
     juce::juce_audio_utils
     juce::juce_dsp
   PUBLIC

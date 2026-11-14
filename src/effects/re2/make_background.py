@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
-"""Renders the RE-2 front panel (2610 x 1138) used as the plugin background: turquoise satin body, black panels,
+"""Renders the RE-2 front panel (2610 x 1260) used as the plugin background: turquoise satin body, black panels,
 printed legends. Control positions match PluginEditor.cpp (see ../style.md). Needs numpy + Pillow.
 Usage: make_background.py out.png"""
 import math, sys
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-W, H, S = 2610, 1138, 2
+W, H, S = 2610, 1260, 2
 rng = np.random.default_rng(202)
 BODY = (49, 85, 181)                          # royal blue #3155B5 (palette)
 ACC = BODY                                    # panel titles use the plugin's body colour
@@ -17,7 +17,7 @@ PANEL = (24, 25, 28)
 CHROME = [(0, (250, 250, 252)), (0.35, (190, 194, 202)), (0.7, (110, 114, 124)), (1, (60, 62, 70))]
 
 # ----- layout (shared with PluginEditor.cpp): side margins 40, panel gaps 20, see ../style.md -----
-PT, PB = 268, 1000
+PT, PB = 268, 1122
 P1, P2, P3 = (40, PT, 900, PB), (920, PT, 1560, PB), (1580, PT, 2570, PB)
 ROW1, ROW2, KR = 458, 790, 72                 # knob rows, knob radius
 LEFT = [(250, ROW2, "SATURATION"), (690, ROW2, "WOW &|FLUTTER")]
@@ -170,6 +170,7 @@ panel(P1, "INPUT", 150)
 panel(P2, "MODE", 150)
 panel(P3, "ECHO", 150)
 line([(P3[0] + 34, (ROW1 + ROW2) / 2 + 28), (P3[2] - 34, (ROW1 + ROW2) / 2 + 28)], INK, 1.5, 70)       # divider between the two knob rows
+line([(P3[0] + 34, 1012), (P3[2] - 34, 1012)], INK, 1.5, 70)       # divider above the SYNC button (drawn in the editor, centre y 1070)
 
 def led_bezel(lx, ly, lit=None):
     # flat (see ../../../.claude/style.md, "Flat style"): a thin dark grey ring round a flat dark well; the editor fills the lamp

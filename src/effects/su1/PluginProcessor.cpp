@@ -103,7 +103,7 @@ void SU1AudioProcessor::getStateInformation (juce::MemoryBlock& dest)
 void SU1AudioProcessor::setStateInformation (const void* data, int size)
 {
     if (auto xml = getXmlFromBinary (data, size))
-        if (xml->hasTagName (apvts.state.getType())) apvts.replaceState (juce::ValueTree::fromXml (*xml));
+        if (xml->hasTagName (apvts.state.getType())) { auto st = juce::ValueTree::fromXml (*xml); vibr::BypassLink::normalise (st); apvts.replaceState (st); }
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new SU1AudioProcessor(); }

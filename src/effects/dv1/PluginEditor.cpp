@@ -57,6 +57,8 @@ DV1AudioProcessorEditor::DV1AudioProcessorEditor (DV1AudioProcessor& p)
         k.att = std::make_unique<juce::SliderParameterAttachment> (*dynamic_cast<juce::RangedAudioParameter*> (par), k.slider, nullptr);
         k.slider.onValueChange = [this] { repaint(); };
     }
+    boostTarget.onPress = [this] { proc.undoManager.beginNewTransaction(); toggle ("boostOn"); };
+    addAndMakeVisible (boostTarget);
     powerAtt.sendInitialUpdate();
     grain = ui::makeGrain();
     constrainer.setSizeLimits (720, 414, 2400, 1380);
@@ -74,8 +76,14 @@ DV1AudioProcessorEditor::~DV1AudioProcessorEditor()
     setLookAndFeel (nullptr);
 }
 
+void DV1AudioProcessorEditor::paintOverChildren (juce::Graphics& g)
+{
+    if (midiUI != nullptr) midiUI->paintMarks (g, kPal.body);
+}
+
 void DV1AudioProcessorEditor::timerCallback()
 {
+    if (midiUI != nullptr && midiUI->needsRepaint()) { midiUI->tick(); repaint(); }
     repaint (panelRect (2).expanded (4.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer());
     if (barState.copiedAt != 0) { repaint (juce::Rectangle<float> (0.0f, 30.0f, 900.0f, 50.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer()); if (! barState.copiedRecently()) barState.copiedAt = 0; }
 }
@@ -105,6 +113,17 @@ void DV1AudioProcessorEditor::layoutKnobs()
         auto& k = knobs[(size_t) i];
         k.slider.setBounds (juce::Rectangle<float> (d, d).withCentre (knobCentre (k.panel, k.index, k.count) * sc).toNearestInt());
         k.slider.setVisible (knobShown (i));
+    }
+    boostTarget.setBounds (outButtonRect (0).expanded (3.0f).transformedBy (juce::AffineTransform::scale (sc)).toNearestInt());
+
+    juce::uint64 shown = 0;                                          // MIDI learn marks only for the knobs that are on screen
+    for (int i = 0; i < (int) knobs.size(); ++i) if (knobShown (i)) shown |= (juce::uint64) 1 << i;
+    if (midiUI == nullptr || shown != midiShown)
+    {
+        midiShown = shown;
+        midiUI = std::make_unique<MidiLearnUI> (proc.midiMap);
+        for (int i = 0; i < (int) knobs.size(); ++i) if (knobShown (i)) midiUI->add (knobs[(size_t) i].slider, knobs[(size_t) i].id);
+        midiUI->add (boostTarget, "boostOn");
     }
 }
 void DV1AudioProcessorEditor::resized() { layoutKnobs(); }
@@ -230,6 +249,5 @@ void DV1AudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
     else
         for (int v = 0; v < dv1::variantCount (mode()); ++v)
             if (buttonRect (v).expanded (3.0f).contains (p)) { setChoice ("variant", v); layoutKnobs(); repaint(); return; }
-    if (outButtonRect (0).expanded (3.0f).contains (p)) { toggle ("boostOn"); repaint(); return; }
     if (outButtonRect (1).expanded (3.0f).contains (p)) { toggle ("autoLevel"); repaint(); return; }
 }

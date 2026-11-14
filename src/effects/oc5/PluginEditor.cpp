@@ -90,6 +90,7 @@ OC5AudioProcessorEditor::OC5AudioProcessorEditor (OC5AudioProcessor& p)
         k.slider.setScrollWheelEnabled (false);
         addAndMakeVisible (k.slider);
         k.attachment = std::make_unique<juce::SliderParameterAttachment> (*proc.apvts.getParameter (spec.id), k.slider, nullptr);
+        midiUI.add (k.slider, spec.id);
     };
     add (direct, kDirect);
     add (up1, kUp1);
@@ -137,8 +138,14 @@ void OC5AudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
         setParam ("poly", e.position.y / S > kSwitch.y ? 1.0f : 0.0f);
 }
 
+void OC5AudioProcessorEditor::paintOverChildren (juce::Graphics& g)
+{
+    midiUI.paintMarks (g, juce::Colour (0xffe84b91));
+}
+
 void OC5AudioProcessorEditor::timerCallback()
 {
+    if (midiUI.needsRepaint()) { midiUI.tick(); repaint(); }
     const bool on = proc.apvts.getRawParameterValue ("bypass")->load() < 0.5f;
     const bool poly = proc.apvts.getRawParameterValue ("poly")->load() > 0.5f;
     if (on != lastOn || poly != lastPoly) { lastOn = on; lastPoly = poly; repaint(); }

@@ -4,6 +4,7 @@
 #include "BypassLink.h"
 
 #include <JuceHeader.h>
+#include "MidiMap.h"
 #include "SpaceEngine.h"
 
 // SP-1 Space Engine: five space modes (shimmer, infinite, spectral, modulated, rooms) with freeze (see SpaceEngine.h).
@@ -23,7 +24,7 @@ public:
     bool hasEditor() const override { return true; }
 
     const juce::String getName() const override { return "SP-1"; }
-    bool acceptsMidi() const override { return false; }
+    bool acceptsMidi() const override { return true; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
     double getTailLengthSeconds() const override { return 30.0; }
@@ -39,6 +40,7 @@ public:
     void setStateInformation (const void*, int) override;
 
     juce::AudioProcessorValueTreeState apvts;
+    MidiMap midiMap { apvts, { "size", "decay", "diffusion", "tone", "motion", "texture", "mix", "level", "freeze" } };   // CC -> knob, MIDI learn
 
     vibr::BypassLink bypassLink { apvts };                // host bypass <-> OFF / ON switch
 

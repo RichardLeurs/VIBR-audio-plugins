@@ -42,6 +42,7 @@ ML1AudioProcessorEditor::ML1AudioProcessorEditor (ML1AudioProcessor& p)
         k.slider.onDragStart = [this] { proc.undoManager.beginNewTransaction(); };
         addAndMakeVisible (k.slider);
         k.att = std::make_unique<juce::SliderParameterAttachment> (*dynamic_cast<juce::RangedAudioParameter*> (par), k.slider, nullptr);
+        midiUI.add (k.slider, k.id);
         k.slider.onValueChange = [this] { repaint(); };
     }
     powerAtt.sendInitialUpdate();
@@ -61,8 +62,14 @@ ML1AudioProcessorEditor::~ML1AudioProcessorEditor()
     setLookAndFeel (nullptr);
 }
 
+void ML1AudioProcessorEditor::paintOverChildren (juce::Graphics& g)
+{
+    midiUI.paintMarks (g, kBody);
+}
+
 void ML1AudioProcessorEditor::timerCallback()
 {
+    if (midiUI.needsRepaint()) { midiUI.tick(); repaint(); }
     repaint (panelRect (2).expanded (4.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer());     // the picture moves
     if (barState.copiedAt != 0) { repaint (juce::Rectangle<float> (0.0f, 30.0f, 900.0f, 50.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer()); if (! barState.copiedRecently()) barState.copiedAt = 0; }
 }

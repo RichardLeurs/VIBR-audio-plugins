@@ -23,6 +23,7 @@ public:
     ~DY1AudioProcessorEditor() override;
 
     void paint (juce::Graphics&) override;
+    void paintOverChildren (juce::Graphics&) override;
     void resized() override;
     void mouseDown (const juce::MouseEvent&) override;
 
@@ -50,6 +51,7 @@ private:
     juce::ComponentBoundsConstrainer constrainer;
     juce::Image grain;
     std::array<Knob, 9> knobs;
+    MidiLearnUI midiUI { proc.midiMap };       // right-click a knob: MIDI learn
     juce::ParameterAttachment powerAtt, gateAtt, expAtt, transAtt;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DY1AudioProcessorEditor)

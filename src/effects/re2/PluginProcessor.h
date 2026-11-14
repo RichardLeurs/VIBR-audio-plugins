@@ -2,6 +2,8 @@
 #pragma once
 
 #include "BypassLink.h"
+#include "MidiMap.h"
+#include "TapTempo.h"
 
 #include <JuceHeader.h>
 #include "RE2DSP.h"
@@ -21,7 +23,7 @@ public:
     bool hasEditor() const override { return true; }
 
     const juce::String getName() const override { return JucePlugin_Name; }
-    bool acceptsMidi() const override { return false; }
+    bool acceptsMidi() const override { return true; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
     double getTailLengthSeconds() const override { return 8.0; }
@@ -39,6 +41,10 @@ public:
     juce::AudioProcessorValueTreeState apvts;
 
     vibr::BypassLink bypassLink { apvts };                // host bypass <-> OFF / ON switch
+    MidiMap midiMap { apvts, { "saturation", "wowFlutter", "mode", "bass", "treble", "reverbVol", "repeatRate", "intensity", "echoVol" } };   // CC -> knob, MIDI learn
+    void tapAt (double ms);                      // one tap (ms: juce::Time::getMillisecondCounterHiRes); message thread
+    vibr::TapAverager tapAvg;
+    vibr::TapTempo midiTap { [this] (double ms) { tapAt (ms); } };   // MIDI tap (note-on or CC85) and the TAP button
 
     // metering, read by the editor
     std::atomic<float> outputLevel { 0.0f };
@@ -49,7 +55,8 @@ private:
     void updateFilters (float bass, float treble, float age);
 
     std::atomic<float>* pMode, *pRate, *pIntensity, *pEchoVol, *pRevVol,
-                       *pBass, *pTreble, *pSat, *pWowFlutter, *pTapeAged, *pInputLine, *pPower;
+                       *pBass, *pTreble, *pSat, *pWowFlutter, *pTapeAged, *pInputLine, *pPower,
+                       *pSync, *pDivision;
 
     // panel switches mapped onto the RE-201 engine's 0-10 scale
     float ageValue() const { return *pTapeAged > 0.5f ? 7.0f : 1.5f; }   // NEW / AGED tape
@@ -63,6 +70,7 @@ private:
     float headGain[3] = { 0.0f, 0.0f, 0.0f }, revSend = 0.0f;
     float tapeUnit = 0.09f;       // seconds between heads (smoothed => tape inertia)
     float tapeUnitCoef = 0.001f;
+    double hostTempo = 120.0;     // last host tempo (bpm), read once per block; 120 until the host gives one
     float wowPhase = 0.0f, wowPhase2 = 0.0f, flutPhase = 0.0f, noiseLP = 0.0f;
     juce::Random rng;
     float lastBass = -1.0f, lastTreble = -1.0f, lastAge = -1.0f;

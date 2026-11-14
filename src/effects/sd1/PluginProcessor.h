@@ -2,8 +2,11 @@
 #pragma once
 
 #include "BypassLink.h"
+#include "MidiMap.h"
+#include "TapTempo.h"
 
 #include <JuceHeader.h>
+#include "TempoSync.h"
 #include "SDD1000DSP.h"
 
 class SDD1000AudioProcessor : public juce::AudioProcessor
@@ -21,7 +24,7 @@ public:
     bool hasEditor() const override { return true; }
 
     const juce::String getName() const override { return JucePlugin_Name; }
-    bool acceptsMidi() const override { return false; }
+    bool acceptsMidi() const override { return true; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
     double getTailLengthSeconds() const override { return 12.0; }
@@ -38,7 +41,10 @@ public:
 
     juce::AudioProcessorValueTreeState apvts;
 
-    vibr::BypassLink bypassLink { apvts };                // host bypass <-> OFF / ON switch
+    MidiMap midiMap { apvts, { "level", "delayTime", "factor", "feedback", "hiCut", "modIntensity", "modFrequency", "direct", "effect" } };   // CC -> knob, MIDI learn
+    void tapAt (double ms);                      // one tap (ms: juce::Time::getMillisecondCounterHiRes); message thread
+    vibr::TapAverager tapAvg;
+    vibr::TapTempo midiTap { [this] (double ms) { tapAt (ms); } };   // MIDI tap (note-on or CC85) and the TAP button
 
     std::atomic<float> meterLevel { 0.0f };   // headroom meter: input peak after the Level knob (linear, decaying)
 
@@ -46,7 +52,7 @@ private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
 
     std::atomic<float>* pLevel, *pTime, *pFactor, *pFeedback, *pHiCut, *pModInt, *pModFreq, *pDirect, *pEffect,
-                       *pBypass, *pPower;
+                       *pBypass, *pPower, *pSync, *pDivision;
 
     double sr = 44100.0;
     sdd1000::Channel channels[2];

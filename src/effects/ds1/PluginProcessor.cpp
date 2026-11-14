@@ -27,6 +27,7 @@ DS1AudioProcessor::DS1AudioProcessor()
     pLevel = apvts.getRawParameterValue ("level");
     pDist  = apvts.getRawParameterValue ("dist");
     bypassParam = dynamic_cast<juce::AudioParameterBool*> (apvts.getParameter ("bypass"));
+    midiMap.setDefault ("dist", 11);
 }
 
 bool DS1AudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -68,8 +69,9 @@ void DS1AudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     wetSmooth.reset (sampleRate, 0.01);   wetSmooth.setCurrentAndTargetValue (bypassParam->get() ? 0.0f : 1.0f);
 }
 
-void DS1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
+void DS1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
+    midiMap.process (midi);
     juce::ScopedNoDenormals noDenormals;
     const int n = buffer.getNumSamples();
     const int channels = juce::jmin (buffer.getNumChannels(), kMaxChannels);
@@ -134,7 +136,9 @@ juce::AudioProcessorEditor* DS1AudioProcessor::createEditor() { return new DS1Au
 
 void DS1AudioProcessor::getStateInformation (juce::MemoryBlock& dest)
 {
-    if (auto xml = apvts.copyState().createXml())
+    auto state = apvts.copyState();
+    state.appendChild (midiMap.toTree(), nullptr);
+    if (auto xml = state.createXml())
         copyXmlToBinary (*xml, dest);
 }
 
@@ -142,7 +146,12 @@ void DS1AudioProcessor::setStateInformation (const void* data, int size)
 {
     if (auto xml = getXmlFromBinary (data, size))
         if (xml->hasTagName (apvts.state.getType()))
-            apvts.replaceState (juce::ValueTree::fromXml (*xml));
+        {
+            auto st = juce::ValueTree::fromXml (*xml);
+            midiMap.fromTree (st.getChildWithName ("MIDIMAP"));
+            st.removeChild (st.getChildWithName ("MIDIMAP"), nullptr);
+            apvts.replaceState (st);
+        }
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new DS1AudioProcessor(); }

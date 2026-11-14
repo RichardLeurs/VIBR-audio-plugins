@@ -129,8 +129,18 @@ SA1AudioProcessorEditor::SA1AudioProcessorEditor (SA1AudioProcessor& p)
         auto* par = proc.apvts.getParameter (k.id);
         s.setDoubleClickReturnValue (true, par->convertFrom0to1 (par->getDefaultValue()));
         addAndMakeVisible (s);
+        midiUI.add (s, k.id);
         k.att = std::make_unique<juce::SliderParameterAttachment> (*dynamic_cast<juce::RangedAudioParameter*> (par), s, nullptr);
         s.onValueChange = [this] { repaint(); };
+    }
+    {
+        static const char* const stageIds[4] = { "boostOn", "tubeOn", "tapeOn", "crushOn" };
+        for (int i = 0; i < 4; ++i)
+        {
+            stageTarget[i].onPress = [this, i] { toggle (stageIds[i]); };
+            addAndMakeVisible (stageTarget[i]);
+            midiUI.add (stageTarget[i], stageIds[i]);
+        }
     }
     powerAtt.sendInitialUpdate(); boostAtt.sendInitialUpdate(); tubeAtt.sendInitialUpdate(); tapeAtt.sendInitialUpdate(); crushAtt.sendInitialUpdate();
 
@@ -155,8 +165,14 @@ SA1AudioProcessorEditor::~SA1AudioProcessorEditor()
     setLookAndFeel (nullptr);
 }
 
+void SA1AudioProcessorEditor::paintOverChildren (juce::Graphics& g)
+{
+    midiUI.paintMarks (g, kBody);
+}
+
 void SA1AudioProcessorEditor::timerCallback()
 {
+    if (midiUI.needsRepaint()) { midiUI.tick(); repaint(); }
     for (auto& k : knobs) k.slider.setAlpha (stageOn (k.panel) ? 1.0f : 0.4f);       // the knobs of a stage that is off are dimmed
 }
 
@@ -173,6 +189,8 @@ void SA1AudioProcessorEditor::layoutKnobs()
     const float sc = scale(), d = 2.0f * (kKnobR + kPad) * sc;
     for (auto& k : knobs)
         k.slider.setBounds (juce::Rectangle<float> (d, d).withCentre (knobCentre (k.panel, k.index, k.count) * sc).toNearestInt());
+    for (int i = 0; i < 4; ++i)
+        stageTarget[i].setBounds (pillRect (i).expanded (6.0f, 8.0f).transformedBy (juce::AffineTransform::scale (sc)).toNearestInt());
 }
 
 void SA1AudioProcessorEditor::resized() { layoutKnobs(); }
@@ -367,7 +385,4 @@ void SA1AudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 {
     const auto p = e.position / scale();
     if (powerRect().contains (p)) { toggle ("power"); return; }
-    static const char* ids[4] = { "boostOn", "tubeOn", "tapeOn", "crushOn" };
-    for (int i = 0; i < 4; ++i)
-        if (pillRect (i).expanded (6.0f, 8.0f).contains (p)) { toggle (ids[i]); return; }
 }

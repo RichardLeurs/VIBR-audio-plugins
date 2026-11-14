@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
-"""Renders the TR-2 flanger front panel (1840 x 890) used as the plugin background: magenta satin body, three black panels
+"""Renders the TR-2 flanger front panel (1840 x 968) used as the plugin background: magenta satin body, three black panels
 (FLANGE, SWEEP, MODE), printed legends. Control positions match PluginEditor.cpp. Needs numpy + Pillow.
 Usage: make_background.py out.png"""
 import math, sys
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-W, H, S = 1840, 890, 2
+W, H, S = 1840, 968, 2
 rng = np.random.default_rng(15)
 BODY = (21, 156, 112)                          # teal green #159C70 (palette: TR-1 Tremolo)
 ACC = BODY                                    # panel titles use the plugin's body colour
@@ -17,7 +17,7 @@ PANEL = (24, 25, 28)
 CHROME = [(0, (250, 250, 252)), (0.35, (190, 194, 202)), (0.7, (110, 114, 124)), (1, (60, 62, 70))]
 
 # ----- layout (shared with PluginEditor.cpp); same margins and gaps as the DM-1 (see ../style.md) -----
-PT, PB = 268, 752
+PT, PB = 268, 830
 P1, P2, P3 = (40, PT, 613, PB), (633, PT, 1207, PB), (1227, PT, 1800, PB)      # side margins 40, panel gaps 20; the three panels are the same width
 KY, KR = 532, 100                             # knob row and knob radius
 NAME_Y = 348                                  # knob name above the knob
@@ -234,6 +234,8 @@ wx, wy = 920, KY + 160
 pts = [(wx - 118 + t * 76 / 60.0, wy - 14 * math.sin(2 * math.pi * t / 60.0)) for t in range(61)]
 line(pts, INK, 3, 235)
 line([(wx + 42, wy + 14), (wx + 42, wy - 14), (wx + 62, wy - 14), (wx + 62, wy + 14), (wx + 82, wy + 14), (wx + 82, wy - 14), (wx + 100, wy - 14)], INK, 3, 235)
+
+line([(P1[0] + 40, 731), (P1[2] - 40, 731)], INK, 2, 90)      # divider above the tempo SYNC row of the SPEED panel (the SYNC button is drawn by the editor)
 
 # ----- credit, bottom right (right edge lined up with the panels) -----
 import os

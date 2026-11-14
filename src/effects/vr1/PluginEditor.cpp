@@ -116,6 +116,7 @@ VR1AudioProcessorEditor::VR1AudioProcessorEditor (VR1AudioProcessor& p)
         s.setDoubleClickReturnValue (true, par->convertFrom0to1 (par->getDefaultValue()));
         addAndMakeVisible (s);
         k.att = std::make_unique<juce::SliderParameterAttachment> (*dynamic_cast<juce::RangedAudioParameter*> (par), s, nullptr);
+        midiUI.add (s, k.id);
         s.onValueChange = [this] { repaint(); };
     }
     powerAtt.sendInitialUpdate();
@@ -144,8 +145,14 @@ VR1AudioProcessorEditor::~VR1AudioProcessorEditor()
     setLookAndFeel (nullptr);
 }
 
+void VR1AudioProcessorEditor::paintOverChildren (juce::Graphics& g)
+{
+    midiUI.paintMarks (g, kBody);
+}
+
 void VR1AudioProcessorEditor::timerCallback()
 {
+    if (midiUI.needsRepaint()) { midiUI.tick(); repaint(); }
     lastMode = currentMode();
     repaint (motionRect().expanded (4.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer());     // the picture moves
 }

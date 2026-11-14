@@ -3,6 +3,7 @@
 
 #include "PluginProcessor.h"
 #include "ClickZone.h"
+#include "MidiTarget.h"
 #include "WrapSlider.h"
 #include "ParamMemory.h"
 
@@ -25,6 +26,7 @@ public:
     ~OD2AudioProcessorEditor() override;
 
     void paint (juce::Graphics&) override;
+    void paintOverChildren (juce::Graphics&) override;
     void resized() override;
     void mouseDown (const juce::MouseEvent&) override;
 
@@ -42,7 +44,9 @@ private:
     OD2LookAndFeel laf;
     juce::ComponentBoundsConstrainer constrainer;
     juce::Image background;
+    MidiLearnUI midiUI { proc.midiMap };       // right-click a knob: MIDI learn
     Knob type, param, level, drive, low, middle, high;
+    MidiTarget boostTarget;                        // over the BOOST slide switch (MIDI learn target)
     ClickZone paramZone, memoryZone;
     ClickZone paramLedZone[5], memLedZone[5];       // click a lamp to select it
 

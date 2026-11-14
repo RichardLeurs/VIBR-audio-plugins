@@ -248,6 +248,7 @@ MS1AudioProcessor::MS1AudioProcessor()
 
 MS1AudioProcessor::~MS1AudioProcessor()
 {
+    cancelPendingUpdate();
     irTimer.stopTimer();
     delete irPending.exchange (nullptr);
     delete irTrash.exchange (nullptr);
@@ -662,7 +663,7 @@ void MS1AudioProcessor::setStateInformation (const void* data, int size)
     if (auto xml = getXmlFromBinary (data, size))
         if (xml->hasTagName (apvts.state.getType()))
         {
-            apvts.replaceState (juce::ValueTree::fromXml (*xml));
+            { auto st = juce::ValueTree::fromXml (*xml); vibr::BypassLink::normalise (st); apvts.replaceState (st); }
             specModeOpt.store ((int) apvts.state.getProperty ("specMode", 0)); specSourceOpt.store ((int) apvts.state.getProperty ("specSource", 0)); specSlopeOpt.store ((int) apvts.state.getProperty ("specSlope", 2));
             const juce::File f (apvts.state.getProperty ("refPath").toString());
             if (f.existsAsFile() && f != reference.file()) reference.loadAsync (f);

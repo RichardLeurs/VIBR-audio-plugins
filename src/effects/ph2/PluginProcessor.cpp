@@ -16,6 +16,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout PH2AudioProcessor::createLay
     layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "mode", 1 }, "Mode",
                                                         StringArray { "I", "II" }, ph2::kModeI));
     layout.add (std::make_unique<AudioParameterBool> (ParameterID { "bypass", 1 }, "Bypass", false));
+    // tempo sync (plugin extension): off = the RATE knob sets the LFO as before; on = one LFO cycle per DIVISION of the host tempo
+    layout.add (std::make_unique<AudioParameterBool> (ParameterID { "sync", 1 }, "Sync", false));
+    layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "division", 1 }, "Division", vibr::sync::divisionNames(), 3));   // 3 = "1/4"
     return layout;
 }
 
@@ -30,6 +33,12 @@ PH2AudioProcessor::PH2AudioProcessor()
     pRate   = apvts.getRawParameterValue ("rate");
     pMode   = apvts.getRawParameterValue ("mode");
     bypassParam = dynamic_cast<juce::AudioParameterBool*> (apvts.getParameter ("bypass"));
+    pSync     = apvts.getRawParameterValue ("sync");
+    pDivision = apvts.getRawParameterValue ("division");
+
+    midiMap.setDefault ("depth", 1);                  // mod wheel
+    midiMap.setDefault ("rate", 11);                  // expression pedal
+    midiMap.setSyncAlias ("rate", "sync", "division");
 }
 
 bool PH2AudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -47,11 +56,14 @@ void PH2AudioProcessor::prepareToPlay (double sampleRate, int)
     depthSmooth.reset (sampleRate, 0.03);  depthSmooth.setCurrentAndTargetValue (pDepth->load() * 0.1f);
     rateSmooth.reset (sampleRate, 0.03);   rateSmooth.setCurrentAndTargetValue (pRate->load() * 0.1f);
     modeSmooth.reset (sampleRate, 0.05);   modeSmooth.setCurrentAndTargetValue (pMode->load());
+    syncMix.reset (sampleRate, 0.05);     syncMix.setCurrentAndTargetValue (pSync->load() > 0.5f ? 1.0f : 0.0f);
+    syncHzSmooth.reset (sampleRate, 0.1); syncHzSmooth.setCurrentAndTargetValue (ph2::syncedHz (vibr::sync::hostBpm (*this, 120.0), (int) pDivision->load()));
     wetSmooth.reset (sampleRate, 0.01);    wetSmooth.setCurrentAndTargetValue (bypassParam->get() ? 0.0f : 1.0f);
 }
 
-void PH2AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
+void PH2AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
+    midiMap.process (midi);
     juce::ScopedNoDenormals noDenormals;
     const int n = buffer.getNumSamples();
     const int channels = juce::jmin (buffer.getNumChannels(), kMaxChannels);
@@ -63,13 +75,19 @@ void PH2AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     rateSmooth.setTargetValue (pRate->load() * 0.1f);
     modeSmooth.setTargetValue (pMode->load());
     wetSmooth.setTargetValue (bypassParam->get() ? 0.0f : 1.0f);
+    // tempo sync: target frequency from the host tempo once per block; glides (multiplicative, 100 ms) on tempo / division changes,
+    // and SYNC on / off crossfades the knob and synced frequencies over 50 ms so the LFO speed bends instead of jumping
+    syncMix.setTargetValue (pSync->load() > 0.5f ? 1.0f : 0.0f);
+    syncHzSmooth.setTargetValue (ph2::syncedHz (vibr::sync::hostBpm (*this, 120.0), (int) pDivision->load()));
 
     for (int i = 0; i < n; ++i)
     {
         const float res = resSmooth.getNextValue(), depth = depthSmooth.getNextValue(), rate = rateSmooth.getNextValue();
         const float mode = modeSmooth.getNextValue(), bypassMix = wetSmooth.getNextValue();
 
-        phase += (double) ph2::rateHz (rate) / sr;
+        const float knobHz = ph2::rateHz (rate), syncHz = syncHzSmooth.getNextValue(), mix = syncMix.getNextValue();
+        const float lfoHz = mix <= 0.0f ? knobHz : knobHz + (syncHz - knobHz) * mix;           // sync off: exactly the knob frequency, as before
+        phase += (double) lfoHz / sr;
         if (phase >= 1.0) phase -= 1.0;
         const float ph = (float) phase;
         // right channel's sweep is 90 degrees behind for width
@@ -92,7 +110,9 @@ juce::AudioProcessorEditor* PH2AudioProcessor::createEditor() { return new PH2Au
 
 void PH2AudioProcessor::getStateInformation (juce::MemoryBlock& dest)
 {
-    if (auto xml = apvts.copyState().createXml())
+    auto state = apvts.copyState();
+    state.appendChild (midiMap.toTree(), nullptr);
+    if (auto xml = state.createXml())
         copyXmlToBinary (*xml, dest);
 }
 
@@ -100,7 +120,12 @@ void PH2AudioProcessor::setStateInformation (const void* data, int size)
 {
     if (auto xml = getXmlFromBinary (data, size))
         if (xml->hasTagName (apvts.state.getType()))
-            apvts.replaceState (juce::ValueTree::fromXml (*xml));
+        {
+            auto st = juce::ValueTree::fromXml (*xml);
+            midiMap.fromTree (st.getChildWithName ("MIDIMAP"));
+            st.removeChild (st.getChildWithName ("MIDIMAP"), nullptr);
+            apvts.replaceState (st);
+        }
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new PH2AudioProcessor(); }

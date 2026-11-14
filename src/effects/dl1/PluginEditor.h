@@ -15,6 +15,7 @@ public:
     ~DL1AudioProcessorEditor() override;
 
     void paint (juce::Graphics&) override;
+    void paintOverChildren (juce::Graphics&) override;
     void resized() override;
     void mouseDown (const juce::MouseEvent&) override;
     void mouseDrag (const juce::MouseEvent&) override;
@@ -48,13 +49,13 @@ private:
     };
 
     DL1AudioProcessor& proc;
+    MidiLearnUI midiUI { proc.midiMap };       // right-click a knob: MIDI learn
     vibr::ui::KnobLookAndFeel laf;
     juce::ComponentBoundsConstrainer constrainer;
     juce::Image grain;
     std::array<Knob, 27> knobs;
     vibr::ui::PresetBarState barState;
     juce::ParameterAttachment powerAtt;
-    std::vector<juce::uint32> taps;
     bool draggingTime = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DL1AudioProcessorEditor)

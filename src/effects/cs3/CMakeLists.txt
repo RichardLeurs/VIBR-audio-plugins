@@ -11,7 +11,7 @@ juce_add_plugin(CS-3
   ICON_BIG "${RL_ICON}"
   BUNDLE_ID com.richardleurs.cs3
   IS_SYNTH FALSE
-  NEEDS_MIDI_INPUT FALSE
+  NEEDS_MIDI_INPUT TRUE
   NEEDS_MIDI_OUTPUT FALSE
   IS_MIDI_EFFECT FALSE
   EDITOR_WANTS_KEYBOARD_FOCUS FALSE
@@ -43,6 +43,7 @@ target_compile_definitions(CS-3
 target_link_libraries(CS-3
   PRIVATE
     CS3Assets
+    rl_common
     juce::juce_audio_utils
     juce::juce_dsp
   PUBLIC

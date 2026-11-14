@@ -4,9 +4,9 @@
 
 namespace
 {
-// Positions are in the coordinates of the rendered background (2610 x 1138, see make_background.py);
-// the editor shows it at 1305 x 569 and paint() scales them with S.
-constexpr int kW = 1305, kH = 569;
+// Positions are in the coordinates of the rendered background (2610 x 1260, see make_background.py);
+// the editor shows it at 1305 x 630 and paint() scales them with S.
+constexpr int kW = 1305, kH = 630;
 constexpr float S = (float) kW / 2610.0f;
 
 juce::Point<float> img (float x, float y) { return { x * S, y * S }; }
@@ -26,6 +26,10 @@ const float kMemLedX[5] = { 150.0f, 260.0f, 370.0f, 480.0f, 590.0f };
 const juce::Point<float> kMemoryLed0 { 0.0f, 386.0f }, kMemoryButton { 780.0f, 386.0f };
 constexpr juce::uint32 kHoldMs = 800;
 const juce::Point<float> kPowerSwitch { 2535.0f, 87.0f };      // power slide switch (top right)
+// SYNC button inside the ECHO panel, under REPEAT RATE, below the divider line drawn in the background (y 1012); the division readout sits to its right
+const juce::Rectangle<float> kSyncPill = juce::Rectangle<float> (116.0f, 46.0f).withCentre ({ 1680.0f, 1070.0f });
+const juce::Rectangle<float> kDivisionText = juce::Rectangle<float> (200.0f, 46.0f).withCentre ({ 1860.0f, 1070.0f });
+const juce::Colour kBody (0xff3155b5);      // the plugin's body colour (make_background.py BODY)
 
 juce::Point<float> polar (juce::Point<float> c, float r, float a)
 {
@@ -39,6 +43,7 @@ void drawLamp (juce::Graphics& g, juce::Point<float> c, bool on, juce::Colour co
     g.setColour (on ? colour : colour.interpolatedWith (juce::Colour (0xff0c0d0f), 0.78f));
     g.fillEllipse (juce::Rectangle<float> (22.0f, 22.0f).withCentre (c));
 }
+
 } // namespace
 
 //==============================================================================
@@ -92,7 +97,9 @@ void RE2LookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int w, i
 
 //==============================================================================
 RE2AudioProcessorEditor::RE2AudioProcessorEditor (RE2AudioProcessor& p)
-    : AudioProcessorEditor (&p), proc (p)
+    : AudioProcessorEditor (&p), proc (p),
+      syncAtt (*p.apvts.getParameter ("sync"), [this] (float v) { syncOn = v > 0.5f; syncChanged(); }, nullptr),
+      divisionAtt (*p.apvts.getParameter ("division"), [this] (float v) { division = (int) std::lround (v); repaint(); }, nullptr)
 {
     setLookAndFeel (&laf);
     background = juce::ImageFileFormat::loadFrom (RE2Data::background_png, (size_t) RE2Data::background_pngSize);
@@ -106,6 +113,9 @@ RE2AudioProcessorEditor::RE2AudioProcessorEditor (RE2AudioProcessor& p)
     addKnob (repeatRate, "repeatRate");
     addKnob (intensity,  "intensity");
     addKnob (echoVol,    "echoVol");
+    midiUI.add (saturation.slider, "saturation");  midiUI.add (wowFlutter.slider, "wowFlutter");  midiUI.add (mode.slider, "mode");
+    midiUI.add (bass.slider, "bass");              midiUI.add (treble.slider, "treble");          midiUI.add (reverbVol.slider, "reverbVol");
+    midiUI.add (repeatRate.slider, "repeatRate");  midiUI.add (intensity.slider, "intensity");    midiUI.add (echoVol.slider, "echoVol");
 
     // the printed 1-12 dial: pointer on "1" at the lower left, sweeping clockwise round to "12"
     mode.slider.setRotaryParameters (juce::degreesToRadians (-150.0f), juce::degreesToRadians (180.0f), true);
@@ -133,6 +143,8 @@ RE2AudioProcessorEditor::RE2AudioProcessorEditor (RE2AudioProcessor& p)
     }
 
     setSize (kW, kH);
+    syncAtt.sendInitialUpdate();
+    divisionAtt.sendInitialUpdate();
     timerCallback();      // initial LED state
     startTimerHz (20);
 }
@@ -188,8 +200,31 @@ void RE2AudioProcessorEditor::resized()
     powerSwitch.setBounds (juce::Rectangle<float> (110.0f * S, 70.0f * S).withCentre (img (kPowerSwitch.x, kPowerSwitch.y)).toNearestInt());
 }
 
+void RE2AudioProcessorEditor::syncChanged()
+{
+    // REPEAT RATE is the echo rate, or the note division while sync is on (the attachment sets the slider range from the parameter)
+    auto& k = repeatRate;
+    k.attachment.reset();
+    divisionKnobAtt.reset();
+    if (syncOn) divisionKnobAtt = std::make_unique<juce::SliderParameterAttachment> (*proc.apvts.getParameter ("division"), k.slider, nullptr);
+    else        k.attachment    = std::make_unique<juce::SliderParameterAttachment> (*proc.apvts.getParameter ("repeatRate"), k.slider, nullptr);
+    repaint();
+}
+
+void RE2AudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
+{
+    if (kSyncPill.expanded (4.0f).transformedBy (juce::AffineTransform::scale (S)).contains (e.position))
+        syncAtt.setValueAsCompleteGesture (syncOn ? 0.0f : 1.0f);
+}
+
+void RE2AudioProcessorEditor::paintOverChildren (juce::Graphics& g)
+{
+    midiUI.paintMarks (g, kBody);
+}
+
 void RE2AudioProcessorEditor::timerCallback()
 {
+    if (midiUI.needsRepaint()) { midiUI.tick(); repaint(); }
     // memory: holding the button writes the slot; moving a knob after a recall goes back to MANUAL
     const auto now = juce::Time::getMillisecondCounter();
     if (memHeld && ! memWritten && now - memDownAt >= kHoldMs)
@@ -240,6 +275,24 @@ void RE2AudioProcessorEditor::paint (juce::Graphics& g)
     drawLamp (g, kLineLed,    line);
     drawLamp (g, kNewLed,   ! aged);
     drawLamp (g, kAgedLed,    aged);
+
+    // SYNC: a flat rounded button, dark with a body-colour border when off, filled body colour when on
+    const float rad = kSyncPill.getHeight() * 0.5f;
+    g.setColour (syncOn ? kBody : juce::Colour (0xff131417));
+    g.fillRoundedRectangle (kSyncPill, rad);
+    g.setColour (kBody);
+    g.drawRoundedRectangle (kSyncPill.reduced (1.0f), rad, 2.0f);
+    g.setFont (juce::Font (juce::FontOptions ("Avenir Next", 24.0f, juce::Font::bold)));
+    g.setColour (syncOn ? juce::Colours::white : kBody);
+    g.drawText ("SYNC", kSyncPill, juce::Justification::centred, false);
+
+    // the chosen note division (REPEAT RATE sets it) next to the button while sync is on
+    if (syncOn)
+    {
+        g.setColour (juce::Colours::white);
+        g.setFont (juce::Font (juce::FontOptions ("Avenir Next", 34.0f, juce::Font::bold)));
+        g.drawText (vibr::sync::divisionNames()[juce::jlimit (0, vibr::sync::kNumDivisions - 1, division)], kDivisionText, juce::Justification::centredLeft, false);
+    }
 
     // power slide switch: chrome ball left = off, right = on; the slot lights up green when on
     const bool on = powerSwitch.getToggleState();

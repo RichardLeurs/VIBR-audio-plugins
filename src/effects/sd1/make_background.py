@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
-"""Renders the SD-1 digital delay front panel (2520 x 818) used as the plugin background: rose satin body, five black panels
+"""Renders the SD-1 digital delay front panel (2520 x 918) used as the plugin background: rose satin body, five black panels
 (INPUT with the headroom meter frame, DELAY TIME, REGENERATION, MODULATION, OUTPUT). Control positions match
 PluginEditor.cpp. Needs numpy + Pillow.  Usage: make_background.py out.png"""
 import math, sys
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-W, H, S = 2520, 818, 2
+W, H, S = 2520, 918, 2
 rng = np.random.default_rng(41)
 BODY = (57, 121, 239)                          # blue #3979EF (palette)
 ACC = BODY                                    # panel titles use the plugin's body colour
@@ -17,7 +17,7 @@ PANEL = (24, 25, 28)
 CHROME = [(0, (250, 250, 252)), (0.35, (190, 194, 202)), (0.7, (110, 114, 124)), (1, (60, 62, 70))]
 
 # ----- layout (shared with PluginEditor.cpp); same margins and gaps as the DM-1 (see ../style.md) -----
-PT, PB = 268, 680
+PT, PB = 268, 780
 P1, P2, P3, P4, P5 = (40, PT, 480, PB), (500, PT, 980, PB), (1000, PT, 1480, PB), (1500, PT, 1980, PB), (2000, PT, 2480, PB)
 KR = 60                                       # knob radius
 KY, NAME_Y = 500, 350
@@ -532,6 +532,8 @@ for x, name, lo, hi, a0, a1 in KNOBS:
     text(x, NAME_Y, name, font(27, 0), INK, spacing=1)
     text(x - 56, KY + 108, lo, font(22, 2), INK, 'mm')
     text(x + 56, KY + 108, hi, font(22, 2), INK, 'mm')
+
+line([(P2[0] + 40, 660), (P2[2] - 40, 660)], INK, 2, 90)      # divider above the tempo SYNC row of the DELAY TIME panel (the SYNC button is drawn by the editor)
 
 # ----- credit, bottom right (right edge lined up with the panels) -----
 import os

@@ -164,6 +164,13 @@ void MA1AudioProcessorEditor::updateTabVisibility()
         buttons[i].setVisible (buttonTab (i) == tab);
     for (auto& z : irZones)
         z.setVisible (tab == 1);
+
+    midiUI = std::make_unique<MidiLearnUI> (proc.midiMap);          // marks only for what is on screen (the learnable controls are on the AMP tab)
+    if (tab == 0)
+    {
+        for (int i = 0; i < kNumKnobs; ++i) if (knobTab (i) == 0) midiUI->add (knobs[i].slider, kKnobs[i].id);
+        for (int i = 0; i < kNumButtons; ++i) if (buttonTab (i) == 0) midiUI->add (buttons[i], kButtonIds[i]);
+    }
 }
 
 void MA1AudioProcessorEditor::setTab (int newTab)
@@ -232,8 +239,14 @@ void MA1AudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
         toggle ("bypass");
 }
 
+void MA1AudioProcessorEditor::paintOverChildren (juce::Graphics& g)
+{
+    if (midiUI != nullptr) midiUI->paintMarks (g, juce::Colour (217, 76, 72));
+}
+
 void MA1AudioProcessorEditor::timerCallback()
 {
+    if (midiUI != nullptr && midiUI->needsRepaint()) { midiUI->tick(); repaint(); }
     const bool on = proc.apvts.getRawParameterValue ("bypass")->load() < 0.5f;
     juce::String state;
     state << (int) on << ",";

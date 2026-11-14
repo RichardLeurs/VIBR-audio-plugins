@@ -125,6 +125,7 @@ MF1AudioProcessorEditor::MF1AudioProcessorEditor (MF1AudioProcessor& p)
         s.setDoubleClickReturnValue (true, par->convertFrom0to1 (par->getDefaultValue()));
         addAndMakeVisible (s);
         k.att = std::make_unique<juce::SliderParameterAttachment> (*dynamic_cast<juce::RangedAudioParameter*> (par), s, nullptr);
+        midiUI.add (s, k.id);
         s.onValueChange = [this] { repaint(); };
     }
     powerAtt.sendInitialUpdate();
@@ -153,8 +154,14 @@ MF1AudioProcessorEditor::~MF1AudioProcessorEditor()
     setLookAndFeel (nullptr);
 }
 
+void MF1AudioProcessorEditor::paintOverChildren (juce::Graphics& g)
+{
+    midiUI.paintMarks (g, kBody);
+}
+
 void MF1AudioProcessorEditor::timerCallback()
 {
+    if (midiUI.needsRepaint()) { midiUI.tick(); repaint(); }
     const int st = proc.currentStep.load();
     if (st != lastStep)
     {

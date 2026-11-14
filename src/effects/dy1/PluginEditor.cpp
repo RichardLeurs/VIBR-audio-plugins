@@ -119,6 +119,7 @@ DY1AudioProcessorEditor::DY1AudioProcessorEditor (DY1AudioProcessor& p)
         auto* par = proc.apvts.getParameter (k.id);
         s.setDoubleClickReturnValue (true, par->convertFrom0to1 (par->getDefaultValue()));
         addAndMakeVisible (s);
+        midiUI.add (s, k.id);
         k.att = std::make_unique<juce::SliderParameterAttachment> (*dynamic_cast<juce::RangedAudioParameter*> (par), s, nullptr);
         s.onValueChange = [this] { repaint(); };
     }
@@ -145,8 +146,14 @@ DY1AudioProcessorEditor::~DY1AudioProcessorEditor()
     setLookAndFeel (nullptr);
 }
 
+void DY1AudioProcessorEditor::paintOverChildren (juce::Graphics& g)
+{
+    midiUI.paintMarks (g, kBody);
+}
+
 void DY1AudioProcessorEditor::timerCallback()
 {
+    if (midiUI.needsRepaint()) { midiUI.tick(); repaint(); }
     for (auto& k : knobs) k.slider.setAlpha (stageOn (k.panel) ? 1.0f : 0.4f);       // the knobs of a stage that is off are dimmed
     repaint (actionRect().expanded (4.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer());     // the display moves
 }

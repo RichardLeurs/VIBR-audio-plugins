@@ -25,6 +25,8 @@ OC5AudioProcessor::OC5AudioProcessor()
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       apvts (*this, nullptr, "OC5", createLayout())
 {
+    midiMap.setDefault ("up1", 1);
+    midiMap.setDefault ("down1", 11);
     pDirect = apvts.getRawParameterValue ("direct");
     pUp1    = apvts.getRawParameterValue ("up1");
     pDown1  = apvts.getRawParameterValue ("down1");
@@ -46,8 +48,9 @@ void OC5AudioProcessor::prepareToPlay (double sampleRate, int)
     wetSmooth.setCurrentAndTargetValue (bypassParam->get() ? 0.0f : 1.0f);
 }
 
-void OC5AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
+void OC5AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
+    midiMap.process (midi);
     juce::ScopedNoDenormals noDenormals;
     const int n = buffer.getNumSamples();
     const int channels = juce::jmin (buffer.getNumChannels(), kMaxChannels);
@@ -79,15 +82,22 @@ juce::AudioProcessorEditor* OC5AudioProcessor::createEditor() { return new OC5Au
 
 void OC5AudioProcessor::getStateInformation (juce::MemoryBlock& dest)
 {
-    if (auto xml = apvts.copyState().createXml())
-        copyXmlToBinary (*xml, dest);
+    auto state = apvts.copyState();
+    state.appendChild (midiMap.toTree(), nullptr);
+    if (auto xml = state.createXml()) copyXmlToBinary (*xml, dest);
 }
 
 void OC5AudioProcessor::setStateInformation (const void* data, int size)
 {
     if (auto xml = getXmlFromBinary (data, size))
         if (xml->hasTagName (apvts.state.getType()))
-            apvts.replaceState (juce::ValueTree::fromXml (*xml));
+        {
+            auto st = juce::ValueTree::fromXml (*xml);
+            midiMap.fromTree (st.getChildWithName ("MIDIMAP"));
+            st.removeChild (st.getChildWithName ("MIDIMAP"), nullptr);
+
+            apvts.replaceState (st);
+        }
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new OC5AudioProcessor(); }

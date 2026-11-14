@@ -4,17 +4,19 @@
 #include "BypassLink.h"
 
 #include <JuceHeader.h>
+#include "MidiMap.h"
 #include "ReverbLabEngine.h"
 #include "ui/Presets.h"
 
 // RB-1 Reverb Lab: CLASSIC (BS-1, 12 types), SPACE (SP-1, 5 modes) and RESONATE (SR-1, strings) in one plugin (see ReverbLabEngine.h and .claude/lab_specs.md).
 // Host parameters: power, mode, variant, decay, size, tone, motion, preDelay, duck, mix, level, freeze, param2, value (CLASSIC), diffusion, texture (SPACE),
 // root, scale, damping, tension, fine, blend (RESONATE). There is no latency; the tail rings after the input stops.
-class RB1AudioProcessor : public juce::AudioProcessor
+class RB1AudioProcessor : public juce::AudioProcessor,
+      private juce::AsyncUpdater
 {
 public:
     RB1AudioProcessor();
-    ~RB1AudioProcessor() override = default;
+    ~RB1AudioProcessor() override { cancelPendingUpdate(); }
 
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
     void releaseResources() override {}
@@ -25,7 +27,7 @@ public:
     bool hasEditor() const override { return true; }
 
     const juce::String getName() const override { return "RB-1"; }
-    bool acceptsMidi() const override { return false; }
+    bool acceptsMidi() const override { return true; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
     double getTailLengthSeconds() const override { return 40.0; }
@@ -33,19 +35,14 @@ public:
 
     // the factory presets are the host's programs (the preset menu in the editor stays in step through the preset name)
     int getNumPrograms() override { return juce::jmax (1, (int) presets.factory().size()); }
-    int getCurrentProgram() override
-    {
-        const auto& list = presets.factory();
-        for (int i = 0; i < (int) list.size(); ++i)
-            if (list[(size_t) i].name == presets.name()) return currentProgram = i;
-        return currentProgram;
-    }
+    int getCurrentProgram() override { return currentProgram.load(); }
     void setCurrentProgram (int index) override
     {
-        if (index < 0 || index >= (int) presets.factory().size()) return;
-        currentProgram = index;
+        index = juce::jlimit (0, getNumPrograms() - 1, index);
+        if (index == currentProgram.load()) return;   // a host re-sending the current program must not reset the user's edits
+        currentProgram.store (index);
         if (juce::MessageManager::getInstance()->isThisTheMessageThread()) presets.applyFactory (index);
-        else juce::MessageManager::callAsync ([weak = juce::WeakReference<RB1AudioProcessor> (this), index] { if (weak != nullptr) weak->presets.applyFactory (index); });
+        else { pendingProgram.store (index); triggerAsyncUpdate(); }
     }
     const juce::String getProgramName (int index) override
     {
@@ -59,13 +56,15 @@ public:
 
     juce::UndoManager undoManager { 30000, 100 };
     juce::AudioProcessorValueTreeState apvts;
+    MidiMap midiMap { apvts, { "decay", "size", "tone", "motion", "preDelay", "duck", "mix", "level", "freeze", "param2", "value", "diffusion", "texture", "damping", "tension", "blend" } };   // CC -> knob, MIDI learn
     vibr::BypassLink bypassLink { apvts };                // host bypass <-> OFF / ON switch
     vibr::PresetManager presets;
-    int currentProgram = 0;
-    JUCE_DECLARE_WEAK_REFERENCEABLE (RB1AudioProcessor)
+    std::atomic<int> currentProgram { 0 };
+    std::atomic<int> pendingProgram { -1 };
     const rb1::Engine& getEngine() const { return engine; }
 
 private:
+    void handleAsyncUpdate() override { const int i = pendingProgram.exchange (-1); if (i >= 0) presets.applyFactory (i); }
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
 
     rb1::Engine engine;

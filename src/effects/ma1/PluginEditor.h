@@ -17,7 +17,7 @@ class MA1Zone : public juce::Component
 public:
     std::function<void()> onPress;
     bool isDown() const { return down; }
-    void mouseDown (const juce::MouseEvent&) override { down = true; if (onPress) onPress(); if (auto* p = getParentComponent()) p->repaint(); }
+    void mouseDown (const juce::MouseEvent& e) override { if (e.mods.isPopupMenu()) return; down = true; if (onPress) onPress(); if (auto* p = getParentComponent()) p->repaint(); }
     void mouseUp (const juce::MouseEvent&) override { down = false; if (auto* p = getParentComponent()) p->repaint(); }
 private:
     bool down = false;
@@ -31,6 +31,7 @@ public:
     ~MA1AudioProcessorEditor() override;
 
     void paint (juce::Graphics&) override;
+    void paintOverChildren (juce::Graphics&) override;
     void resized() override;
     void mouseDown (const juce::MouseEvent&) override;
 
@@ -58,6 +59,7 @@ private:
     juce::Image background[2];           // one background per tab
     int tab = 0;                         // 0 = AMP, 1 = CABINET
     Knob knobs[kNumKnobs];
+    std::unique_ptr<MidiLearnUI> midiUI;       // right-click a knob: MIDI learn (AMP tab only, rebuilt on a tab change)
     MA1Zone buttons[kNumButtons], irZones[2];
     std::unique_ptr<juce::FileChooser> chooser;
     juce::String lastState;
