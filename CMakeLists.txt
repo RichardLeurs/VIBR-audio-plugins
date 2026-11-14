@@ -70,7 +70,7 @@ endif()
 
 # All build output lives in ONE place outside iCloud-synced folders: ~/Developer/VIBR
 #   - the CMake build tree (configure with: cmake -S . -B ~/Developer/VIBR)
-#   - plus, after every build, the signed bundles collected in  <RELEASES_DIR> = <BUILD_OUTPUT_DIR>/releases/{effects,drumcomputer,multieffect}/{VST3,AU,Standalone}
+#   - plus, after every build, the signed bundles collected in  <RELEASES_DIR> = <BUILD_OUTPUT_DIR>/releases/{new,vintage,experimental,mastering,multieffect,drumcomputer}/{VST3,AU,Standalone}
 set(BUILD_OUTPUT_DIR "$ENV{HOME}/Developer/VIBR" CACHE PATH "Collects the signed VST3 / AU / Standalone bundles of every plugin")
 if(NOT "${CMAKE_BINARY_DIR}" STREQUAL "${BUILD_OUTPUT_DIR}" AND NOT "${CMAKE_BINARY_DIR}" STREQUAL "${BUILD_OUTPUT_DIR}-${RL_ARCH}")
   message(WARNING "Build tree is ${CMAKE_BINARY_DIR}; the project builds in ${BUILD_OUTPUT_DIR} (cmake -S . -B ${BUILD_OUTPUT_DIR}).")
@@ -81,7 +81,7 @@ endif()
 set(RL_ICON "${CMAKE_SOURCE_DIR}/assets/icon.png")
 
 # The signed VST3 / AU / Standalone bundles of every plugin are collected here after each build.
-# Layout: <RELEASES_DIR>/{effects,drumcomputer,multieffect}/{VST3,AU,Standalone}, one RELEASES_DIR per architecture:
+# Layout: <RELEASES_DIR>/{new,vintage,experimental,mastering,multieffect,drumcomputer}/{VST3,AU,Standalone}, one RELEASES_DIR per architecture:
 #   ~/Developer/VIBR/releases/arm64  and  ~/Developer/VIBR/releases/x86_64
 set(RELEASES_DIR "${BUILD_OUTPUT_DIR}/releases/${RL_ARCH}" CACHE PATH "Folder that collects the signed bundles of this architecture, split in effects / drumcomputer / multieffect (each with VST3, AU and Standalone subfolders)")
 
@@ -111,18 +111,29 @@ endif()
 #      Ableton can reject the bare linker signature JUCE leaves behind;
 #   2. re-installs the signed VST3 and AU into ~/Library/Audio/Plug-Ins (JUCE's own install step runs before signing);
 #   3. collects the signed VST3 / AU / Standalone bundles in RELEASES_DIR/<group>/{VST3,AU,Standalone}, where <group> is the
-#      source folder of the plugin: effects (src/effects), drumcomputer (src/drumcomputer), multieffect (src/multieffect) or mastering (src/mastering);
+#      group listed in plugins.conf (new, vintage, experimental, mastering, multieffect or drumcomputer);
 #   4. copies the signed VST3 into each folder in VST_COPY_DIRS (none by default).
-function(copy_vst3_after_build plugin)
-  # releases are split like src/: effects, drumcomputer, multieffect
-  set(_group effects)
-  if(CMAKE_CURRENT_SOURCE_DIR MATCHES "/src/drumcomputer/")
-    set(_group drumcomputer)
-  elseif(CMAKE_CURRENT_SOURCE_DIR MATCHES "/src/multieffect/")
-    set(_group multieffect)
-  elseif(CMAKE_CURRENT_SOURCE_DIR MATCHES "/src/mastering/")
-    set(_group mastering)
+# plugins.conf: "<name> <group>" per line, stored as RL_GROUP_<name without dash, lower case>
+file(STRINGS "${CMAKE_CURRENT_LIST_DIR}/plugins.conf" _conf_lines)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_LIST_DIR}/plugins.conf")
+foreach(_l IN LISTS _conf_lines)
+  if(_l MATCHES "^[ \t]*([A-Za-z0-9-]+)[ \t]+(new|vintage|experimental|mastering|multieffect|drumcomputer)[ \t]*$")
+    string(TOLOWER "${CMAKE_MATCH_1}" _n)
+    string(REPLACE "-" "" _n "${_n}")
+    set(RL_GROUP_${_n} "${CMAKE_MATCH_2}")
+  elseif(NOT _l MATCHES "^[ \t]*(#.*)?$")
+    message(FATAL_ERROR "plugins.conf: cannot read the line '${_l}' (use '<name> <group>' with group new, vintage, experimental, mastering, multieffect or drumcomputer)")
   endif()
+endforeach()
+
+function(copy_vst3_after_build plugin)
+  # the build group of the plugin comes from plugins.conf (key = folder name of the plugin, e.g. dd1)
+  get_filename_component(_key "${CMAKE_CURRENT_SOURCE_DIR}" NAME)
+  string(TOLOWER "${_key}" _key)
+  if(NOT DEFINED RL_GROUP_${_key})
+    message(FATAL_ERROR "plugins.conf has no group for '${_key}' (add a line like '${_key}  new')")
+  endif()
+  set(_group "${RL_GROUP_${_key}}")
   set(_rel "${RELEASES_DIR}/${_group}")
   if(APPLE)
     foreach(fmt VST3 AU Standalone)

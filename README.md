@@ -154,7 +154,7 @@ The build on macOS is placed outside the iCloud synced folders in `~/Developer/V
 ./build.sh --clean          # rebuild from scratch
 ```
 
-The signed bundles of each architecture are collected in `~/Developer/VIBR/releases/<arch>/{effects,drumcomputer,multieffect}/{VST3,AU,Standalone}`, with `<arch>` = `arm64` or `x86_64`. Only this Mac's own architecture is installed in `~/Library/Audio/Plug-Ins`; the other one is just collected, so copy it to a Mac of that type.
+The signed bundles of each architecture are collected in `~/Developer/VIBR/releases/<arch>/{new,vintage,experimental,mastering,multieffect,drumcomputer}/{VST3,AU,Standalone}`, with `<arch>` = `arm64` or `x86_64`. The group of every plugin is set in `plugins.conf`. Only this Mac's own architecture is installed in `~/Library/Audio/Plug-Ins`; the other one is just collected, so copy it to a Mac of that type.
 
 `build.sh` configures and builds into `~/Developer/VIBR` (outside iCloud; the x86_64 build tree is `~/Developer/VIBR-x86_64`); it is a thin wrapper around:
 
