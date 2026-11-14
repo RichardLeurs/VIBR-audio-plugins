@@ -247,6 +247,7 @@ private:
         snap = false;
     }
 
+public:
     void resetState()
     {
         for (auto& l : fdn) l.clear();
@@ -260,6 +261,7 @@ private:
         for (int c = 0; c < 2; ++c) lpz1[c] = lpz2[c] = hpz[c] = 0.0f;
     }
 
+private:
     // ----- per-sample engine -----
     void tick (float xin, const Params& p, float& outL, float& outR)
     {

@@ -1,5 +1,5 @@
 // VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
-// Offline check of the RL-1 engine: every mode at extreme / mid settings (and with freeze) must stay finite and bounded,
+// Offline check of the RV-1 engine: every mode at extreme / mid settings (and with freeze) must stay finite and bounded,
 // produce sound from a tone burst, and REVERSE must really play the burst backwards (its envelope starts quiet and rises).
 #include <cstdio>
 #include "ReverseEngine.h"
@@ -8,12 +8,12 @@ int main()
 {
     const float fs = 48000.0f;
     int problems = 0;
-    for (int mode = 0; mode < rl1::kNumModes; ++mode)
+    for (int mode = 0; mode < rv1::kNumModes; ++mode)
         for (int setting = 0; setting < 4; ++setting)
         {
-            rl1::Engine e;
+            rv1::Engine e;
             e.prepare (fs);
-            rl1::Params p;
+            rv1::Params p;
             p.mode = mode;
             const float v = setting == 0 ? 0.0f : setting == 1 ? 1.0f : 0.5f;
             p.length = p.speed = p.smooth = p.random = p.repeats = v;
@@ -40,13 +40,13 @@ int main()
             }
             const bool bad = ! finite || peak > 2.0f || peak < 0.003f;
             if (bad) ++problems;
-            std::printf ("%-8s setting %d  peak %.3f  energy(3-6s) %.2f %s\n", rl1::modeName (mode), setting, peak, energy, bad ? "  <-- PROBLEM" : "");
+            std::printf ("%-8s setting %d  peak %.3f  energy(3-6s) %.2f %s\n", rv1::modeName (mode), setting, peak, energy, bad ? "  <-- PROBLEM" : "");
             if (setting == 3 && energy < 1.0f) { ++problems; std::printf ("  freeze did not keep playing the captured audio\n"); }
         }
 
     {   // REVERSE: a tone that decays should come back growing
-        rl1::Engine e; e.prepare (fs);
-        rl1::Params p; p.mode = rl1::Reverse; p.length = 0.62f; p.speed = 0.5f; p.smooth = 0.3f; p.random = 0.0f; p.repeats = 0.0f;
+        rv1::Engine e; e.prepare (fs);
+        rv1::Params p; p.mode = rv1::Reverse; p.length = 0.62f; p.speed = 0.5f; p.smooth = 0.3f; p.random = 0.0f; p.repeats = 0.0f;
         std::vector<float> l (512), r (512), out;
         for (int pos = 0; pos < (int) (fs * 2.0f); pos += 512)
         {

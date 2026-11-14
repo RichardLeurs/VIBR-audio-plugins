@@ -1,0 +1,45 @@
+name: Windows build
+
+# Builds all VIBR plugins (VST3 + Standalone) for 64-bit Windows with ./build.sh --arch win64
+# and attaches the zips to the workflow run. Start it from the Actions tab, or push a tag like v1.0.
+# A tag push also uploads the zips to the GitHub release of that tag (the website download links use the latest release).
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  win64:
+    runs-on: windows-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build (VST3 + Standalone)
+        shell: bash
+        run: ./build.sh --arch win64
+
+      - name: List zips
+        shell: bash
+        run: ls -l ~/Developer/VIBR/zip
+
+      - name: Collect zips
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp ~/Developer/VIBR/zip/*.zip dist/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vibr-win64
+          path: dist/*.zip
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.zip

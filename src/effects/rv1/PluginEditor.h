@@ -2,24 +2,17 @@
 #pragma once
 
 #include "PluginProcessor.h"
+#include "ui/VibrUI.h"
 
-// Black knob of the VIBR look (see style.md): matt body with a knurled edge, raised cap, white pointer bar.
-// The knob is drawn 5 px inside its component so the shadow is not clipped.
-class RL1LookAndFeel : public juce::LookAndFeel_V4
-{
-public:
-    void drawRotarySlider (juce::Graphics&, int x, int y, int w, int h, float pos,
-                           float startAngle, float endAngle, juce::Slider&) override;
-};
-
-// RL-1 window, drawn in code on a satin body: header (name, description, power), four panels:
-// MODE (five mode buttons + FREEZE), SLICE (length, speed, smooth), CHAOS (two knobs, renamed per mode) and OUTPUT (mix, level).
-class RL1AudioProcessorEditor : public juce::AudioProcessorEditor,
+// RV-1 window (1200 x 690), on the shared UI of src/common/ui: header (name, preset chip, A / B, undo), the CONTROLS panel with the mode tab pills (REVERSE, SCRUB,
+// STUTTER, GLITCH, REPEAT) on its top edge (LENGTH, SPEED, SMOOTH and the two mode knobs, SYNC and FREEZE), OUTPUT (MIX, LEVEL) and the wide SLICES display (the read
+// position of each slice over three seconds, as the mode, length, speed and chaos set it).
+class RV1AudioProcessorEditor : public juce::AudioProcessorEditor,
                                 private juce::Timer
 {
 public:
-    explicit RL1AudioProcessorEditor (RL1AudioProcessor&);
-    ~RL1AudioProcessorEditor() override;
+    explicit RV1AudioProcessorEditor (RV1AudioProcessor&);
+    ~RV1AudioProcessorEditor() override;
 
     void paint (juce::Graphics&) override;
     void resized() override;
@@ -29,27 +22,31 @@ private:
     void timerCallback() override;
     float scale() const { return (float) getWidth() / 1200.0f; }
     void layoutKnobs();
-    int currentMode() const { return juce::jlimit (0, rl1::kNumModes - 1, (int) std::lround (proc.apvts.getRawParameterValue ("mode")->load())); }
+    int currentMode() const { return juce::jlimit (0, rv1::kNumModes - 1, (int) std::lround (proc.apvts.getRawParameterValue ("mode")->load())); }
     bool isOn (const char* id) const { return proc.apvts.getRawParameterValue (id)->load() > 0.5f; }
+    float value (const char* id) const { return proc.apvts.getRawParameterValue (id)->load(); }
     void toggle (const char* id);
+    void setChoice (const char* id, int index);
+    void drawSlices (juce::Graphics&);
 
     struct Knob
     {
         const char* id;
-        int panel, index, count;      // panel number, position in the panel, knobs in the panel
-        const char* name;             // nullptr: the TEXTURE name of the current mode
+        int panel, index, count;      // panel (0 controls, 1 output), position and number of knobs in the group
+        const char* name;             // nullptr: the CHAOS name of the current mode
         int kind;                     // 0 percent, 1 speed (x), 2 dB
         juce::Slider slider;
         std::unique_ptr<juce::SliderParameterAttachment> att;
     };
 
-    RL1AudioProcessor& proc;
-    RL1LookAndFeel laf;
+    RV1AudioProcessor& proc;
+    vibr::ui::KnobLookAndFeel laf;
     juce::ComponentBoundsConstrainer constrainer;
     juce::Image grain;
     std::array<Knob, 7> knobs;
-    juce::ParameterAttachment powerAtt, modeAtt, freezeAtt, syncAtt;
-    int lastMode = -1;
+    vibr::ui::PresetBarState barState;
+    juce::ParameterAttachment powerAtt;
+    float scroll = 0.0f;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (RL1AudioProcessorEditor)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (RV1AudioProcessorEditor)
 };

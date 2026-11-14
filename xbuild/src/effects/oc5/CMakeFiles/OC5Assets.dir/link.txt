@@ -1,2 +1,0 @@
-/usr/bin/ar qc libOC5Assets.a CMakeFiles/OC5Assets.dir/juce_binarydata_OC5Assets/JuceLibraryCode/BinaryData1.cpp.o
-/usr/bin/ranlib libOC5Assets.a

@@ -3,14 +3,15 @@
 
 #include <JuceHeader.h>
 #include "ReverseEngine.h"
+#include "ui/Presets.h"
 
-// RL-1 Reverse Lab: reverse, scrub, stutter, glitch and repeat with freeze (see ReverseEngine.h).
+// RV-1 Reverse Lab: reverse, scrub, stutter, glitch and repeat with freeze (see ReverseEngine.h).
 // Host parameters: power, mode, freeze, length, speed, smooth, random, repeats, mix, level.
-class RL1AudioProcessor : public juce::AudioProcessor
+class RV1AudioProcessor : public juce::AudioProcessor
 {
 public:
-    RL1AudioProcessor();
-    ~RL1AudioProcessor() override = default;
+    RV1AudioProcessor();
+    ~RV1AudioProcessor() override = default;
 
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
     void releaseResources() override {}
@@ -20,7 +21,7 @@ public:
     juce::AudioProcessorEditor* createEditor() override;
     bool hasEditor() const override { return true; }
 
-    const juce::String getName() const override { return "RL-1"; }
+    const juce::String getName() const override { return "RV-1"; }
     bool acceptsMidi() const override { return false; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
@@ -35,15 +36,17 @@ public:
     void getStateInformation (juce::MemoryBlock&) override;
     void setStateInformation (const void*, int) override;
 
+    juce::UndoManager undoManager { 30000, 100 };
     juce::AudioProcessorValueTreeState apvts;
+    vibr::PresetManager presets;
 
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
 
-    rl1::Engine engine;
+    rv1::Engine engine;
     std::atomic<float> *pPower {}, *pMode {}, *pFreeze {}, *pSync {}, *pLength {}, *pSpeed {}, *pSmooth {}, *pRandom {}, *pRepeats {}, *pMix {}, *pLevel {};
     juce::SmoothedValue<float> powerSmooth;
     juce::AudioBuffer<float> dryBuf;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (RL1AudioProcessor)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (RV1AudioProcessor)
 };

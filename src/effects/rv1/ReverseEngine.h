@@ -1,7 +1,7 @@
 // VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
 #pragma once
 
-// RL-1 Reverse Lab: creative reverse and time manipulation on one engine with five modes.
+// RV-1 Reverse Lab: creative reverse and time manipulation on one engine with five modes.
 //   The input is recorded all the time in a ring buffer.  Two playback heads (cross-faded) play slices of it:
 //   REVERSE   the last LENGTH of audio, played backwards, slice after slice
 //   SCRUB     a tape head that runs at SPEED behind the live signal; RANDOM scrubs it back and forth by hand (WANDER = how fast),
@@ -16,7 +16,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace rl1
+namespace rv1
 {
 constexpr int kNumModes = 5;
 enum Mode { Reverse, Scrub, Stutter, Glitch, Repeat };
@@ -291,4 +291,4 @@ private:
     std::vector<float> snap[2][2];       // [snapshot][channel]
     Head heads[2];
 };
-} // namespace rl1
+} // namespace rv1
