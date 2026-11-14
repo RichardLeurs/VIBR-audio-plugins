@@ -4,20 +4,18 @@
 
 namespace
 {
-// host label and readable text for a float parameter (the stored value is the shown value; Hz above 1000 reads as kHz)
+// host label and readable text for a float parameter (the stored value is the shown value, the host shows the label next to it)
 juce::AudioParameterFloatAttributes unitAttrs (const juce::String& unit, int decimals)
 {
     return juce::AudioParameterFloatAttributes()
         .withLabel (unit)
-        .withStringFromValueFunction ([unit, decimals] (float v, int)
+        .withStringFromValueFunction ([decimals] (float v, int)
         {
-            if (unit == "Hz" && std::abs (v) >= 1000.0f) return juce::String (v / 1000.0f, 2) + " kHz";
-            return juce::String (v, decimals) + (unit.isEmpty() ? juce::String() : " " + unit);
+            return juce::String (v, decimals);                       // the number only: the host adds the label (unit) itself
         })
-        .withValueFromStringFunction ([unit] (const juce::String& s)
+        .withValueFromStringFunction ([] (const juce::String& s)
         {
-            const float v = s.retainCharacters ("0123456789.-+").getFloatValue();
-            return (unit == "Hz" && s.containsIgnoreCase ("k")) ? v * 1000.0f : v;
+            return s.retainCharacters ("0123456789.-+").getFloatValue();
         });
 }
 

@@ -34,13 +34,52 @@ std::vector<vibr::PresetManager::Factory> ms1FactoryPresets()
 }
 } // namespace
 
+namespace
+{
+// host label and readable text for a float parameter (Hz above 1000 reads as kHz)
+juce::AudioParameterFloatAttributes unitAttrs (const juce::String& unit, int decimals)
+{
+    return juce::AudioParameterFloatAttributes()
+        .withLabel (unit)
+        .withStringFromValueFunction ([decimals] (float v, int)
+        {
+            return juce::String (v, decimals);                       // the number only: the host adds the label (unit) itself
+        })
+        .withValueFromStringFunction ([] (const juce::String& s)
+        {
+            return s.retainCharacters ("0123456789.-+").getFloatValue();
+        });
+}
+
+// unit of a parameter id: eq1Freq, mb2Attack, xover1 ...
+juce::String unitFor (const juce::String& id)
+{
+    static const char* const dB[] = { "inGain", "limGain", "limCeiling", "outGain", "busThresh", "busMakeup", "mbKnee", "imgBalance", "colourTilt", "colourOut" };
+    for (auto* k : dB) if (id == k) return "dB";
+    if (id.endsWith ("Gain") || id.endsWith ("DynThr") || id.endsWith ("Thresh") || id.endsWith ("Make")) return "dB";
+    if (id.endsWith ("Freq") || id.startsWith ("xover") || id == "imgX1" || id == "imgX2" || id == "monoBelow" || id == "mbScHz") return "Hz";
+    if (id == "limRelease" || id == "limLook" || id.endsWith ("DynAtk") || id.endsWith ("DynRel") || id.endsWith ("Attack") || id.endsWith ("Release")) return "ms";
+    if (id.endsWith ("DynRatio") || id.endsWith ("Ratio")) return ":1";
+    if (id == "limTarget") return "LUFS";
+    if (id == "limLink" || id == "busMix" || id == "mbMix" || id == "mbRms" || id.startsWith ("width") || id == "colourDrive" || id == "colourMix") return "%";
+    return {};
+}
+int decimalsFor (const juce::String& id, const juce::String& unit)
+{
+    if (unit == "Hz" || unit == "%") return 0;
+    if (unit == "ms") return id.endsWith ("Attack") || id.endsWith ("Atk") || id == "limLook" ? 1 : 0;
+    return unit.isEmpty() ? 2 : 1;
+}
+juce::AudioParameterFloatAttributes attrsFor (const juce::String& id) { const auto u = unitFor (id); return unitAttrs (u, decimalsFor (id, u)); }
+} // namespace
+
 juce::AudioProcessorValueTreeState::ParameterLayout MS1AudioProcessor::createLayout()
 {
     using namespace juce;
     AudioProcessorValueTreeState::ParameterLayout layout;
     const auto flt = [&layout] (const char* id, const char* name, float lo, float hi, float step, float def)
     {
-        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id, 1 }, name, NormalisableRange<float> (lo, hi, step), def));
+        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id, 1 }, name, NormalisableRange<float> (lo, hi, step), def, attrsFor (id)));
     };
     layout.add (std::make_unique<AudioParameterBool> (ParameterID { "power", 1 }, "Power", true));
     layout.add (vibr::makeBypassParam());
@@ -50,7 +89,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout MS1AudioProcessor::createLay
     {
         NormalisableRange<float> r (10.0f, 1000.0f, 1.0f);
         r.setSkewForCentre (100.0f);
-        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "limRelease", 1 }, "Limiter Release", r, 100.0f));
+        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "limRelease", 1 }, "Limiter Release", r, 100.0f, attrsFor ("limRelease")));
     }
     flt ("limLook", "Limiter Lookahead", 0.5f, 5.0f, 0.1f, 2.0f);
     layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "limChar", 1 }, "Limiter Character", StringArray { "Transparent", "Punchy", "Loud" }, 0));
@@ -83,19 +122,19 @@ juce::AudioProcessorValueTreeState::ParameterLayout MS1AudioProcessor::createLay
         const bool shelf = n == 1 || n == ms1::kEqBands;
         layout.add (std::make_unique<AudioParameterBool> (ParameterID { id + "On", 1 }, nm + "On", true));
         NormalisableRange<float> fr (20.0f, 20000.0f, 1.0f); fr.setSkewForCentre (1000.0f);
-        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id + "Freq", 1 }, nm + "Frequency", fr, defFreq[n - 1]));
-        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id + "Gain", 1 }, nm + "Gain", NormalisableRange<float> (-18.0f, 18.0f, 0.1f), 0.0f));
+        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id + "Freq", 1 }, nm + "Frequency", fr, defFreq[n - 1], attrsFor (id + "Freq")));
+        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id + "Gain", 1 }, nm + "Gain", NormalisableRange<float> (-18.0f, 18.0f, 0.1f), 0.0f, attrsFor (id + "Gain")));
         NormalisableRange<float> qr (0.2f, 10.0f, 0.01f); qr.setSkewForCentre (1.0f);
-        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id + "Q", 1 }, nm + "Q", qr, shelf ? 0.71f : 1.0f));
+        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id + "Q", 1 }, nm + "Q", qr, shelf ? 0.71f : 1.0f, attrsFor (id + "Q")));
         layout.add (std::make_unique<AudioParameterChoice> (ParameterID { id + "Mode", 1 }, nm + "Mode", StringArray { "Stereo", "Left", "Right", "Mid", "Side" }, 0));
         // dynamic EQ: the band's gain follows the level in the band
         NormalisableRange<float> ar (1.0f, 100.0f, 0.1f), rr (10.0f, 1000.0f, 1.0f), dr (1.0f, 10.0f, 0.1f);
         ar.setSkewForCentre (10.0f); rr.setSkewForCentre (100.0f); dr.setSkewForCentre (3.0f);
         layout.add (std::make_unique<AudioParameterBool> (ParameterID { id + "Dyn", 1 }, nm + "Dynamic", false));
-        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id + "DynThr", 1 }, nm + "Dynamic Threshold", NormalisableRange<float> (-60.0f, 0.0f, 0.1f), -30.0f));
-        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id + "DynRatio", 1 }, nm + "Dynamic Ratio", dr, 2.0f));
-        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id + "DynAtk", 1 }, nm + "Dynamic Attack", ar, 10.0f));
-        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id + "DynRel", 1 }, nm + "Dynamic Release", rr, 100.0f));
+        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id + "DynThr", 1 }, nm + "Dynamic Threshold", NormalisableRange<float> (-60.0f, 0.0f, 0.1f), -30.0f, attrsFor (id + "DynThr")));
+        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id + "DynRatio", 1 }, nm + "Dynamic Ratio", dr, 2.0f, attrsFor (id + "DynRatio")));
+        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id + "DynAtk", 1 }, nm + "Dynamic Attack", ar, 10.0f, attrsFor (id + "DynAtk")));
+        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id + "DynRel", 1 }, nm + "Dynamic Release", rr, 100.0f, attrsFor (id + "DynRel")));
         layout.add (std::make_unique<AudioParameterBool> (ParameterID { id + "DynBelow", 1 }, nm + "Dynamic Below Threshold", false));
     }
 
@@ -119,25 +158,25 @@ juce::AudioProcessorValueTreeState::ParameterLayout MS1AudioProcessor::createLay
     {
         static const float dx[3] = { 120.0f, 1200.0f, 6000.0f };
         for (int k = 1; k <= 3; ++k)
-            layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "xover" + String (k), 1 }, "Crossover " + String (k), skewed (40.0f, 12000.0f, 1.0f, 800.0f), dx[k - 1]));
+            layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "xover" + String (k), 1 }, "Crossover " + String (k), skewed (40.0f, 12000.0f, 1.0f, 800.0f), dx[k - 1], attrsFor ("xover" + String (k))));
         for (int n = 1; n <= 4; ++n)
         {
             const String id = "mb" + String (n), nm = "Band " + String (n) + " ";
             layout.add (std::make_unique<AudioParameterBool> (ParameterID { id + "On", 1 }, nm + "On", true));
             layout.add (std::make_unique<AudioParameterBool> (ParameterID { id + "Solo", 1 }, nm + "Solo", false));
             layout.add (std::make_unique<AudioParameterBool> (ParameterID { id + "Auto", 1 }, nm + "Auto Release", false));
-            layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id + "Thresh", 1 }, nm + "Threshold", NormalisableRange<float> (-60.0f, 0.0f, 0.1f), -18.0f));
-            layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id + "Ratio", 1 }, nm + "Ratio", skewed (1.0f, 20.0f, 0.1f, 4.0f), 2.0f));
-            layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id + "Attack", 1 }, nm + "Attack", skewed (0.1f, 200.0f, 0.1f, 10.0f), 10.0f));
-            layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id + "Release", 1 }, nm + "Release", skewed (10.0f, 2000.0f, 1.0f, 200.0f), 200.0f));
-            layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id + "Make", 1 }, nm + "Make-up", NormalisableRange<float> (-12.0f, 12.0f, 0.1f), 0.0f));
+            layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id + "Thresh", 1 }, nm + "Threshold", NormalisableRange<float> (-60.0f, 0.0f, 0.1f), -18.0f, attrsFor (id + "Thresh")));
+            layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id + "Ratio", 1 }, nm + "Ratio", skewed (1.0f, 20.0f, 0.1f, 4.0f), 2.0f, attrsFor (id + "Ratio")));
+            layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id + "Attack", 1 }, nm + "Attack", skewed (0.1f, 200.0f, 0.1f, 10.0f), 10.0f, attrsFor (id + "Attack")));
+            layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id + "Release", 1 }, nm + "Release", skewed (10.0f, 2000.0f, 1.0f, 200.0f), 200.0f, attrsFor (id + "Release")));
+            layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id + "Make", 1 }, nm + "Make-up", NormalisableRange<float> (-12.0f, 12.0f, 0.1f), 0.0f, attrsFor (id + "Make")));
         }
     }
 
     // stereo imager: 3 bands
     layout.add (std::make_unique<AudioParameterBool> (ParameterID { "imgOn", 1 }, "Imager On", false));
-    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "imgX1", 1 }, "Imager Crossover 1", skewed (40.0f, 1000.0f, 1.0f, 200.0f), 200.0f));
-    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "imgX2", 1 }, "Imager Crossover 2", skewed (1000.0f, 12000.0f, 1.0f, 4000.0f), 4000.0f));
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "imgX1", 1 }, "Imager Crossover 1", skewed (40.0f, 1000.0f, 1.0f, 200.0f), 200.0f, attrsFor ("imgX1")));
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "imgX2", 1 }, "Imager Crossover 2", skewed (1000.0f, 12000.0f, 1.0f, 4000.0f), 4000.0f, attrsFor ("imgX2")));
     for (int k = 1; k <= 3; ++k) flt (("width" + String (k)).toRawUTF8(), ("Imager Width " + String (k)).toRawUTF8(), 0.0f, 200.0f, 1.0f, 100.0f);
     flt ("monoBelow", "Mono Below (0 = off)", 0.0f, 250.0f, 1.0f, 0.0f);
     layout.add (std::make_unique<AudioParameterBool> (ParameterID { "imgSafe", 1 }, "Imager Auto Safe Width", false));
