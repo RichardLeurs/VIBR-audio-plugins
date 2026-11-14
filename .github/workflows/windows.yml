@@ -1,7 +1,7 @@
 name: Windows build
 
 # Builds all VIBR plugins (VST3 + Standalone) for 64-bit Windows with ./build.sh --arch win64, using the groups in plugins.conf,
-# and attaches the zips (<group>-<format>-win64.zip) to the workflow run. Start it from the Actions tab, or push a tag like v1.0.
+# and attaches the zips (VIBR-<group>-<format>-win64.zip) to the workflow run. Start it from the Actions tab, or push a tag like v1.0.
 # A tag push also uploads the zips to the GitHub release of that tag (the website download links use the latest release).
 
 on:

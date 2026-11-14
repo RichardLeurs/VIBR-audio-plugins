@@ -6,7 +6,7 @@
 # VST3 / AU / Standalone bundles are collected in
 #   ~/Developer/VIBR/releases/<arch>/{new,vintage,experimental,mastering,multieffect,drumcomputer}/{VST3,AU,Standalone}     (<arch> = arm64 or x86_64; on Windows win64, without AU)
 # 
-# After each build every releases/<arch>/<group>/<format> folder is zipped to ~/Developer/VIBR/zip/<group>-<format>-<arch>.zip (e.g. new-AU-arm64.zip). The group of each plugin is set in plugins.conf. for sending to another computer.
+# After each build every releases/<arch>/<group>/<format> folder is zipped to ~/Developer/VIBR/zip/VIBR-<group>-<format>-<arch>.zip (e.g. VIBR-new-AU-arm64.zip). The group of each plugin is set in plugins.conf.
 # Windows (win64): run this script on a Windows machine in Git Bash with Visual Studio 2022 (C++ desktop workload) and CMake installed. A Mac cannot build the Windows plugins.
 #
 #   ./build.sh                    build everything for this Mac's architecture (build tree ~/Developer/VIBR)
@@ -68,7 +68,7 @@ build_arch() {
     local g f d z
     for g in new vintage experimental mastering multieffect drumcomputer; do
       for f in VST3 AU Standalone; do                # (win64 has no AU folder: it is skipped)
-        d="$OUT/releases/$a/$g/$f"; z="$OUT/zip/$g-$f-$a.zip"
+        d="$OUT/releases/$a/$g/$f"; z="$OUT/zip/VIBR-$g-$f-$a.zip"
         [ -d "$d" ] || continue
         rm -f "$z"
         if [ "$IS_WIN" = 1 ]; then (cd "$OUT/releases/$a/$g" && cmake -E tar cf "$z" --format=zip "$f")      # the zip holds the folder VST3 / Standalone, as on the Mac
