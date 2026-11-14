@@ -2,6 +2,8 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include "MidiMap.h"
+#include "TapTempo.h"
 #include "DD1DSP.h"
 
 class DD1AudioProcessor : public juce::AudioProcessor
@@ -19,7 +21,7 @@ public:
     bool hasEditor() const override { return true; }
 
     const juce::String getName() const override { return JucePlugin_Name; }
-    bool acceptsMidi() const override { return false; }
+    bool acceptsMidi() const override { return true; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
     double getTailLengthSeconds() const override { return 12.0; }
@@ -36,6 +38,10 @@ public:
     juce::AudioProcessorParameter* getBypassParameter() const override { return bypassParam; }
 
     juce::AudioProcessorValueTreeState apvts;
+    MidiMap midiMap { apvts, { "aTime", "aRep", "aLevel", "bTime", "bRep", "bLevel", "drive", "boostLevel", "chDepth", "chLevel", "rvDecay", "rvLevel", "rLevel", "rShim", "spread", "tempo" } };   // CC -> knob, MIDI learn
+    void tapAt (double ms);                      // one tap (ms: juce::Time::getMillisecondCounterHiRes); message thread
+    vibr::TapAverager tapAvg;
+    vibr::TapTempo midiTap { [this] (double ms) { tapAt (ms); } };   // MIDI tap (note-on or CC85) and the TAP button
 
     // factory presets (Edge-style); a preset sets every control except tempo, host/tap source and bypass
     static int getNumPresets();

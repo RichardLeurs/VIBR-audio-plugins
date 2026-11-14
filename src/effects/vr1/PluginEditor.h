@@ -22,6 +22,7 @@ public:
     ~VR1AudioProcessorEditor() override;
 
     void paint (juce::Graphics&) override;
+    void paintOverChildren (juce::Graphics&) override;
     void resized() override;
     void mouseDown (const juce::MouseEvent&) override;
 
@@ -50,6 +51,7 @@ private:
     juce::ComponentBoundsConstrainer constrainer;
     juce::Image grain;
     std::array<Knob, 4> knobs;
+    MidiLearnUI midiUI { proc.midiMap };       // right-click a knob: MIDI learn
     juce::ParameterAttachment powerAtt, modeAtt, variantAtt, syncAtt;
     int lastMode = -1;
 

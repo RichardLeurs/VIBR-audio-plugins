@@ -48,6 +48,7 @@ DY1AudioProcessor::DY1AudioProcessor()
     pPower = get ("power"); pGateOn = get ("gateOn"); pGateThresh = get ("gateThresh"); pGateRelease = get ("gateRelease");
     pExpOn = get ("expOn"); pExpThresh = get ("expThresh"); pExpRatio = get ("expRatio"); pExpRelease = get ("expRelease");
     pTransOn = get ("transOn"); pAttack = get ("attack"); pSustain = get ("sustain"); pMix = get ("mix"); pLevel = get ("level");
+    midiMap.setDefault ("gateThresh", 11);
 }
 
 bool DY1AudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -63,8 +64,9 @@ void DY1AudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     dryBuf.setSize (2, juce::jmax (samplesPerBlock, 8192));
 }
 
-void DY1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
+void DY1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
+    midiMap.process (midi);
     juce::ScopedNoDenormals noDenormals;
     const int n = buffer.getNumSamples();
     if (n == 0 || buffer.getNumChannels() < 2 || n > dryBuf.getNumSamples()) return;
@@ -100,13 +102,23 @@ juce::AudioProcessorEditor* DY1AudioProcessor::createEditor() { return new DY1Au
 
 void DY1AudioProcessor::getStateInformation (juce::MemoryBlock& dest)
 {
-    if (auto xml = apvts.copyState().createXml()) copyXmlToBinary (*xml, dest);
+    auto state = apvts.copyState();
+    state.appendChild (midiMap.toTree(), nullptr);
+    if (auto xml = state.createXml())
+        copyXmlToBinary (*xml, dest);
 }
 
 void DY1AudioProcessor::setStateInformation (const void* data, int size)
 {
     if (auto xml = getXmlFromBinary (data, size))
-        if (xml->hasTagName (apvts.state.getType())) apvts.replaceState (juce::ValueTree::fromXml (*xml));
+        if (xml->hasTagName (apvts.state.getType()))
+        {
+            auto st = juce::ValueTree::fromXml (*xml);
+            midiMap.fromTree (st.getChildWithName ("MIDIMAP"));
+            st.removeChild (st.getChildWithName ("MIDIMAP"), nullptr);
+            vibr::BypassLink::normalise (st);
+            apvts.replaceState (st);
+        }
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new DY1AudioProcessor(); }

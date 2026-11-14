@@ -130,7 +130,7 @@ int main (int argc, char** argv)
                 if (auto* rp = dynamic_cast<juce::RangedAudioParameter*> (par))
                 {
                     const auto id = rp->paramID;
-                    if (id == "power" || id == "refPlay" || id == "refAB") continue;
+                    if (id == "power" || id == "bypass" || id == "refPlay" || id == "refAB") continue;
                     rp->setValueNotifyingHost (u01 (rng));
                 }
             const double fs = rates[trial % 4]; const int block = (trial % 3 == 0) ? 64 : (trial % 3 == 1) ? 512 : 2048;

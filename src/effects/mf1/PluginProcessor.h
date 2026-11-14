@@ -2,6 +2,7 @@
 #pragma once
 
 #include "BypassLink.h"
+#include "MidiMap.h"
 
 #include <JuceHeader.h>
 #include "MotionEngine.h"
@@ -23,7 +24,7 @@ public:
     bool hasEditor() const override { return true; }
 
     const juce::String getName() const override { return "MF-1"; }
-    bool acceptsMidi() const override { return false; }
+    bool acceptsMidi() const override { return true; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
     double getTailLengthSeconds() const override { return 0.5; }
@@ -41,6 +42,7 @@ public:
     juce::AudioProcessorValueTreeState apvts;
 
     vibr::BypassLink bypassLink { apvts };                // host bypass <-> OFF / ON switch
+    MidiMap midiMap { apvts, { "cutoff", "res", "depth", "m1", "m2", "mix", "level" } };   // CC -> knob, MIDI learn
     std::atomic<int> currentStep { 0 };            // the step the sequencer plays now (for the editor)
     std::atomic<float> modulation { 0.0f };        // the movement, -1 .. 1 (for the editor)
 

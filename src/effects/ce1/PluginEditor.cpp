@@ -4,9 +4,9 @@
 
 namespace
 {
-// Positions are in the coordinates of the rendered background (2200 x 766, see make_background.py);
+// Positions are in the coordinates of the rendered background (2200 x 890, see make_background.py);
 // the editor shows it at 1100 x 383 and paint() scales them with S.
-constexpr int kW = 1100, kH = 383;
+constexpr int kW = 1100, kH = 445;
 constexpr float S = (float) kW / 2200.0f;
 
 juce::Point<float> at (float x, float y) { return { x * S, y * S }; }
@@ -19,6 +19,12 @@ const juce::Point<float> kLever { 160.0f, 438.0f };                             
 const juce::Point<float> kPeakLed { 160.0f, 548.0f };
 const juce::Point<float> kEffectButton { 1980.0f, 458.0f };                           // chorus / vibrato
 const juce::Point<float> kPowerSwitch { 2125.0f, 87.0f };                             // power slide switch (ball left = off)
+
+// Tempo sync (vibrato rate only): a SYNC button in the VIBRATO panel under the RATE knob, below a divider line drawn in the background.
+// While sync is on the RATE knob selects the note division (it is attached to "division") and the division is shown next to the button.
+const auto kSyncPill     = juce::Rectangle<float> (116.0f, 46.0f).withCentre ({ 1548.0f, 698.0f });
+const auto kDivisionText = juce::Rectangle<float> (130.0f, 46.0f).withCentre ({ 1677.0f, 698.0f });
+const juce::Colour kBody (0xff20b6a5), kPanel (0xff18191c);
 
 juce::Point<float> polar (juce::Point<float> c, float r, float a)
 {
@@ -96,7 +102,9 @@ void CE1LookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int w, i
 
 //==============================================================================
 CE1AudioProcessorEditor::CE1AudioProcessorEditor (CE1AudioProcessor& p)
-    : AudioProcessorEditor (&p), proc (p)
+    : AudioProcessorEditor (&p), proc (p),
+      syncAtt (*p.apvts.getParameter ("sync"), [this] (float v) { syncOn = v > 0.5f; syncChanged(); }, nullptr),
+      divisionAtt (*p.apvts.getParameter ("division"), [this] (float v) { division = (int) std::lround (v); repaint(); }, nullptr)
 {
     setLookAndFeel (&laf);
 
@@ -106,9 +114,13 @@ CE1AudioProcessorEditor::CE1AudioProcessorEditor (CE1AudioProcessor& p)
     addKnob (chorus, "chorusIntensity");
     addKnob (depth,  "vibratoDepth");
     addKnob (rate,   "vibratoRate");
+    midiUI.add (level.slider, "level");  midiUI.add (chorus.slider, "chorusIntensity");
+    midiUI.add (depth.slider, "vibratoDepth");  midiUI.add (rate.slider, "vibratoRate");
     addSwitch (inputSwitch,  "inputHigh");
     addSwitch (effectSwitch, "vibrato");
     addSwitch (powerSwitch,  "power");
+    syncAtt.sendInitialUpdate();
+    divisionAtt.sendInitialUpdate();
 
     setSize (kW, kH);
     startTimerHz (30);
@@ -152,8 +164,30 @@ void CE1AudioProcessorEditor::resized()
     effectSwitch.button.setBounds (sq (kEffectButton, 110.0f, 150.0f));
 }
 
+void CE1AudioProcessorEditor::syncChanged()
+{
+    // the RATE knob is the vibrato rate, or the note division while sync is on (the attachment sets the slider range from the parameter)
+    rate.attachment.reset();
+    divisionKnobAtt.reset();
+    if (syncOn) divisionKnobAtt = std::make_unique<juce::SliderParameterAttachment> (*proc.apvts.getParameter ("division"), rate.slider, nullptr);
+    else        rate.attachment = std::make_unique<juce::SliderParameterAttachment> (*proc.apvts.getParameter ("vibratoRate"), rate.slider, nullptr);
+    repaint();
+}
+
+void CE1AudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
+{
+    if (kSyncPill.expanded (4.0f).transformedBy (juce::AffineTransform::scale (S)).contains (e.position))
+        syncAtt.setValueAsCompleteGesture (syncOn ? 0.0f : 1.0f);
+}
+
+void CE1AudioProcessorEditor::paintOverChildren (juce::Graphics& g)
+{
+    midiUI.paintMarks (g, kBody);
+}
+
 void CE1AudioProcessorEditor::timerCallback()
 {
+    if (midiUI.needsRepaint()) { midiUI.tick(); repaint(); }
     if (proc.inputPeak.exchange (0.0f) > 0.9f) peakHold = 8;
     const bool lit = peakHold > 0;
     if (peakHold > 0) --peakHold;
@@ -193,6 +227,25 @@ void CE1AudioProcessorEditor::paint (juce::Graphics& g)
         g.setGradientFill (juce::ColourGradient (juce::Colour (0xfffafbfd), ball.x - 6.0f, ball.y - 8.0f,
                                                  juce::Colour (0xff6b6f7a), ball.x + 9.0f, ball.y + 11.0f, true));
         g.fillEllipse (juce::Rectangle<float> (28.0f, 28.0f).withCentre (ball));
+    }
+
+    // SYNC: a flat rounded button, dark with a body-colour border when off, filled body colour when on
+    {
+        const float rad = kSyncPill.getHeight() * 0.5f;
+        g.setColour (syncOn ? kBody : kPanel.darker (0.4f));
+        g.fillRoundedRectangle (kSyncPill, rad);
+        g.setColour (kBody);
+        g.drawRoundedRectangle (kSyncPill.reduced (1.0f), rad, 2.0f);
+        g.setFont (juce::Font (juce::FontOptions ("Avenir Next", 24.0f, juce::Font::bold)));
+        g.setColour (syncOn ? juce::Colours::white : kBody);
+        g.drawText ("SYNC", kSyncPill, juce::Justification::centred, false);
+
+        if (syncOn)
+        {
+            g.setColour (juce::Colours::white);
+            g.setFont (juce::Font (juce::FontOptions ("Avenir Next", 34.0f, juce::Font::bold)));
+            g.drawText (vibr::sync::divisionNames()[juce::jlimit (0, vibr::sync::kNumDivisions - 1, division)], kDivisionText, juce::Justification::centredLeft, false);
+        }
     }
 
     // power slide switch: chrome ball left = off, right = on

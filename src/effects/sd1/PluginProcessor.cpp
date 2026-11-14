@@ -30,7 +30,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout SDD1000AudioProcessor::creat
     knob ("effect",        "Effect",               5.0f);
     l.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "bypass", 1 }, "Bypass", false));
     l.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "power", 1 },  "Power",  true));
-    l.add (vibr::makeBypassParam());
+    // tempo sync (added later, appended so existing ids / order stay put): off = the TIME / FACTOR knobs work as before;
+    // on = delay time = one `division` at the host tempo (vibr::sync::ms), clamped to the 3 .. 2048 ms range of the unit
+    l.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "sync", 1 }, "Sync", false));
+    l.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "division", 1 }, "Division",
+                                                         vibr::sync::divisionNames(), vibr::sync::divisionNames().indexOf ("1/8")));
     return l;
 }
 
@@ -51,6 +55,28 @@ SDD1000AudioProcessor::SDD1000AudioProcessor()
     pEffect   = apvts.getRawParameterValue ("effect");
     pBypass   = apvts.getRawParameterValue ("bypass");
     pPower    = apvts.getRawParameterValue ("power");
+    pSync     = apvts.getRawParameterValue ("sync");
+    pDivision = apvts.getRawParameterValue ("division");
+
+    midiMap.setDefault ("modIntensity", 1);           // mod wheel
+    midiMap.setDefault ("delayTime", 11);             // expression pedal
+    midiMap.setSyncAlias ("delayTime", "sync", "division");
+    midiMap.enableTap (85);                          // MIDI tap tempo: any note-on or CC85
+}
+
+void SDD1000AudioProcessor::tapAt (double ms)
+{
+    double iv = 0.0;
+    if (! tapAvg.add (ms, iv)) return;
+    // the tapped beat sets the delay time: TIME knob x FACTOR (see processBlock); the knob is found by bisection (TIME is monotonic)
+    const float factorGain = 0.25f * std::pow (4.0f, juce::jlimit (0.0f, 1.0f, apvts.getRawParameterValue ("factor")->load() / 10.0f));
+    double t = iv;
+    while (t / factorGain > 2048.0) t *= 0.5;
+    const float target = (float) t / factorGain;
+    float lo = 0.0f, hi = 8.0f;
+    for (int i = 0; i < 24; ++i) { const float mid = 0.5f * (lo + hi); (sdd1000::timeKnobToMs (mid) < target ? lo : hi) = mid; }
+    if (auto* p = apvts.getParameter ("sync")) if (p->getValue() > 0.5f) { p->beginChangeGesture(); p->setValueNotifyingHost (0.0f); p->endChangeGesture(); }
+    if (auto* p = apvts.getParameter ("delayTime")) { p->beginChangeGesture(); p->setValueNotifyingHost (p->convertTo0to1 (0.5f * (lo + hi))); p->endChangeGesture(); }
 }
 
 bool SDD1000AudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -77,18 +103,24 @@ void SDD1000AudioProcessor::prepareToPlay (double sampleRate, int)
 }
 
 //==============================================================================
-void SDD1000AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
+void SDD1000AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
+    midiMap.process (midi);
+    if (midiMap.consumeTap()) midiTap.hit();
     juce::ScopedNoDenormals noDenormals;
     const int numCh = juce::jmin (2, buffer.getNumChannels());
     const int numSamples = buffer.getNumSamples();
     for (int c = numCh; c < buffer.getNumChannels(); ++c)
         buffer.clear (c, 0, numSamples);
 
-    const float timeMs = sdd1000::timeKnobToMs (*pTime) * 0.25f * std::pow (4.0f, knob01 (*pFactor));   // Factor x0.25 .. x1
+    // TIME: 16 .. 2048 ms (piecewise geometric, see timeKnobToMs) x FACTOR 0..10 -> x0.25 .. x1 (exponential).
+    // SYNC on: one division at the host tempo (read once per block, 120 bpm without a host) replaces TIME x FACTOR.
+    const float freeMs = sdd1000::timeKnobToMs (*pTime) * 0.25f * std::pow (4.0f, knob01 (*pFactor));
+    const float timeMs = *pSync > 0.5f ? (float) vibr::sync::ms (vibr::sync::hostBpm (*this, 120.0), (int) std::lround (pDivision->load()))
+                                       : freeMs;
     const float fbKnob = (*pFeedback - 5.0f) / 5.0f;                                                    // -1 .. +1
 
-    sDelayMs.setTargetValue (juce::jlimit (3.0f, 2048.0f, timeMs));
+    sDelayMs.setTargetValue (juce::jlimit (3.0f, 2048.0f, timeMs));            // same clamp + 100 ms glide for both paths
     sFeedback.setTargetValue (fbKnob * 1.02f);                    // >1 near the ends self-oscillates (bounded by tanh)
     sInGain.setTargetValue (*pLevel / 5.0f);
     sDirect.setTargetValue (std::pow (knob01 (*pDirect), 1.6f) * 1.1f);
@@ -147,7 +179,9 @@ juce::AudioProcessorEditor* SDD1000AudioProcessor::createEditor()
 
 void SDD1000AudioProcessor::getStateInformation (juce::MemoryBlock& dest)
 {
-    if (auto xml = apvts.copyState().createXml())
+    auto state = apvts.copyState();
+    state.appendChild (midiMap.toTree(), nullptr);
+    if (auto xml = state.createXml())
         copyXmlToBinary (*xml, dest);
 }
 
@@ -155,7 +189,12 @@ void SDD1000AudioProcessor::setStateInformation (const void* data, int size)
 {
     if (auto xml = getXmlFromBinary (data, size))
         if (xml->hasTagName (apvts.state.getType()))
-            apvts.replaceState (juce::ValueTree::fromXml (*xml));
+        {
+            auto st = juce::ValueTree::fromXml (*xml);
+            midiMap.fromTree (st.getChildWithName ("MIDIMAP"));
+            st.removeChild (st.getChildWithName ("MIDIMAP"), nullptr);
+            apvts.replaceState (st);
+        }
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()

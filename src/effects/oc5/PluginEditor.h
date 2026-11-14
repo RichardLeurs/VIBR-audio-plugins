@@ -20,6 +20,7 @@ public:
 
     void paint (juce::Graphics&) override;
     void resized() override;
+    void paintOverChildren (juce::Graphics&) override;
     void mouseDown (const juce::MouseEvent&) override;
 
 private:
@@ -32,6 +33,7 @@ private:
     };
 
     OC5AudioProcessor& proc;
+    MidiLearnUI midiUI { proc.midiMap };       // right-click a knob: MIDI learn
     OC5LookAndFeel laf;
     juce::ComponentBoundsConstrainer constrainer;
     juce::Image background;

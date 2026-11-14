@@ -4,7 +4,7 @@
 // Flanger engine (BF-3 style): a short modulated delay with feedback, mixed with the dry signal.
 //   MANUAL  centre of the sweep (0.25 .. 5 ms)
 //   DEPTH   how far the delay sweeps round the centre (in octaves)
-//   RATE    triangle LFO speed (0.05 .. 8 Hz)
+//   RATE    triangle LFO speed (0.05 .. 8 Hz); with SYNC on, one LFO cycle per note division of the host tempo (same range)
 //   RES     feedback (resonance)
 //   MODE    0 GATE/PAN: the flange is panned between the two outputs (A / B)
 //           1 STANDARD: normal flanger, left / right LFOs 90 degrees apart
@@ -18,6 +18,13 @@ constexpr int kModeGatePan = 0, kModeStandard = 1, kModeUltra = 2;
 
 inline float centreMs (float manual01) { return 0.25f * std::pow (20.0f, manual01); }           // 0.25 .. 5 ms
 inline float rateHz (float rate01)     { return 0.05f * std::pow (160.0f, rate01); }            // 0.05 .. 8 Hz
+constexpr float kRateMinHz = 0.05f, kRateMaxHz = 8.0f;
+// inverse of rateHz (tempo sync): the knob position 0..1 that gives `hz`, clamped to the LFO range. The processor smooths this
+// value, so a tempo change glides along the same exponential curve as turning the RATE knob.
+inline float rate01ForHz (float hz)
+{
+    return std::log (juce::jlimit (kRateMinHz, kRateMaxHz, hz) / kRateMinHz) / std::log (kRateMaxHz / kRateMinHz);
+}
 inline float sweepOctaves (float depth01, int mode) { return depth01 * (mode == kModeUltra ? 3.0f : 2.0f); }
 inline float feedbackAmount (float res01, int mode) { return res01 * (mode == kModeUltra ? 0.97f : 0.85f); }
 

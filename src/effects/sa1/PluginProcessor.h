@@ -4,6 +4,7 @@
 #include "BypassLink.h"
 
 #include <JuceHeader.h>
+#include "MidiMap.h"
 #include "SaturatorEngine.h"
 
 // SA-1 Lo-Fi Saturator: boost, tube, tape and bit crusher in one chain (see SaturatorEngine.h).
@@ -23,7 +24,7 @@ public:
     bool hasEditor() const override { return true; }
 
     const juce::String getName() const override { return "SA-1"; }
-    bool acceptsMidi() const override { return false; }
+    bool acceptsMidi() const override { return true; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
     double getTailLengthSeconds() const override { return 0.0; }
@@ -39,6 +40,7 @@ public:
     void setStateInformation (const void*, int) override;
 
     juce::AudioProcessorValueTreeState apvts;
+    MidiMap midiMap { apvts, { "tubeDrive", "boostGain", "boostTone", "tubeBias", "tapeDrive", "tapeWarmth", "bits", "rate", "crushMix", "mix", "level", "boostOn", "tubeOn", "tapeOn", "crushOn" } };   // CC -> knob, MIDI learn
 
     vibr::BypassLink bypassLink { apvts };                // host bypass <-> OFF / ON switch
 

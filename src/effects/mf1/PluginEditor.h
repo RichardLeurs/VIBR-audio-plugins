@@ -23,6 +23,7 @@ public:
     ~MF1AudioProcessorEditor() override;
 
     void paint (juce::Graphics&) override;
+    void paintOverChildren (juce::Graphics&) override;
     void resized() override;
     void mouseDown (const juce::MouseEvent&) override;
     void mouseDrag (const juce::MouseEvent&) override;
@@ -54,6 +55,7 @@ private:
     juce::ComponentBoundsConstrainer constrainer;
     juce::Image grain;
     std::array<Knob, 7> knobs;
+    MidiLearnUI midiUI { proc.midiMap };       // right-click a knob: MIDI learn
     juce::ParameterAttachment powerAtt, typeAtt, sourceAtt, syncAtt;
     int lastStep = -1, dragStep = -1;
 

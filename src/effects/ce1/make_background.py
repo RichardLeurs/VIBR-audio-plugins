@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
-"""Renders the CE-1 pedal front panel (2200 x 640) used as the plugin background: teal satin body, black panels,
+"""Renders the CE-1 pedal front panel (2200 x 890) used as the plugin background: teal satin body, black panels,
 printed legends. Control positions match PluginEditor.cpp (see ../style.md). Needs numpy + Pillow.
 Usage: make_background.py out.png"""
 import math, sys
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-W, H, S = 2200, 766, 2
+W, H, S = 2200, 890, 2
 rng = np.random.default_rng(5)
 BODY = (32, 182, 165)                          # turquoise #20B6A5 (palette)
 ACC = BODY                                    # panel titles use the plugin's body colour
@@ -17,7 +17,7 @@ PANEL = (24, 25, 28)
 CHROME = [(0, (250, 250, 252)), (0.35, (190, 194, 202)), (0.7, (110, 114, 124)), (1, (60, 62, 70))]
 
 # ----- layout (shared with PluginEditor.cpp) -----
-PT, PB = 268, 628
+PT, PB = 268, 752
 P1, P2, P3, P4 = (40, PT, 560, PB), (580, PT, 1090, PB), (1110, PT, 1790, PB), (1810, PT, 2160, PB)      # side margins 40, panel gaps 20
 KY, KR = 438, 72                              # knob row, knob radius
 DIVY = 0                                      # no divider line in these panels
@@ -161,6 +161,7 @@ panel(P3, "VIBRATO", 190)
 panel(P4, "EFFECT", 170)
 # thin divider between the two vibrato knobs
 line([(1450, PT + 70), (1450, PB - 40)], INK, 1.5, 70)
+line([(1490, 642), (1750, 642)], INK, 2, 90)      # divider above the tempo SYNC row of the VIBRATO panel (the SYNC button is drawn by the editor)
 
 def led_bezel(lx, ly, lit=None):
     shadow(lx, ly, 20, 3, 6, 5, 160)

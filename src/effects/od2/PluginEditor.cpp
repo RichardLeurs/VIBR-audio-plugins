@@ -115,6 +115,7 @@ OD2AudioProcessorEditor::OD2AudioProcessorEditor (OD2AudioProcessor& p)
         k.slider.setMouseDragSensitivity (180);
         k.slider.setScrollWheelEnabled (false);
         addAndMakeVisible (k.slider);
+        midiUI.add (k.slider, spec.id);
         k.attachment = std::make_unique<juce::SliderParameterAttachment> (*proc.apvts.getParameter (spec.id), k.slider, nullptr);
     };
     add (type, kType);
@@ -138,6 +139,9 @@ OD2AudioProcessorEditor::OD2AudioProcessorEditor (OD2AudioProcessor& p)
         addAndMakeVisible (paramLedZone[i]);
         addAndMakeVisible (memLedZone[i]);
     }
+    boostTarget.onPress = [this] { auto* prm = proc.apvts.getParameter ("boostOn"); prm->beginChangeGesture(); prm->setValueNotifyingHost (prm->getValue() > 0.5f ? 0.0f : 1.0f); prm->endChangeGesture(); };
+    addAndMakeVisible (boostTarget);
+    midiUI.add (boostTarget, "boostOn");
     addAndMakeVisible (paramZone);
     addAndMakeVisible (memoryZone);
 
@@ -169,6 +173,7 @@ void OD2AudioProcessorEditor::resized()
     };
     place (type, kType); place (param, kParam); place (level, kLevel); place (drive, kDrive);
     place (low, kLow); place (middle, kMiddle); place (high, kHigh);
+    boostTarget.setBounds (juce::Rectangle<float> (110.0f * S, 60.0f * S).withCentre (kBoostSw * S).toNearestInt());
     paramZone.setBounds (juce::Rectangle<float> (140.0f * S, 80.0f * S).withCentre (kParamButton * S).toNearestInt());
     memoryZone.setBounds (juce::Rectangle<float> (140.0f * S, 80.0f * S).withCentre (kMemoryButton * S).toNearestInt());
     for (int i = 0; i < 5; ++i)
@@ -190,11 +195,16 @@ void OD2AudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
         prm->endChangeGesture();
     };
     if (juce::Rectangle<float> (110.0f * S, 70.0f * S).withCentre (kLed * S).contains (e.position)) toggle ("bypass");
-    else if (juce::Rectangle<float> (110.0f * S, 60.0f * S).withCentre (kBoostSw * S).contains (e.position)) toggle ("boostOn");
+}
+
+void OD2AudioProcessorEditor::paintOverChildren (juce::Graphics& g)
+{
+    midiUI.paintMarks (g, juce::Colour(240, 120, 53));
 }
 
 void OD2AudioProcessorEditor::timerCallback()
 {
+    if (midiUI.needsRepaint()) { midiUI.tick(); repaint(); }
     // memory: holding the button writes the slot; moving a knob after a recall goes back to MANUAL
     const auto now = juce::Time::getMillisecondCounter();
     if (memHeld && ! memWritten && now - memDownAt >= kHoldMs)

@@ -24,6 +24,7 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
     void mouseDown (const juce::MouseEvent&) override;
+    void paintOverChildren (juce::Graphics&) override;
 
 private:
     void timerCallback() override;
@@ -45,6 +46,7 @@ private:
     };
 
     PT1AudioProcessor& proc;
+    MidiLearnUI midiUI { proc.midiMap };       // right-click a knob: MIDI learn
     PT1LookAndFeel laf;
     juce::ComponentBoundsConstrainer constrainer;
     juce::Image grain;

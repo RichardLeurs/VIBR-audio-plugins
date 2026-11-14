@@ -2,6 +2,7 @@
 #pragma once
 
 #include "PluginProcessor.h"
+#include "ui/VibrUI.h"
 
 // Black knurled knob with a raised cap and a white pointer (same as the DM-1), drawn over the scales printed in the background.
 class SDD1000LookAndFeel : public juce::LookAndFeel_V4
@@ -20,10 +21,12 @@ public:
 
     void paint (juce::Graphics&) override;
     void resized() override;
+    void paintOverChildren (juce::Graphics&) override;
     void mouseDown (const juce::MouseEvent&) override;
 
 private:
     void timerCallback() override;
+    void syncChanged();                                   // TIME knob <-> division, dims FACTOR
 
     struct Knob
     {
@@ -35,7 +38,14 @@ private:
     SDD1000LookAndFeel laf;
     juce::ComponentBoundsConstrainer constrainer;
     juce::Image background;
+    MidiLearnUI midiUI { proc.midiMap };       // right-click a knob: MIDI learn
     Knob knobs[9];
+
+    // tempo sync pills in the DELAY TIME panel (code-drawn over the background)
+    bool syncOn = false;
+    int division = 4;
+    juce::ParameterAttachment syncAtt, divisionAtt;
+    std::unique_ptr<juce::SliderParameterAttachment> divisionKnobAtt;      // the TIME knob while sync is on
 
     float meterDb = -60.0f;
     int lastSegs = -1;

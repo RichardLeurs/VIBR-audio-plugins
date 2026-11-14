@@ -20,10 +20,12 @@ public:
 
     void paint (juce::Graphics&) override;
     void resized() override;
+    void paintOverChildren (juce::Graphics&) override;
     void mouseDown (const juce::MouseEvent&) override;
 
 private:
     void timerCallback() override;
+    void syncChanged();
 
     struct Knob
     {
@@ -35,8 +37,14 @@ private:
     MemoryManLookAndFeel laf;
     juce::ComponentBoundsConstrainer constrainer;
     juce::Image background;
+    MidiLearnUI midiUI { proc.midiMap };       // right-click a knob: MIDI learn
     Knob knobs[6];
     bool lastOn = true;
+    // SYNC button under the DELAY knob (drawn in code over the background)
+    juce::ParameterAttachment syncAtt, divisionAtt;
+    bool syncOn = false;
+    int division = 4;
+    std::unique_ptr<juce::SliderParameterAttachment> divisionKnobAtt;      // the DELAY knob while sync is on
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MemoryManAudioProcessorEditor)
 };

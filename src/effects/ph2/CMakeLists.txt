@@ -11,7 +11,7 @@ juce_add_plugin(PH-2
   ICON_BIG "${RL_ICON}"
   BUNDLE_ID com.richardleurs.ph2
   IS_SYNTH FALSE
-  NEEDS_MIDI_INPUT FALSE
+  NEEDS_MIDI_INPUT TRUE
   NEEDS_MIDI_OUTPUT FALSE
   IS_MIDI_EFFECT FALSE
   EDITOR_WANTS_KEYBOARD_FOCUS FALSE
@@ -43,6 +43,7 @@ target_compile_definitions(PH-2
 target_link_libraries(PH-2
   PRIVATE
     PH2Assets
+    rl_common
     juce::juce_audio_utils
     juce::juce_dsp
   PUBLIC

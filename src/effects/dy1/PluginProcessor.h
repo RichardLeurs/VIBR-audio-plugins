@@ -4,6 +4,7 @@
 #include "BypassLink.h"
 
 #include <JuceHeader.h>
+#include "MidiMap.h"
 #include "DynamicEngine.h"
 
 // DY-1 Dynamic Shaper: noise gate, expander and transient shaper in one chain (see DynamicEngine.h).
@@ -23,7 +24,7 @@ public:
     bool hasEditor() const override { return true; }
 
     const juce::String getName() const override { return "DY-1"; }
-    bool acceptsMidi() const override { return false; }
+    bool acceptsMidi() const override { return true; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
     double getTailLengthSeconds() const override { return 0.0; }
@@ -39,6 +40,7 @@ public:
     void setStateInformation (const void*, int) override;
 
     juce::AudioProcessorValueTreeState apvts;
+    MidiMap midiMap { apvts, { "gateThresh", "gateRelease", "expThresh", "expRatio", "expRelease", "attack", "sustain", "mix", "level" } };   // CC -> knob, MIDI learn
 
     vibr::BypassLink bypassLink { apvts };                // host bypass <-> OFF / ON switch
     const dy1::Engine& getEngine() const { return engine; }       // for the ACTION display of the editor

@@ -1,5 +1,7 @@
 name: macOS build
 
+# VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
+
 # Builds all VIBR plugins (VST3, AU and Standalone) for Apple Silicon (arm64) and Intel (x86_64) with ./build.sh,
 # using the groups in plugins.conf, and attaches the zips (VIBR-<group>-<format>-<arch>.zip) to the workflow run.
 # Start it from the Actions tab, or push a tag like v1.0: the zips are then also uploaded to the GitHub release of that tag.

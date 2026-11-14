@@ -59,6 +59,7 @@ DL1AudioProcessorEditor::DL1AudioProcessorEditor (DL1AudioProcessor& p)
         k.slider.onDragStart = [this] { proc.undoManager.beginNewTransaction(); };
         addAndMakeVisible (k.slider);
         k.att = std::make_unique<juce::SliderParameterAttachment> (*dynamic_cast<juce::RangedAudioParameter*> (par), k.slider, nullptr);
+        midiUI.add (k.slider, k.id);
         k.slider.onValueChange = [this] { repaint(); };
     }
     powerAtt.sendInitialUpdate();
@@ -80,6 +81,7 @@ DL1AudioProcessorEditor::~DL1AudioProcessorEditor()
 
 void DL1AudioProcessorEditor::timerCallback()
 {
+    if (midiUI.needsRepaint()) { midiUI.tick(); repaint(); }
     repaint (panelRect (2).expanded (4.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer());
     if (barState.copiedAt != 0) { repaint (juce::Rectangle<float> (0.0f, 30.0f, 900.0f, 50.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer()); if (! barState.copiedRecently()) barState.copiedAt = 0; }
 }
@@ -108,20 +110,7 @@ void DL1AudioProcessorEditor::layoutKnobs()
 void DL1AudioProcessorEditor::resized() { layoutKnobs(); }
 
 // TAP: the time between the last taps sets TIME (a pause of more than 2 s starts again)
-void DL1AudioProcessorEditor::tap()
-{
-    const auto now = juce::Time::getMillisecondCounter();
-    if (! taps.empty() && now - taps.back() > 2000u) taps.clear();
-    taps.push_back (now);
-    if (taps.size() > 4) taps.erase (taps.begin());
-    if (taps.size() >= 2)
-    {
-        const float ms = (float) (taps.back() - taps.front()) / (float) (taps.size() - 1);
-        proc.undoManager.beginNewTransaction();
-        setFloat ("time", juce::jlimit (1.0f, 2000.0f, ms));
-        if (isOn ("sync")) toggle ("sync");                                       // a tapped time is a free time
-    }
-}
+void DL1AudioProcessorEditor::tap() { proc.midiTap.tap(); }   // the same tap logic as the MIDI tap (in the processor)
 
 //==============================================================================
 // ECHOES: the input (the bar at 0 follows the level), the first repeat at TIME (drag it), and the repeats after it falling by FEEDBACK, on a time axis of 2.4 s.
@@ -213,6 +202,11 @@ void DL1AudioProcessorEditor::drawEchoes (juce::Graphics& g)
 }
 
 //==============================================================================
+void DL1AudioProcessorEditor::paintOverChildren (juce::Graphics& g)
+{
+    midiUI.paintMarks (g, kPal.body);
+}
+
 void DL1AudioProcessorEditor::paint (juce::Graphics& g)
 {
     g.addTransform (juce::AffineTransform::scale (scale()));

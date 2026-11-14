@@ -2,6 +2,7 @@
 #pragma once
 
 #include "PluginProcessor.h"
+#include "MidiTarget.h"
 #include "ui/VibrUI.h"
 
 // DV-1 window (1200 x 690), on the shared UI of src/common/ui: header (name, preset chip, A / B, undo), the CONTROLS panel with the mode tab pills on its top edge
@@ -15,6 +16,7 @@ public:
     ~DV1AudioProcessorEditor() override;
 
     void paint (juce::Graphics&) override;
+    void paintOverChildren (juce::Graphics&) override;
     void resized() override;
     void mouseDown (const juce::MouseEvent&) override;
 
@@ -50,6 +52,9 @@ private:
     juce::ComponentBoundsConstrainer constrainer;
     juce::Image grain;
     std::array<Knob, 31> knobs;
+    MidiTarget boostTarget;                    // over the BOOST button (MIDI learn target)
+    std::unique_ptr<MidiLearnUI> midiUI;       // right-click a knob: MIDI learn (rebuilt when the shown knobs change)
+    juce::uint64 midiShown = 0;
     vibr::ui::PresetBarState barState;
     juce::ParameterAttachment powerAtt;
 

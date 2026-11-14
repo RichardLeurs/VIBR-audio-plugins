@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 # VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
-"""Renders the DM-1 pedal front panel (2576 x 1018) used as the plugin background: blue satin body, black panels,
+"""Renders the DM-1 pedal front panel (2576 x 1170) used as the plugin background: blue satin body, black panels,
 printed legends. Control positions match PluginEditor.cpp. Needs numpy + Pillow.  Usage: make_background.py out.png"""
 import math, sys
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-W, H, S = 2576, 1096, 2
+W, H, S = 2576, 1170, 2
 rng = np.random.default_rng(11)
 BODY = (37, 136, 201)                          # blue #2588C9 (palette)
 ACC = BODY                                    # panel titles use the plugin's body colour
@@ -16,7 +16,7 @@ PANEL = (24, 25, 28)
 CHROME = [(0, (250, 250, 252)), (0.35, (190, 194, 202)), (0.7, (110, 114, 124)), (1, (60, 62, 70))]
 
 # ----- layout (shared with PluginEditor.cpp) -----
-PT, PB = 268, 958
+PT, PB = 268, 1032
 LP, MP, RP = (40, PT, 997, PB), (1017, PT, 1560, PB), (1580, PT, 2536, PB)      # side margins 40, panel gaps 20
 KY = 728                                      # knob row
 KR = 100                                      # knob radius
@@ -160,6 +160,9 @@ def panel(box, title, pw):
 panel(LP, "MODULATION", 300)
 panel(MP, "MODE", 170)
 panel(RP, "DELAY", 190)
+# divider above the tempo SYNC row of the DELAY panel, centred between the MIN/MAX legends (bottom ~900) and the SYNC button (top 960);
+# the SYNC button and division readout are drawn by the editor
+line([(RP[0] + 40, 930), (RP[2] - 40, 930)], INK, 2, 90)
 
 def led_bezel(lx, ly, lit=None):
     # flat (see ../../../.claude/style.md, "Flat style"): a thin dark grey ring round a flat dark well; the editor fills the lamp

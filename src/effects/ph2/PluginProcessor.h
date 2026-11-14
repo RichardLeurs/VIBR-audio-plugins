@@ -3,6 +3,7 @@
 
 #include <JuceHeader.h>
 #include "PH2DSP.h"
+#include "MidiMap.h"
 
 class PH2AudioProcessor : public juce::AudioProcessor
 {
@@ -19,7 +20,7 @@ public:
     bool hasEditor() const override { return true; }
 
     const juce::String getName() const override { return JucePlugin_Name; }
-    bool acceptsMidi() const override { return false; }
+    bool acceptsMidi() const override { return true; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
     double getTailLengthSeconds() const override { return 0.2; }
@@ -36,6 +37,7 @@ public:
     juce::AudioProcessorParameter* getBypassParameter() const override { return bypassParam; }
 
     juce::AudioProcessorValueTreeState apvts;
+    MidiMap midiMap { apvts, { "res", "depth", "rate", "mode" } };      // MIDI CC + MIDI learn
 
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
@@ -44,6 +46,9 @@ private:
 
     std::atomic<float>* pManual, *pRes, *pDepth, *pRate, *pMode;
     juce::AudioParameterBool* bypassParam = nullptr;
+    std::atomic<float>* pSync = nullptr, *pDivision = nullptr;
+    juce::SmoothedValue<float> syncMix { 0.0f };                                              // 0 = RATE knob, 1 = tempo synced
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Multiplicative> syncHzSmooth { 1.0f }; // synced LFO frequency (Hz)
 
     ph2::PhaserChannel phaser[kMaxChannels];
     juce::SmoothedValue<float> resSmooth { 0.5f }, depthSmooth { 0.5f }, rateSmooth { 0.5f }, wetSmooth { 1.0f };

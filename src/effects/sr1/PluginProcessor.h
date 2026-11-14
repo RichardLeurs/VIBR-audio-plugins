@@ -3,6 +3,8 @@
 
 #include "BypassLink.h"
 
+#include "MidiMap.h"
+
 #include <JuceHeader.h>
 #include "ResonatorEngine.h"
 
@@ -23,7 +25,7 @@ public:
     bool hasEditor() const override { return true; }
 
     const juce::String getName() const override { return "SR-1"; }
-    bool acceptsMidi() const override { return false; }
+    bool acceptsMidi() const override { return true; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
     double getTailLengthSeconds() const override { return 18.0; }
@@ -39,6 +41,7 @@ public:
     void setStateInformation (const void*, int) override;
 
     juce::AudioProcessorValueTreeState apvts;
+    MidiMap midiMap { apvts, { "strings", "decay", "damping", "tension", "motion", "fine", "mix", "level" } };   // CC -> knob, MIDI learn
 
     vibr::BypassLink bypassLink { apvts };                // host bypass <-> OFF / ON switch
     const sr1::Engine& getEngine() const { return engine; }       // the editor reads the string display from it

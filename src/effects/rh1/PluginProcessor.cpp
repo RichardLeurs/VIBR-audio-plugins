@@ -117,6 +117,9 @@ RH1AudioProcessor::RH1AudioProcessor()
     for (int s = 0; s < rh1::kSteps; ++s) pSteps[s] = apvts.getRawParameterValue (stepId (s));
     pCutoff = get ("cutoff"); pRes = get ("res"); pTremStereo = get ("tremStereo"); pTremBias = get ("tremBias"); pSlAttack = get ("slAttack"); pSlDuty = get ("slDuty"); pSlBalance = get ("slBalance");
     pMix = get ("mix"); pLevel = get ("level");
+    midiMap.setDefault ("depth", 1);
+    midiMap.setDefault ("rate", 11);
+    midiMap.setSyncAlias ("rate", "sync", "division");
 }
 
 bool RH1AudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -132,8 +135,9 @@ void RH1AudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     dryBuf.setSize (2, juce::jmax (samplesPerBlock, 8192));
 }
 
-void RH1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
+void RH1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
+    midiMap.process (midi);
     juce::ScopedNoDenormals noDenormals;
     const int n = buffer.getNumSamples();
     if (n == 0 || buffer.getNumChannels() < 2 || n > dryBuf.getNumSamples()) return;
@@ -186,13 +190,21 @@ juce::AudioProcessorEditor* RH1AudioProcessor::createEditor() { return new RH1Au
 
 void RH1AudioProcessor::getStateInformation (juce::MemoryBlock& dest)
 {
-    if (auto xml = apvts.copyState().createXml()) copyXmlToBinary (*xml, dest);
+    auto state = apvts.copyState();
+    state.appendChild (midiMap.toTree(), nullptr);
+    if (auto xml = state.createXml()) copyXmlToBinary (*xml, dest);
 }
 
 void RH1AudioProcessor::setStateInformation (const void* data, int size)
 {
     if (auto xml = getXmlFromBinary (data, size))
-        if (xml->hasTagName (apvts.state.getType())) apvts.replaceState (juce::ValueTree::fromXml (*xml));
+        if (xml->hasTagName (apvts.state.getType())) {
+            auto st = juce::ValueTree::fromXml (*xml);
+            midiMap.fromTree (st.getChildWithName ("MIDIMAP"));
+            st.removeChild (st.getChildWithName ("MIDIMAP"), nullptr);
+            vibr::BypassLink::normalise (st);
+            apvts.replaceState (st);
+        }
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new RH1AudioProcessor(); }

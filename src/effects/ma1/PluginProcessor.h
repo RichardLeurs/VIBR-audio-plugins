@@ -2,6 +2,7 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include "MidiMap.h"
 #include "MA1DSP.h"
 
 class MA1AudioProcessor : public juce::AudioProcessor
@@ -19,7 +20,7 @@ public:
     bool hasEditor() const override { return true; }
 
     const juce::String getName() const override { return JucePlugin_Name; }
-    bool acceptsMidi() const override { return false; }
+    bool acceptsMidi() const override { return true; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
     double getTailLengthSeconds() const override { return 1.0; }
@@ -42,6 +43,7 @@ public:
 
     std::atomic<float> gateOpenLamp { 0.0f }, limiterLamp { 0.0f };           // read by the editor
     juce::AudioProcessorValueTreeState apvts;
+    MidiMap midiMap { apvts, { "gain", "bass", "middle", "treble", "presence", "resonance", "sag", "master", "gateThresh", "gateRelease", "boostDrive", "boostLevel", "boostTight", "boostOn", "gateOn", "bright" } };   // CC -> knob, MIDI learn
 
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();

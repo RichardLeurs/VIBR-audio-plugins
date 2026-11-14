@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
-"""Renders the MM-1 analog delay front panel (1980 x 890) used as the plugin background: silver satin body, three black panels
+"""Renders the MM-1 analog delay front panel (1980 x 968) used as the plugin background: silver satin body, three black panels
 (MIX, ECHO, MODULATION), printed legends. Control positions match PluginEditor.cpp. Needs numpy + Pillow.
 Usage: make_background.py out.png"""
 import math, sys
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-W, H, S = 1980, 890, 2
+W, H, S = 1980, 968, 2
 rng = np.random.default_rng(15)
 BODY = (75, 145, 209)                          # steel blue #4B91D1 (palette)
 ACC = BODY                                    # panel titles use the plugin's body colour
@@ -17,7 +17,7 @@ PANEL = (24, 25, 28)
 CHROME = [(0, (250, 250, 252)), (0.35, (190, 194, 202)), (0.7, (110, 114, 124)), (1, (60, 62, 70))]
 
 # ----- layout (shared with PluginEditor.cpp); same margins and gaps as the DM-1 (see ../style.md) -----
-PT, PB = 268, 752
+PT, PB = 268, 830
 P1, P2, P3 = (40, PT, 660, PB), (680, PT, 1300, PB), (1320, PT, 1940, PB)      # side margins 40, panel gaps 20
 KY, KR = 532, 78                              # knob row and knob radius
 NAME_Y = 348                                  # knob name above the knob
@@ -200,6 +200,7 @@ def panel(box, title):
 panel(P1, "MIX")
 panel(P2, "ECHO")
 panel(P3, "MODULATION")
+line([(P2[0] + 40, 731), (P2[2] - 40, 731)], INK, 2, 90)      # divider above the tempo SYNC row of the ECHO panel (the SYNC button is drawn by the editor)
 
 # ----- power: horizontal slide switch (top right), ball left = OFF, right = ON -----
 def power_switch(rx, ry):

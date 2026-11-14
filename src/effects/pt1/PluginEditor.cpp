@@ -113,6 +113,7 @@ PT1AudioProcessorEditor::PT1AudioProcessorEditor (PT1AudioProcessor& p)
         addAndMakeVisible (s);
         k->att = std::make_unique<juce::SliderParameterAttachment> (*dynamic_cast<juce::RangedAudioParameter*> (par), s, nullptr);
         s.onValueChange = [this] { repaint(); };
+        midiUI.add (s, id);
         knobs.push_back (std::move (k));
     };
     keepIds.ensureStorageAllocated (64);
@@ -147,6 +148,11 @@ PT1AudioProcessorEditor::~PT1AudioProcessorEditor()
 {
     stopTimer();
     setLookAndFeel (nullptr);
+}
+
+void PT1AudioProcessorEditor::paintOverChildren (juce::Graphics& g)
+{
+    midiUI.paintMarks (g, kBody);
 }
 
 void PT1AudioProcessorEditor::timerCallback() { repaint(); }          // the heard and played notes

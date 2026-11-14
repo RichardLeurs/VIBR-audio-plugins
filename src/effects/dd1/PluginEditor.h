@@ -20,6 +20,7 @@ public:
     ~DD1AudioProcessorEditor() override;
 
     void paint (juce::Graphics&) override;
+    void paintOverChildren (juce::Graphics&) override;
     void resized() override;
     void mouseDown (const juce::MouseEvent&) override;
     void mouseUp (const juce::MouseEvent&) override;
@@ -43,6 +44,7 @@ private:
     };
 
     DD1AudioProcessor& proc;
+    MidiLearnUI midiUI { proc.midiMap };       // right-click a knob: MIDI learn
     DD1LookAndFeel laf;
     juce::ComponentBoundsConstrainer constrainer;
     juce::Image background[2];           // one background per tab
@@ -57,8 +59,6 @@ private:
     juce::uint32 memDownAt = 0, memFlashUntil = 0;
     bool lastHost = false, lastBlink = false;
     float lastBpm = 0.0f;
-    std::vector<double> taps;
-    double lastTap = -1000.0;
     float lastMs[2] { -1.0f, -1.0f };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DD1AudioProcessorEditor)

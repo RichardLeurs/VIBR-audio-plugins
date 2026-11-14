@@ -116,6 +116,7 @@ SP1AudioProcessorEditor::SP1AudioProcessorEditor (SP1AudioProcessor& p)
         s.setDoubleClickReturnValue (true, par->convertFrom0to1 (par->getDefaultValue()));
         addAndMakeVisible (s);
         k.att = std::make_unique<juce::SliderParameterAttachment> (*dynamic_cast<juce::RangedAudioParameter*> (par), s, nullptr);
+        midiUI.add (s, k.id);
         s.onValueChange = [this] { repaint(); };
     }
     powerAtt.sendInitialUpdate();
@@ -145,6 +146,7 @@ SP1AudioProcessorEditor::~SP1AudioProcessorEditor()
 
 void SP1AudioProcessorEditor::timerCallback()
 {
+    if (midiUI.needsRepaint()) { midiUI.tick(); repaint(); }
     if (currentMode() != lastMode) { lastMode = currentMode(); repaint(); }      // the TEXTURE name follows the mode
 }
 
@@ -166,6 +168,11 @@ void SP1AudioProcessorEditor::layoutKnobs()
 void SP1AudioProcessorEditor::resized() { layoutKnobs(); }
 
 //==============================================================================
+void SP1AudioProcessorEditor::paintOverChildren (juce::Graphics& g)
+{
+    midiUI.paintMarks (g, kBody);
+}
+
 void SP1AudioProcessorEditor::paint (juce::Graphics& g)
 {
     g.addTransform (juce::AffineTransform::scale (scale()));

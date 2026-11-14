@@ -42,6 +42,7 @@ RV1AudioProcessorEditor::RV1AudioProcessorEditor (RV1AudioProcessor& p)
         k.slider.onDragStart = [this] { proc.undoManager.beginNewTransaction(); };
         addAndMakeVisible (k.slider);
         k.att = std::make_unique<juce::SliderParameterAttachment> (*dynamic_cast<juce::RangedAudioParameter*> (par), k.slider, nullptr);
+        midiUI.add (k.slider, k.id);
         k.slider.onValueChange = [this] { repaint(); };
     }
     powerAtt.sendInitialUpdate();
@@ -63,6 +64,7 @@ RV1AudioProcessorEditor::~RV1AudioProcessorEditor()
 
 void RV1AudioProcessorEditor::timerCallback()
 {
+    if (midiUI.needsRepaint()) { midiUI.tick(); repaint(); }
     scroll += 0.05f;
     repaint (panelRect (2).expanded (4.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer());
     if (barState.copiedAt != 0) { repaint (juce::Rectangle<float> (0.0f, 30.0f, 900.0f, 50.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer()); if (! barState.copiedRecently()) barState.copiedAt = 0; }
@@ -132,6 +134,11 @@ void RV1AudioProcessorEditor::drawSlices (juce::Graphics& g)
 }
 
 //==============================================================================
+void RV1AudioProcessorEditor::paintOverChildren (juce::Graphics& g)
+{
+    midiUI.paintMarks (g, kPal.body);
+}
+
 void RV1AudioProcessorEditor::paint (juce::Graphics& g)
 {
     g.addTransform (juce::AffineTransform::scale (scale()));

@@ -15,7 +15,8 @@
 // outGain, delta, eqOn and per band n = 1 .. 8: eq<n>On, eq<n>Freq, eq<n>Gain, eq<n>Q, eq<n>Mode, busOn, busThresh, busRatio, busAttack, busRelease, busMakeup, busMix, busSc,
 // mbOn, mbMix, xover1..3, mb<n>On / Solo / Auto / Thresh / Ratio / Attack / Release / Make (n = 1 .. 4), imgOn, imgX1, imgX2, width1..3, monoBelow, imgBalance,
 // eqPhase, mbPhase, trimPolarity, trimHpf, monoCheck, limRelAuto, limFreeze, colourOn, colourChar, colourDrive, colourTilt, colourMix, colourOut, colourMode, refAB, refMatch, refPlay, refFollow. The latency (lookahead + the true-peak filter) is reported to the host and follows `limLook`.
-class MS1AudioProcessor : public juce::AudioProcessor
+class MS1AudioProcessor : public juce::AudioProcessor,
+      private juce::AsyncUpdater
 {
 public:
     MS1AudioProcessor();
@@ -38,19 +39,14 @@ public:
 
     // the factory presets are the host's programs (the preset menu in the editor stays in step through the preset name)
     int getNumPrograms() override { return juce::jmax (1, (int) presets.factory().size()); }
-    int getCurrentProgram() override
-    {
-        const auto& list = presets.factory();
-        for (int i = 0; i < (int) list.size(); ++i)
-            if (list[(size_t) i].name == presets.name()) return currentProgram = i;
-        return currentProgram;
-    }
+    int getCurrentProgram() override { return currentProgram.load(); }
     void setCurrentProgram (int index) override
     {
-        if (index < 0 || index >= (int) presets.factory().size()) return;
-        currentProgram = index;
+        index = juce::jlimit (0, getNumPrograms() - 1, index);
+        if (index == currentProgram.load()) return;   // a host re-sending the current program must not reset the user's edits
+        currentProgram.store (index);
         if (juce::MessageManager::getInstance()->isThisTheMessageThread()) presets.applyFactory (index);
-        else juce::MessageManager::callAsync ([weak = juce::WeakReference<MS1AudioProcessor> (this), index] { if (weak != nullptr) weak->presets.applyFactory (index); });
+        else { pendingProgram.store (index); triggerAsyncUpdate(); }
     }
     const juce::String getProgramName (int index) override
     {
@@ -85,8 +81,8 @@ public:
 
     // presets, A / B and undo (src/common/ui/Presets.h; the editor shows them in the header)
     vibr::PresetManager presets;
-    int currentProgram = 0;
-    JUCE_DECLARE_WEAK_REFERENCEABLE (MS1AudioProcessor)
+    std::atomic<int> currentProgram { 0 };
+    std::atomic<int> pendingProgram { -1 };
     float eqDynAmount (int band) const { return eq.dynAmount[band].load (std::memory_order_relaxed); }
     float busGrDb() const { return bus.grDb.load (std::memory_order_relaxed); }     // the bus compressor's gain reduction now (dB, <= 0)
     // match EQ: the input's long-term spectrum is learned while audio plays; the button fits the 8 EQ bands to the reference (see matchEqFit)
@@ -96,6 +92,7 @@ public:
     void requestReset() { resetFlag.store (true); }                 // the RESET button: integrated loudness, range and the true-peak hold start again
 
 private:
+    void handleAsyncUpdate() override { const int i = pendingProgram.exchange (-1); if (i >= 0) presets.applyFactory (i); }
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
     void processChunk (float* l, float* r, int n);          // a part of a block that fits the scratch buffers
 

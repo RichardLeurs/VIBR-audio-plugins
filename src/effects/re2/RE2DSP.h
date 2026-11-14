@@ -4,6 +4,7 @@
 #include <juce_dsp/juce_dsp.h>
 #include <vector>
 #include <cmath>
+#include "TempoSync.h"
 
 namespace re2
 {
@@ -28,6 +29,39 @@ inline constexpr ModeInfo kModes[12] = {
 };
 
 //==============================================================================
+// Tape length. The loop holds at least kTapeSeconds at any sample rate (rounded up to a power of two).
+// The longest head may sit at most kMaxHeadSeconds behind the record head: the 50 ms margin covers the wow / flutter
+// excursion (< 1 % of the delay) and the four Hermite taps, so a head never reads past the oldest sample.
+inline constexpr double kTapeSeconds = 1.2;
+inline constexpr double kMaxHeadSeconds = 1.15;
+
+// number of the furthest playback head in a mode (1..3); 1 for reverb only, so the spacing stays as chosen
+inline int longestHead (int headMask)
+{
+    return (headMask & 0b100) != 0 ? 3 : ((headMask & 0b010) != 0 ? 2 : 1);
+}
+
+// SYNC: head spacing (seconds between the heads) from the host tempo. The division is the spacing between heads, so head 2
+// repeats at 2 x division and head 3 at 3 x division. Clamp: when the longest active head would sit further back than
+// kMaxHeadSeconds, the spacing is shortened to the largest division (of all of vibr::sync's divisions) whose longest head still
+// fits; if none fits (cannot happen within 20-400 bpm: 1/32 at 20 bpm x 3 = 1.125 s) the spacing is the limit itself.
+inline double syncedHeadSpacing (double bpm, int division, int headMask)
+{
+    const double limit = kMaxHeadSeconds / (double) longestHead (headMask);
+    const double wanted = vibr::sync::seconds (bpm, division);
+    if (wanted <= limit)
+        return wanted;
+    double best = 0.0;
+    for (int d = 0; d < vibr::sync::kNumDivisions; ++d)
+    {
+        const double s = vibr::sync::seconds (bpm, d);
+        if (s <= limit && s > best)
+            best = s;
+    }
+    return best > 0.0 ? best : limit;
+}
+
+//==============================================================================
 // Circular delay line with 4-point Hermite interpolation (fractional delay).
 class TapeDelayLine
 {
@@ -35,7 +69,7 @@ public:
     void prepare (double sampleRate)
     {
         int n = 1;
-        while (n < (int) (sampleRate * 1.2)) n <<= 1;
+        while (n < (int) std::ceil (sampleRate * kTapeSeconds)) n <<= 1;
         buffer.assign ((size_t) n, 0.0f);
         mask = n - 1;
         writePos = 0;

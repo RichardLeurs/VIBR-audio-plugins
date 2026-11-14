@@ -4,6 +4,7 @@
 #include "BypassLink.h"
 
 #include <JuceHeader.h>
+#include "MidiMap.h"
 #include "DynamicsEngine.h"
 #include "ui/Presets.h"
 
@@ -11,11 +12,12 @@
 // Host parameters: power, mode, variant, gateOn, gateThresh, gateRelease, expOn, expThresh, expRatio, expRelease, transOn, attack, sustain (SHAPER),
 // compSustain, compAttack, compThresh, compRatio, compAttackMs, compRelease, compMakeup, compMix (COMPRESSOR), tone, limThresh, limRelease, limCeiling (LIMITER),
 // scHp, link, mix, level, autoLevel. The latency is constant (the lookahead of the true-peak limiter) and reported to the host.
-class DN1AudioProcessor : public juce::AudioProcessor
+class DN1AudioProcessor : public juce::AudioProcessor,
+      private juce::AsyncUpdater
 {
 public:
     DN1AudioProcessor();
-    ~DN1AudioProcessor() override = default;
+    ~DN1AudioProcessor() override { cancelPendingUpdate(); }
 
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
     void releaseResources() override {}
@@ -26,7 +28,7 @@ public:
     bool hasEditor() const override { return true; }
 
     const juce::String getName() const override { return "DN-1"; }
-    bool acceptsMidi() const override { return false; }
+    bool acceptsMidi() const override { return true; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
     double getTailLengthSeconds() const override { return 0.0; }
@@ -34,19 +36,14 @@ public:
 
     // the factory presets are the host's programs (the preset menu in the editor stays in step through the preset name)
     int getNumPrograms() override { return juce::jmax (1, (int) presets.factory().size()); }
-    int getCurrentProgram() override
-    {
-        const auto& list = presets.factory();
-        for (int i = 0; i < (int) list.size(); ++i)
-            if (list[(size_t) i].name == presets.name()) return currentProgram = i;
-        return currentProgram;
-    }
+    int getCurrentProgram() override { return currentProgram.load(); }
     void setCurrentProgram (int index) override
     {
-        if (index < 0 || index >= (int) presets.factory().size()) return;
-        currentProgram = index;
+        index = juce::jlimit (0, getNumPrograms() - 1, index);
+        if (index == currentProgram.load()) return;   // a host re-sending the current program must not reset the user's edits
+        currentProgram.store (index);
         if (juce::MessageManager::getInstance()->isThisTheMessageThread()) presets.applyFactory (index);
-        else juce::MessageManager::callAsync ([weak = juce::WeakReference<DN1AudioProcessor> (this), index] { if (weak != nullptr) weak->presets.applyFactory (index); });
+        else { pendingProgram.store (index); triggerAsyncUpdate(); }
     }
     const juce::String getProgramName (int index) override
     {
@@ -60,13 +57,15 @@ public:
 
     juce::UndoManager undoManager { 30000, 100 };
     juce::AudioProcessorValueTreeState apvts;
+    MidiMap midiMap { apvts, { "gateThresh", "expThresh", "compThresh", "limThresh", "attack", "sustain", "compSustain", "compRatio", "compMakeup", "compMix", "tone", "limCeiling", "scHp", "link", "mix", "level" } };   // CC -> knob, MIDI learn
     vibr::BypassLink bypassLink { apvts };                // host bypass <-> OFF / ON switch
     vibr::PresetManager presets;
-    int currentProgram = 0;
-    JUCE_DECLARE_WEAK_REFERENCEABLE (DN1AudioProcessor)
+    std::atomic<int> currentProgram { 0 };
+    std::atomic<int> pendingProgram { -1 };
     const dn1::Engine& getEngine() const { return engine; }
 
 private:
+    void handleAsyncUpdate() override { const int i = pendingProgram.exchange (-1); if (i >= 0) presets.applyFactory (i); }
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
 
     dn1::Engine engine;

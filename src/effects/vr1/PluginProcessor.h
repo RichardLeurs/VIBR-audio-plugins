@@ -2,6 +2,7 @@
 #pragma once
 
 #include "BypassLink.h"
+#include "MidiMap.h"
 
 #include <JuceHeader.h>
 #include "VibeEngine.h"
@@ -23,7 +24,7 @@ public:
     bool hasEditor() const override { return true; }
 
     const juce::String getName() const override { return "VR-1"; }
-    bool acceptsMidi() const override { return false; }
+    bool acceptsMidi() const override { return true; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
     double getTailLengthSeconds() const override { return 0.1; }
@@ -41,6 +42,7 @@ public:
     juce::AudioProcessorValueTreeState apvts;
 
     vibr::BypassLink bypassLink { apvts };                // host bypass <-> OFF / ON switch
+    MidiMap midiMap { apvts, { "rate", "depth", "mix", "level" } };   // CC -> knob, MIDI learn
     const vr1::Engine& getEngine() const { return engine; }       // for the MOTION display of the editor
 
 private:

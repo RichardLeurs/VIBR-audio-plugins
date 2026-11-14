@@ -47,6 +47,8 @@ MF1AudioProcessor::MF1AudioProcessor()
     pMix    = apvts.getRawParameterValue ("mix");
     pLevel  = apvts.getRawParameterValue ("level");
     for (int i = 0; i < mf1::kNumSteps; ++i) pStep[i] = apvts.getRawParameterValue ("step" + juce::String (i + 1));
+    midiMap.setDefault ("depth", 1);
+    midiMap.setDefault ("cutoff", 11);
 }
 
 bool MF1AudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -62,8 +64,9 @@ void MF1AudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     dryBuf.setSize (2, juce::jmax (samplesPerBlock, 8192));
 }
 
-void MF1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
+void MF1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
+    midiMap.process (midi);
     juce::ScopedNoDenormals noDenormals;
     const int n = buffer.getNumSamples();
     if (n == 0 || buffer.getNumChannels() < 2 || n > dryBuf.getNumSamples()) return;
@@ -111,13 +114,21 @@ juce::AudioProcessorEditor* MF1AudioProcessor::createEditor() { return new MF1Au
 
 void MF1AudioProcessor::getStateInformation (juce::MemoryBlock& dest)
 {
-    if (auto xml = apvts.copyState().createXml()) copyXmlToBinary (*xml, dest);
+    auto state = apvts.copyState();
+    state.appendChild (midiMap.toTree(), nullptr);
+    if (auto xml = state.createXml()) copyXmlToBinary (*xml, dest);
 }
 
 void MF1AudioProcessor::setStateInformation (const void* data, int size)
 {
     if (auto xml = getXmlFromBinary (data, size))
-        if (xml->hasTagName (apvts.state.getType())) apvts.replaceState (juce::ValueTree::fromXml (*xml));
+        if (xml->hasTagName (apvts.state.getType())) {
+            auto st = juce::ValueTree::fromXml (*xml);
+            midiMap.fromTree (st.getChildWithName ("MIDIMAP"));
+            st.removeChild (st.getChildWithName ("MIDIMAP"), nullptr);
+            vibr::BypassLink::normalise (st);
+            apvts.replaceState (st);
+        }
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new MF1AudioProcessor(); }

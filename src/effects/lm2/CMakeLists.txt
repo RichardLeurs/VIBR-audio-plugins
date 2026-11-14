@@ -11,7 +11,7 @@ juce_add_plugin(LM-2
   ICON_BIG "${RL_ICON}"
   BUNDLE_ID com.richardleurs.lm2
   IS_SYNTH FALSE
-  NEEDS_MIDI_INPUT FALSE
+  NEEDS_MIDI_INPUT TRUE
   NEEDS_MIDI_OUTPUT FALSE
   IS_MIDI_EFFECT FALSE
   EDITOR_WANTS_KEYBOARD_FOCUS FALSE
@@ -43,6 +43,7 @@ target_compile_definitions(LM-2
 target_link_libraries(LM-2
   PRIVATE
     LM2Assets
+    rl_common
     juce::juce_audio_utils
     juce::juce_dsp
   PUBLIC

@@ -16,6 +16,6 @@ function(add_screenshot_tool plugin)
   set_target_properties(${tool} PROPERTIES EXCLUDE_FROM_ALL TRUE)
 endfunction()
 
-foreach(p DY-1 SU-1 SA-1 MS-1 ML-1 VR-1 RV-1 DL-1 DN-1 DV-1 RH-1 RB-1)
+foreach(p DY-1 SU-1 SA-1 MS-1 ML-1 VR-1 RV-1 DL-1 DN-1 DV-1 RH-1 RB-1 RE-2 DM-1 SD-1 MM-1 TR-2 PH-2 BF-3 CE-1)
   add_screenshot_tool(${p})
 endforeach()

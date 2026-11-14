@@ -5,8 +5,8 @@
 namespace
 {
 // Positions below are in the 2576 x 1018 coordinates of the rendered background (make_background.py);
-// the editor shows it at 1288 x 548.
-constexpr int kW = 1288, kH = 548;
+// the editor shows it at 1288 x 585 (the image is 2576 x 1170).
+constexpr int kW = 1288, kH = 585;
 constexpr float S = (float) kW / 2576.0f;
 
 juce::Point<float> at (float x, float y) { return { x * S, y * S }; }
@@ -27,6 +27,16 @@ const juce::Point<float> kDivisionButton { 2370.0f, 398.0f };
 
 // the real pedal's footswitches are not part of the artwork, so ON/OFF and TAP are small buttons in the MODE panel
 const juce::Point<float> kLed { 2501.0f, 87.0f }, kTapPad { 1288.0f, 398.0f };     // power slide switch (top right, ball left = off), TAP pad
+
+// Tempo sync (as MM-1): a flat SYNC button in the DELAY panel, under the DELAY TIME knob, below a divider line (drawn in the background).
+// SYNC toggles "sync"; while it is on the DELAY TIME knob selects the note division ("division" param) and the division is shown to the
+// right of the button.
+const juce::Rectangle<float> kSyncPill = juce::Rectangle<float> (116.0f, 46.0f).withCentre ({ 1678.0f, 983.0f });
+const juce::Rectangle<float> kDivisionText = juce::Rectangle<float> (130.0f, 46.0f).withCentre ({ 1820.0f, 983.0f });
+const juce::Colour kBody { 0xff2588c9 };      // the background's body colour
+
+// the printed "TAP" caption is dimmed while sync is on
+const juce::Rectangle<float> kTapCaptionArea { 1218.0f, 302.0f, 140.0f, 50.0f };
 
 juce::Point<float> polar (juce::Point<float> c, float r, float a)
 {
@@ -70,14 +80,17 @@ void drawPowerLed (juce::Graphics& g, bool on)
 
 // the TAP pad is its own light (flat, see style.md "Flat style"): a flat pad inside the ring of the background, bright red on the beat and
 // when tapped, dark red otherwise
-void drawTapPad (juce::Graphics& g, bool lit)
+// `dim` (sync on): the pad still shows the beat but is faded towards the panel, TAP does nothing
+void drawTapPad (juce::Graphics& g, bool lit, bool dim = false, juce::Colour panel = juce::Colours::black)
 {
     const auto pad = juce::Rectangle<float> (104.0f * S, 50.0f * S).withCentre (at (kTapPad.x, kTapPad.y));
-    g.setColour (lit ? juce::Colour (0xffe5432c) : juce::Colour (0xff3a1411));
+    const auto c = lit ? juce::Colour (0xffe5432c) : juce::Colour (0xff3a1411);
+    g.setColour (dim ? c.interpolatedWith (panel, 0.6f) : c);
     g.fillRoundedRectangle (pad, 8.0f * S);
 }
 } // namespace
 
+//==============================================================================
 //==============================================================================
 void DM1LookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int w, int h, float,
                                          float startAngle, float endAngle, juce::Slider& s)
@@ -129,10 +142,15 @@ void DM1LookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int w, i
 
 //==============================================================================
 DM1AudioProcessorEditor::DM1AudioProcessorEditor (DM1AudioProcessor& p)
-    : AudioProcessorEditor (&p), proc (p)
+    : AudioProcessorEditor (&p), proc (p),
+      syncAtt (*p.apvts.getParameter ("sync"), [this] (float v) { syncShown = v > 0.5f; syncChanged(); }, nullptr),
+      divisionAtt (*p.apvts.getParameter ("division"), [this] (float v) { divisionIdx = (int) std::lround (v); repaint(); }, nullptr)
 {
     setLookAndFeel (&laf);
     background = juce::ImageFileFormat::loadFrom (DM1Data::background_png, (size_t) DM1Data::background_pngSize);
+    if (background.isValid())      // an empty spot of the DELAY panel (between the lamp row and the divider)
+        panelColour = background.getPixelAt (juce::roundToInt (1650.0f * (float) background.getWidth() / 2576.0f),
+                                             juce::roundToInt (470.0f * (float) background.getWidth() / 2576.0f));
 
     addKnob (modRate,     "modRate");
     addKnob (modDepth,    "modDepth");
@@ -141,6 +159,9 @@ DM1AudioProcessorEditor::DM1AudioProcessorEditor (DM1AudioProcessor& p)
     addKnob (intensity,   "intensity");
     addKnob (delayVolume, "delayVolume");
     addKnob (mode,        "mode");
+    midiUI.add (modRate.slider, "modRate");          midiUI.add (modDepth.slider, "modDepth");          midiUI.add (variation.slider, "variation");
+    midiUI.add (delayTime.slider, "delayTime");      midiUI.add (intensity.slider, "intensity");        midiUI.add (delayVolume.slider, "delayVolume");
+    midiUI.add (mode.slider, "mode");
 
     // 12 printed positions at 30 degree steps, Classic at 12 o'clock, clockwise
     mode.slider.setRotaryParameters (0.0f, juce::degreesToRadians (330.0f), true);
@@ -150,7 +171,7 @@ DM1AudioProcessorEditor::DM1AudioProcessorEditor (DM1AudioProcessor& p)
         k->slider.setRotaryParameters (juce::degreesToRadians (-154.0f), juce::degreesToRadians (154.0f), true);
 
     powerZone.onClick    = [this] { togglePower(); };
-    tapZone.onDown       = [this] { proc.tapTempo(); };
+    tapZone.onDown       = [this] { if (! proc.syncOn()) proc.tapTempo(); };   // TAP does nothing while sync is on
     divisionZone.onClick = [this] { cycleDivision(); };
     memoryZone.onDown    = [this] { memHeld = true; memWritten = false; memDownAt = juce::Time::getMillisecondCounter(); };
     memoryZone.onUp      = [this] { memHeld = false; };
@@ -172,6 +193,8 @@ DM1AudioProcessorEditor::DM1AudioProcessorEditor (DM1AudioProcessor& p)
         addAndMakeVisible (z);
 
     setSize (kW, kH);
+    syncAtt.sendInitialUpdate();
+    divisionAtt.sendInitialUpdate();
     timerCallback();
     startTimerHz (30);
 }
@@ -197,6 +220,23 @@ void DM1AudioProcessorEditor::togglePower()
     prm->beginChangeGesture();
     prm->setValueNotifyingHost (prm->getValue() > 0.5f ? 0.0f : 1.0f);
     prm->endChangeGesture();
+}
+
+void DM1AudioProcessorEditor::syncChanged()
+{
+    // the DELAY TIME knob is the delay time, or the note division while sync is on (the attachment sets the slider range from the parameter)
+    delayTime.attachment.reset();
+    divisionKnobAtt.reset();
+    if (syncShown) divisionKnobAtt = std::make_unique<juce::SliderParameterAttachment> (*proc.apvts.getParameter ("division"), delayTime.slider, nullptr);
+    else           delayTime.attachment = std::make_unique<juce::SliderParameterAttachment> (*proc.apvts.getParameter ("delayTime"), delayTime.slider, nullptr);
+    tapZone.setEnabled (! syncShown);      // TAP works only with sync off
+    repaint();
+}
+
+void DM1AudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
+{
+    if ((kSyncPill.expanded (4.0f) * S).contains (e.position))
+        syncAtt.setValueAsCompleteGesture (syncShown ? 0.0f : 1.0f);
 }
 
 void DM1AudioProcessorEditor::cycleDivision()
@@ -231,8 +271,14 @@ void DM1AudioProcessorEditor::resized()
     }
 }
 
+void DM1AudioProcessorEditor::paintOverChildren (juce::Graphics& g)
+{
+    midiUI.paintMarks (g, kBody);
+}
+
 void DM1AudioProcessorEditor::timerCallback()
 {
+    if (midiUI.needsRepaint()) { midiUI.tick(); repaint(); }
     // memory: holding the button writes the slot; moving a knob after a recall goes back to MANUAL
     const auto now = juce::Time::getMillisecondCounter();
     if (memHeld && ! memWritten && now - memDownAt >= kHoldMs)
@@ -288,5 +334,32 @@ void DM1AudioProcessorEditor::paint (juce::Graphics& g)
     }
 
     drawPowerLed (g, powerOn);
-    drawTapPad (g, tapOn || tapZone.isDown());
+    drawTapPad (g, tapOn || tapZone.isDown(), syncShown, panelColour);
+
+    // SYNC: a flat rounded button in the body colour, dark when off, solid when on
+    {
+        const auto b = kSyncPill * S;
+        const float rad = b.getHeight() * 0.5f;
+        g.setColour (syncShown ? kBody : panelColour.darker (0.4f));
+        g.fillRoundedRectangle (b, rad);
+        g.setColour (kBody);
+        g.drawRoundedRectangle (b.reduced (1.0f), rad, 2.0f);
+        g.setFont (juce::Font (juce::FontOptions ("Avenir Next", 24.0f * S, juce::Font::bold)));
+        g.setColour (syncShown ? juce::Colours::white : kBody);
+        g.drawText ("SYNC", b, juce::Justification::centred, false);
+
+        if (syncShown)      // the chosen note division next to the button
+        {
+            g.setColour (juce::Colours::white);
+            g.setFont (juce::Font (juce::FontOptions ("Avenir Next", 34.0f * S, juce::Font::bold)));
+            g.drawText (vibr::sync::divisionNames()[juce::jlimit (0, vibr::sync::kNumDivisions - 1, divisionIdx)],
+                        kDivisionText * S, juce::Justification::centredLeft, false);
+        }
+    }
+
+    if (syncShown)      // fade the printed TAP caption towards the panel
+    {
+        g.setColour (panelColour.withAlpha (0.6f));
+        g.fillRect (kTapCaptionArea * S);
+    }
 }

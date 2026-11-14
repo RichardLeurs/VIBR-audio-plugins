@@ -11,7 +11,7 @@ juce_add_plugin(BF-3
   ICON_BIG "${RL_ICON}"
   BUNDLE_ID com.richardleurs.bf3
   IS_SYNTH FALSE
-  NEEDS_MIDI_INPUT FALSE
+  NEEDS_MIDI_INPUT TRUE
   NEEDS_MIDI_OUTPUT FALSE
   IS_MIDI_EFFECT FALSE
   EDITOR_WANTS_KEYBOARD_FOCUS FALSE
@@ -42,6 +42,7 @@ target_compile_definitions(BF-3
 
 target_link_libraries(BF-3
   PRIVATE
+    rl_common
     BF3Assets
     juce::juce_audio_utils
     juce::juce_dsp

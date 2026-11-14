@@ -19,6 +19,7 @@ public:
     ~DS1AudioProcessorEditor() override;
 
     void paint (juce::Graphics&) override;
+    void paintOverChildren (juce::Graphics&) override;
     void resized() override;
     void mouseDown (const juce::MouseEvent&) override;
 
@@ -35,6 +36,7 @@ private:
     DS1LookAndFeel laf;
     juce::ComponentBoundsConstrainer constrainer;
     juce::Image background;
+    MidiLearnUI midiUI { proc.midiMap };       // right-click a knob: MIDI learn
     Knob tone, level, dist;
     bool lastOn = true;
 

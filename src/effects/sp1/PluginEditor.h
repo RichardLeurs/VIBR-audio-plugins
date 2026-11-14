@@ -22,6 +22,7 @@ public:
     ~SP1AudioProcessorEditor() override;
 
     void paint (juce::Graphics&) override;
+    void paintOverChildren (juce::Graphics&) override;
     void resized() override;
     void mouseDown (const juce::MouseEvent&) override;
 
@@ -44,6 +45,7 @@ private:
     };
 
     SP1AudioProcessor& proc;
+    MidiLearnUI midiUI { proc.midiMap };       // right-click a knob: MIDI learn
     SP1LookAndFeel laf;
     juce::ComponentBoundsConstrainer constrainer;
     juce::Image grain;

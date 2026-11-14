@@ -27,6 +27,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout MemoryManAudioProcessor::cre
     knob ("delay",    "Delay",         5.0f);
     l.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "effect", 1 }, "Effect On", true));   // footswitch
     l.add (vibr::makeBypassParam());
+    // Tempo sync (added later, appended so the existing ids keep their order). Off = the Delay knob works as before.
+    l.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "sync", 1 }, "Sync (delay time follows the host tempo)", false));
+    l.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "division", 1 }, "Division",
+                                                         vibr::sync::divisionNames(), vibr::sync::divisionNames().indexOf ("1/8")));
     return l;
 }
 
@@ -43,6 +47,26 @@ MemoryManAudioProcessor::MemoryManAudioProcessor()
     pDepth    = apvts.getRawParameterValue ("depth");
     pDelay    = apvts.getRawParameterValue ("delay");
     pEffect   = apvts.getRawParameterValue ("effect");
+    pSync     = apvts.getRawParameterValue ("sync");
+    pDivision = apvts.getRawParameterValue ("division");
+
+    midiMap.setDefault ("depth", 1);                  // mod wheel
+    midiMap.setDefault ("delay", 11);                 // expression pedal
+    midiMap.setSyncAlias ("delay", "sync", "division");
+    midiMap.enableTap (85);                          // MIDI tap tempo: any note-on or CC85
+}
+
+void MemoryManAudioProcessor::tapAt (double ms)
+{
+    double iv = 0.0;
+    if (! tapAvg.add (ms, iv)) return;
+    // the tapped beat sets the delay time (40 .. 550 ms, exponential knob); a longer beat is halved until it fits
+    double t = iv;
+    while (t > 550.0) t *= 0.5;
+    t = juce::jmax (40.0, t);
+    const float knob = (float) (std::log (t / 40.0) / std::log (550.0 / 40.0)) * 10.0f;
+    if (auto* p = apvts.getParameter ("sync")) if (p->getValue() > 0.5f) { p->beginChangeGesture(); p->setValueNotifyingHost (0.0f); p->endChangeGesture(); }
+    if (auto* p = apvts.getParameter ("delay")) { p->beginChangeGesture(); p->setValueNotifyingHost (p->convertTo0to1 (juce::jlimit (0.0f, 10.0f, knob))); p->endChangeGesture(); }
 }
 
 bool MemoryManAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -68,8 +92,10 @@ void MemoryManAudioProcessor::prepareToPlay (double sampleRate, int)
 }
 
 //==============================================================================
-void MemoryManAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
+void MemoryManAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
+    midiMap.process (midi);
+    if (midiMap.consumeTap()) midiTap.hit();
     juce::ScopedNoDenormals noDenormals;
     const int numCh = juce::jmin (2, buffer.getNumChannels());
     const int numSamples = buffer.getNumSamples();
@@ -77,7 +103,17 @@ void MemoryManAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
         buffer.clear (c, 0, numSamples);
 
     // Delay knob: 40 ms .. 550 ms (exponential)
-    const float delayMs = 40.0f * std::pow (550.0f / 40.0f, knob01 (pDelay->load()));
+    constexpr float kMinDelayMs = 40.0f, kMaxDelayMs = 550.0f;
+    float delayMs = kMinDelayMs * std::pow (kMaxDelayMs / kMinDelayMs, knob01 (pDelay->load()));
+    // Sync on: the time of one division at the host tempo (120 bpm without a host), clamped to the 40 .. 550 ms range of the
+    // delay; a division longer than 550 ms falls back to 550 ms. It glides through the same smoother as the knob, so tempo
+    // or division changes bend the pitch like a turned knob instead of clicking.
+    if (pSync->load() > 0.5f)
+    {
+        const double bpm = vibr::sync::hostBpm (*this, 120.0);
+        const int division = juce::jlimit (0, vibr::sync::kNumDivisions - 1, (int) std::lround (pDivision->load()));
+        delayMs = juce::jlimit (kMinDelayMs, kMaxDelayMs, (float) vibr::sync::ms (bpm, division));
+    }
     sDelayMs.setTargetValue (delayMs);
     sFeedback.setTargetValue (knob01 (pFeedback->load()) * 1.03f);       // top of the knob self-oscillates (bounded by tanh)
     const float blend = knob01 (pBlend->load());                          // equal-power: dry <-> echo (full CW = vibrato / echo only)
@@ -136,7 +172,9 @@ juce::AudioProcessorEditor* MemoryManAudioProcessor::createEditor()
 
 void MemoryManAudioProcessor::getStateInformation (juce::MemoryBlock& dest)
 {
-    if (auto xml = apvts.copyState().createXml())
+    auto state = apvts.copyState();
+    state.appendChild (midiMap.toTree(), nullptr);
+    if (auto xml = state.createXml())
         copyXmlToBinary (*xml, dest);
 }
 
@@ -144,7 +182,10 @@ void MemoryManAudioProcessor::setStateInformation (const void* data, int size)
 {
     if (auto xml = getXmlFromBinary (data, size))
         if (xml->hasTagName (apvts.state.getType()))
-            apvts.replaceState (juce::ValueTree::fromXml (*xml));
+            { auto st = juce::ValueTree::fromXml (*xml);
+              midiMap.fromTree (st.getChildWithName ("MIDIMAP"));
+              st.removeChild (st.getChildWithName ("MIDIMAP"), nullptr);
+              vibr::BypassLink::normalise (st, "effect"); apvts.replaceState (st); }
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()

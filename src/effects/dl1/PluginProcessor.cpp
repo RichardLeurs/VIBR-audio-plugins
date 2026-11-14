@@ -135,6 +135,25 @@ DL1AudioProcessor::DL1AudioProcessor()
     pDualTimeB = get ("dualTimeB"); pDualFbB = get ("dualFbB"); pDualLevelA = get ("dualLevelA"); pDualLevelB = get ("dualLevelB"); pDualHighB = get ("dualHighB");
     pModVoice = get ("modVoice"); pModVariation = get ("modVariation"); pModVolume = get ("modVolume");
     pDualPingA = get ("dualPingA"); pDualPingB = get ("dualPingB");
+
+    midiMap.setDefault ("modDepth", 1);
+    midiMap.setDefault ("time", 11);
+    midiMap.setDefault ("hold", 64);
+    midiMap.setSyncAlias ("time", "sync", "division");
+    midiMap.enableTap (85);                          // MIDI tap tempo: any note-on or CC85
+}
+
+void DL1AudioProcessor::tapAt (double ms)
+{
+    double iv = 0.0;
+    if (! tapAvg.add (ms, iv)) return;
+    const auto setP = [this] (const char* id, float v)
+    {
+        if (auto* p = apvts.getParameter (id)) { p->beginChangeGesture(); p->setValueNotifyingHost (p->convertTo0to1 (v)); p->endChangeGesture(); }
+    };
+    undoManager.beginNewTransaction();
+    setP ("time", juce::jlimit (1.0f, 2000.0f, (float) iv));
+    if (pSync->load() > 0.5f) setP ("sync", 0.0f);                              // a tapped time is a free time
 }
 
 bool DL1AudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -150,8 +169,10 @@ void DL1AudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     dryBuf.setSize (2, juce::jmax (samplesPerBlock, 8192));
 }
 
-void DL1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
+void DL1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
+    midiMap.process (midi);
+    if (midiMap.consumeTap()) midiTap.hit();
     juce::ScopedNoDenormals noDenormals;
     const int n = buffer.getNumSamples();
     if (n == 0 || buffer.getNumChannels() < 2 || n > dryBuf.getNumSamples()) return;
@@ -205,13 +226,22 @@ juce::AudioProcessorEditor* DL1AudioProcessor::createEditor() { return new DL1Au
 
 void DL1AudioProcessor::getStateInformation (juce::MemoryBlock& dest)
 {
-    if (auto xml = apvts.copyState().createXml()) copyXmlToBinary (*xml, dest);
+    auto state = apvts.copyState();
+    state.appendChild (midiMap.toTree(), nullptr);
+    if (auto xml = state.createXml()) copyXmlToBinary (*xml, dest);
 }
 
 void DL1AudioProcessor::setStateInformation (const void* data, int size)
 {
     if (auto xml = getXmlFromBinary (data, size))
-        if (xml->hasTagName (apvts.state.getType())) apvts.replaceState (juce::ValueTree::fromXml (*xml));
+        if (xml->hasTagName (apvts.state.getType())) 
+        {
+            auto st = juce::ValueTree::fromXml (*xml);
+            midiMap.fromTree (st.getChildWithName ("MIDIMAP"));
+            st.removeChild (st.getChildWithName ("MIDIMAP"), nullptr);
+            vibr::BypassLink::normalise (st);
+            apvts.replaceState (st);
+        }
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new DL1AudioProcessor(); }

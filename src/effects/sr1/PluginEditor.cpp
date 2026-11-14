@@ -118,6 +118,7 @@ SR1AudioProcessorEditor::SR1AudioProcessorEditor (SR1AudioProcessor& p)
         addAndMakeVisible (s);
         k.att = std::make_unique<juce::SliderParameterAttachment> (*dynamic_cast<juce::RangedAudioParameter*> (par), s, nullptr);
         s.onValueChange = [this] { repaint(); };
+        midiUI.add (s, k.id);
     }
     powerAtt.sendInitialUpdate();
     textureAtt.sendInitialUpdate();
@@ -143,8 +144,14 @@ SR1AudioProcessorEditor::~SR1AudioProcessorEditor()
     setLookAndFeel (nullptr);
 }
 
+void SR1AudioProcessorEditor::paintOverChildren (juce::Graphics& g)
+{
+    midiUI.paintMarks (g, kBody);
+}
+
 void SR1AudioProcessorEditor::timerCallback()
 {
+    if (midiUI.needsRepaint()) { midiUI.tick(); repaint(); }
     repaint (cloudRect().expanded (4.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer());     // the grain cloud moves
 }
 

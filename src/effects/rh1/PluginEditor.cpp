@@ -55,6 +55,7 @@ RH1AudioProcessorEditor::RH1AudioProcessorEditor (RH1AudioProcessor& p)
         k.slider.onDragStart = [this] { proc.undoManager.beginNewTransaction(); };
         addAndMakeVisible (k.slider);
         k.att = std::make_unique<juce::SliderParameterAttachment> (*dynamic_cast<juce::RangedAudioParameter*> (par), k.slider, nullptr);
+        midiUI.add (k.slider, k.id);
         k.slider.onValueChange = [this] { repaint(); };
     }
     powerAtt.sendInitialUpdate();
@@ -74,8 +75,14 @@ RH1AudioProcessorEditor::~RH1AudioProcessorEditor()
     setLookAndFeel (nullptr);
 }
 
+void RH1AudioProcessorEditor::paintOverChildren (juce::Graphics& g)
+{
+    midiUI.paintMarks (g, kPal.body);
+}
+
 void RH1AudioProcessorEditor::timerCallback()
 {
+    if (midiUI.needsRepaint()) { midiUI.tick(); repaint(); }
     repaint (panelRect (2).expanded (4.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer());
     if (barState.copiedAt != 0) { repaint (juce::Rectangle<float> (0.0f, 30.0f, 900.0f, 50.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer()); if (! barState.copiedRecently()) barState.copiedAt = 0; }
 }
@@ -111,7 +118,7 @@ void RH1AudioProcessorEditor::layoutKnobs()
         // the knobs of the source panel are placed by their position among those shown
         int idx = k.index, cnt = k.count;
         if (k.panel == 0) { idx = 0; cnt = 0; for (int j = 0; j < (int) knobs.size(); ++j) if (knobs[(size_t) j].panel == 0 && knobShown (j)) { if (j < i) ++idx; ++cnt; } }
-        k.slider.setBounds (juce::Rectangle<float> (d, d).withCentre (knobCentre (k.panel, idx, cnt) * sc).toNearestInt());
+        k.slider.setBounds (juce::Rectangle<float> (d, d).withCentre (knobShown (i) ? knobCentre (k.panel, idx, cnt) * sc : juce::Point<float> (-2000.0f, -2000.0f)).toNearestInt());   // hidden: parked off screen so the MIDI mark is not drawn
         k.slider.setVisible (knobShown (i));
     }
 }

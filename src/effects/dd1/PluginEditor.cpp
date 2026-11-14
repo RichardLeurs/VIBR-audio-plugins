@@ -167,6 +167,7 @@ DD1AudioProcessorEditor::DD1AudioProcessorEditor (DD1AudioProcessor& p)
         k->slider.setScrollWheelEnabled (true);
         addAndMakeVisible (k->slider);
         k->attachment = std::make_unique<juce::SliderParameterAttachment> (*proc.apvts.getParameter (s.id), k->slider, nullptr);
+        midiUI.add (k->slider, s.id);
         knobs.push_back (std::move (k));
     }
 
@@ -225,22 +226,7 @@ void DD1AudioProcessorEditor::showPresetMenu()
 
 void DD1AudioProcessorEditor::tap()
 {
-    const double now = (double) juce::Time::getMillisecondCounterHiRes();
-    if (! taps.empty() && now - taps.back() > 2000.0) taps.clear();
-    taps.push_back (now);
-    if (taps.size() > 5) taps.erase (taps.begin());
-    lastTap = now;
-    if (taps.size() >= 2)
-    {
-        const double avg = (taps.back() - taps.front()) / (double) (taps.size() - 1);
-        const float bpm = juce::jlimit (30.0f, 300.0f, (float) (60000.0 / avg));
-        for (const char* id : { "hostSync" })                                       // tapping selects the tapped tempo
-            if (proc.apvts.getRawParameterValue (id)->load() > 0.5f) toggleParam (id);
-        auto* prm = proc.apvts.getParameter ("tempo");
-        prm->beginChangeGesture();
-        prm->setValueNotifyingHost (prm->convertTo0to1 (bpm));
-        prm->endChangeGesture();
-    }
+    proc.midiTap.tap();                                     // the same tap logic as the MIDI tap (in the processor)
     repaint();
 }
 
@@ -304,6 +290,7 @@ void DD1AudioProcessorEditor::mouseUp (const juce::MouseEvent&)
 
 void DD1AudioProcessorEditor::timerCallback()
 {
+    if (midiUI.needsRepaint()) { midiUI.tick(); repaint(); }
     // memory: holding the button writes the slot; moving a knob after a recall goes back to MANUAL
     const auto nowMem = juce::Time::getMillisecondCounter();
     if (memHeld && ! memWritten && nowMem - memDownAt >= kHoldMs)
@@ -325,7 +312,7 @@ void DD1AudioProcessorEditor::timerCallback()
     const float bpm = proc.bpmNow.load();
     const double nowMs = (double) juce::Time::getMillisecondCounterHiRes();
     const double beat = 60000.0 / juce::jmax (30.0f, bpm);
-    const bool blink = std::fmod (nowMs, beat) < 90.0 || nowMs - lastTap < 90.0;      // tempo LED
+    const bool blink = std::fmod (nowMs, beat) < 90.0 || nowMs - proc.midiTap.lastMs() < 90.0;      // tempo LED
     bool dirty = memDirty || on != lastOn || series != lastSeries || ping != lastPing || host != lastHost
                  || blink != lastBlink || std::fabs (bpm - lastBpm) > 0.04f;
     lastHost = host; lastBlink = blink; lastBpm = bpm;
@@ -336,6 +323,11 @@ void DD1AudioProcessorEditor::timerCallback()
         if (std::fabs (ms - lastMs[i]) > 0.04f) { lastMs[i] = ms; dirty = true; }
     }
     if (dirty) repaint();
+}
+
+void DD1AudioProcessorEditor::paintOverChildren (juce::Graphics& g)
+{
+    midiUI.paintMarks (g, juce::Colour (255, 190, 60));
 }
 
 void DD1AudioProcessorEditor::paint (juce::Graphics& g)
@@ -420,7 +412,7 @@ void DD1AudioProcessorEditor::paint (juce::Graphics& g)
 
         // the TAP pad is its own light: a flat pad inside the ring of the background, bright red on the beat and when tapped, dark red otherwise
         const double nowMs = (double) juce::Time::getMillisecondCounterHiRes();
-        const bool lit = std::fmod (nowMs, 60000.0 / juce::jmax (30.0f, proc.bpmNow.load())) < 90.0 || nowMs - lastTap < 90.0;
+        const bool lit = std::fmod (nowMs, 60000.0 / juce::jmax (30.0f, proc.bpmNow.load())) < 90.0 || nowMs - proc.midiTap.lastMs() < 90.0;
         const auto pad = juce::Rectangle<float> (76.0f, 44.0f).withCentre (kTapSw);
         g.setColour (lit ? juce::Colour (0xffe5432c) : juce::Colour (0xff3a1411));
         g.fillRoundedRectangle (pad, 7.0f);

@@ -24,13 +24,26 @@ public:
     {
         apvts.addParameterListener (powerId, this);
         apvts.addParameterListener ("bypass", this);
-        if (auto* p = apvts.getParameter (powerId))                     // a session saved before the bypass parameter existed: follow the switch
-            if (auto* b = apvts.getParameter ("bypass")) b->setValueNotifyingHost (1.0f - p->getValue());
     }
     ~BypassLink() override
     {
         apvts.removeParameterListener (powerId, this);
         apvts.removeParameterListener ("bypass", this);
+    }
+
+    // Call on a saved state tree before replaceState (setStateInformation): "power" (the id saved in every session) is the truth, the
+    // "bypass" entry is rebuilt from it. This covers sessions saved before the bypass parameter existed and a bypass entry without a value.
+    static void normalise (juce::ValueTree& state, const juce::String& onId = "power")
+    {
+        float on = 1.0f;
+        for (int i = 0; i < state.getNumChildren(); ++i)
+            if (state.getChild (i).getProperty ("id").toString() == onId) on = (float) state.getChild (i).getProperty ("value", 1.0f);
+        for (int i = state.getNumChildren(); --i >= 0;)
+            if (state.getChild (i).getProperty ("id").toString() == "bypass") state.removeChild (i, nullptr);
+        juce::ValueTree b ("PARAM");
+        b.setProperty ("id", "bypass", nullptr);
+        b.setProperty ("value", on >= 0.5f ? 0.0f : 1.0f, nullptr);
+        state.appendChild (b, nullptr);
     }
 
 private:
@@ -39,7 +52,7 @@ private:
         const bool fromBypass = id == "bypass";
         auto* other = apvts.getParameter (fromBypass ? powerId : juce::String ("bypass"));
         if (other == nullptr) return;
-        const float target = value > 0.5f ? 0.0f : 1.0f;                // the other parameter holds the opposite value
+        const float target = value >= 0.5f ? 0.0f : 1.0f;                // the other parameter holds the opposite value
         if (std::abs (other->getValue() - target) > 0.5f) other->setValueNotifyingHost (target);      // equal values end the ping-pong
     }
 
