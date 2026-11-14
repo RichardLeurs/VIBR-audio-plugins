@@ -233,9 +233,9 @@ foreach(effect IN LISTS EFFECTS)
   endif()
 endforeach()
 
-add_subdirectory(src/multieffect/me1)      # ME-1: self-contained, its own effect modules
+#add_subdirectory(src/multieffect/me1)      # ME-1: self-contained, its own effect modules
 add_subdirectory(src/mastering/ms1)       # MS-1: the mastering suite (src/mastering)
-add_subdirectory(src/drumcomputer/tr08)
+#add_subdirectory(src/drumcomputer/tr08)
 
 # Screenshot tools for the website (not part of the normal build): tools/screenshot
 add_subdirectory(tools/screenshot)
