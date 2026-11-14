@@ -43,6 +43,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout MS1AudioProcessor::createLay
         layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id, 1 }, name, NormalisableRange<float> (lo, hi, step), def));
     };
     layout.add (std::make_unique<AudioParameterBool> (ParameterID { "power", 1 }, "Power", true));
+    layout.add (vibr::makeBypassParam());
     flt ("inGain", "Input Gain", -24.0f, 24.0f, 0.1f, 0.0f);
     flt ("limGain", "Limiter Gain", 0.0f, 24.0f, 0.1f, 0.0f);
     flt ("limCeiling", "Limiter Ceiling", -3.0f, 0.0f, 0.1f, -1.0f);
@@ -165,7 +166,7 @@ MS1AudioProcessor::MS1AudioProcessor()
                           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       apvts (*this, &undoManager, "MS1", createLayout()),
-      presets (*this, apvts, undoManager, "MS-1 Presets", ms1FactoryPresets(), { "power", "delta", "refAB", "refPlay", "refMatch", "refFollow" }, { "refPath" })
+      presets (*this, apvts, undoManager, "MS-1 Presets", ms1FactoryPresets(), { "power", "bypass", "delta", "refAB", "refPlay", "refMatch", "refFollow" }, { "refPath" })
 {
     const auto get = [this] (const char* id) { return apvts.getRawParameterValue (id); };
     pPower = get ("power"); pInGain = get ("inGain"); pLimGain = get ("limGain"); pCeiling = get ("limCeiling"); pRelease = get ("limRelease");

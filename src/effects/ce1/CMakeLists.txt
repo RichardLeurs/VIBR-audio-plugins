@@ -42,6 +42,7 @@ target_compile_definitions(CE-1
 
 target_link_libraries(CE-1
   PRIVATE
+    rl_common
     CE1Assets
     juce::juce_audio_utils
     juce::juce_dsp

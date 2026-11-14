@@ -40,7 +40,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout DD1AudioProcessor::createLay
     knob ("rShim",  "Shimmer Amount", 5.0f);
     layout.add (std::make_unique<AudioParameterInt> (ParameterID { "rInt", 1 }, "Shimmer Interval", 0, 4, 2));
     knob ("rLevel", "Shimmer Level", 3.0f);
-    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "tempo", 1 }, "Tempo (tap)", NormalisableRange<float> (30.0f, 300.0f, 0.1f), 120.0f));
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "tempo", 1 }, "Tempo (tap)", NormalisableRange<float> (30.0f, 300.0f, 0.1f), 120.0f, AudioParameterFloatAttributes().withLabel ("bpm")));
     layout.add (std::make_unique<AudioParameterBool> (ParameterID { "hostSync", 1 }, "Follow Host Tempo (off = Tap)", false));
     knob ("spread", "Stereo Spread", 5.0f);
     layout.add (std::make_unique<AudioParameterBool> (ParameterID { "pingA", 1 }, "Delay A Ping-Pong", false));

@@ -1,6 +1,8 @@
 // VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
 #pragma once
 
+#include "BypassLink.h"
+
 #include <JuceHeader.h>
 #include "MasteringEngine.h"
 #include "MasteringStages.h"
@@ -32,11 +34,29 @@ public:
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
     double getTailLengthSeconds() const override { return 0.2; }
+    juce::AudioProcessorParameter* getBypassParameter() const override { return apvts.getParameter ("bypass"); }
 
-    int getNumPrograms() override { return 1; }
-    int getCurrentProgram() override { return 0; }
-    void setCurrentProgram (int) override {}
-    const juce::String getProgramName (int) override { return {}; }
+    // the factory presets are the host's programs (the preset menu in the editor stays in step through the preset name)
+    int getNumPrograms() override { return juce::jmax (1, (int) presets.factory().size()); }
+    int getCurrentProgram() override
+    {
+        const auto& list = presets.factory();
+        for (int i = 0; i < (int) list.size(); ++i)
+            if (list[(size_t) i].name == presets.name()) return currentProgram = i;
+        return currentProgram;
+    }
+    void setCurrentProgram (int index) override
+    {
+        if (index < 0 || index >= (int) presets.factory().size()) return;
+        currentProgram = index;
+        if (juce::MessageManager::getInstance()->isThisTheMessageThread()) presets.applyFactory (index);
+        else juce::MessageManager::callAsync ([weak = juce::WeakReference<MS1AudioProcessor> (this), index] { if (weak != nullptr) weak->presets.applyFactory (index); });
+    }
+    const juce::String getProgramName (int index) override
+    {
+        const auto& list = presets.factory();
+        return index >= 0 && index < (int) list.size() ? list[(size_t) index].name : juce::String();
+    }
     void changeProgramName (int, const juce::String&) override {}
 
     void getStateInformation (juce::MemoryBlock&) override;
@@ -44,6 +64,7 @@ public:
 
     juce::UndoManager undoManager { 30000, 100 };                                   // 100 undo steps of every parameter change (the editor starts a step per gesture)
     juce::AudioProcessorValueTreeState apvts;
+    vibr::BypassLink bypassLink { apvts };                // host bypass <-> OFF / ON switch
 
     // for the editor (read by the message thread, written by the audio thread)
     ms1::Loudness loudness;
@@ -64,6 +85,8 @@ public:
 
     // presets, A / B and undo (src/common/ui/Presets.h; the editor shows them in the header)
     vibr::PresetManager presets;
+    int currentProgram = 0;
+    JUCE_DECLARE_WEAK_REFERENCEABLE (MS1AudioProcessor)
     float eqDynAmount (int band) const { return eq.dynAmount[band].load (std::memory_order_relaxed); }
     float busGrDb() const { return bus.grDb.load (std::memory_order_relaxed); }     // the bus compressor's gain reduction now (dB, <= 0)
     // match EQ: the input's long-term spectrum is learned while audio plays; the button fits the 8 EQ bands to the reference (see matchEqFit)

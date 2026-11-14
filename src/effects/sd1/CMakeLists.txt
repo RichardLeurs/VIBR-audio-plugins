@@ -42,6 +42,7 @@ target_compile_definitions(SD-1
 
 target_link_libraries(SD-1
   PRIVATE
+    rl_common
     SD1Assets
     juce::juce_audio_utils
     juce::juce_dsp

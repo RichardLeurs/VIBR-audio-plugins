@@ -86,6 +86,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout DM1AudioProcessor::createLay
             [] (int v, int) { return divisionNames()[juce::jlimit (1, 5, v) - 1]; })));
 
     l.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "power", 1 }, "Power", true));
+
+    l.add (vibr::makeBypassParam());
     return l;
 }
 

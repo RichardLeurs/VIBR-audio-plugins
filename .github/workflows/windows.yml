@@ -14,10 +14,10 @@ permissions:
 
 jobs:
   win64:
-    runs-on: windows-latest
+    runs-on: windows-2022      # has Visual Studio 2022; windows-latest may move to a newer Visual Studio
     timeout-minutes: 180
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Build (VST3 + Standalone)
         shell: bash
@@ -35,7 +35,7 @@ jobs:
           mkdir -p dist
           cp ~/Developer/VIBR/zip/*.zip dist/
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: vibr-win64
           path: dist/*.zip

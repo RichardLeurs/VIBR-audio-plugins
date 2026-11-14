@@ -1,6 +1,8 @@
 // VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
 #pragma once
 
+#include "BypassLink.h"
+
 #include <JuceHeader.h>
 #include "ModEngine.h"
 
@@ -26,6 +28,7 @@ public:
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
     double getTailLengthSeconds() const override { return 0.5; }
+    juce::AudioProcessorParameter* getBypassParameter() const override { return apvts.getParameter ("bypass"); }
 
     int getNumPrograms() override { return 1; }
     int getCurrentProgram() override { return 0; }
@@ -37,6 +40,8 @@ public:
     void setStateInformation (const void*, int) override;
 
     juce::AudioProcessorValueTreeState apvts;
+
+    vibr::BypassLink bypassLink { apvts };                // host bypass <-> OFF / ON switch
     const vc1::Engine& getEngine() const { return engine; }       // the editor reads the source lamps from it
 
 private:

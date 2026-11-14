@@ -23,7 +23,7 @@ jobs:
       matrix:
         arch: [arm64, x86_64]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Build (VST3 + AU + Standalone)
         env:
@@ -38,7 +38,7 @@ jobs:
           mkdir -p dist
           cp ~/Developer/VIBR/zip/*-${{ matrix.arch }}.zip dist/
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: vibr-${{ matrix.arch }}
           path: dist/*.zip

@@ -8,9 +8,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout VR1AudioProcessor::createLay
     AudioProcessorValueTreeState::ParameterLayout layout;
     const auto pct = [&layout] (const char* id, const char* name, float def)
     {
-        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id, 1 }, name, NormalisableRange<float> (0.0f, 100.0f, 1.0f), def));
+        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id, 1 }, name, NormalisableRange<float> (0.0f, 100.0f, 1.0f), def, AudioParameterFloatAttributes().withLabel ("%")));
     };
     layout.add (std::make_unique<AudioParameterBool>   (ParameterID { "power", 1 }, "Power", true));
+    layout.add (vibr::makeBypassParam());
     layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "mode", 1 }, "Mode", StringArray { "Uni-Vibe", "Rotary", "Ring Mod" }, 0));
     layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "variant", 1 }, "Type (Chorus / Vibrato, Slow / Fast, Sine / Triangle / Square)",
                                                         StringArray { "Type 1", "Type 2", "Type 3" }, 0));
@@ -18,7 +19,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout VR1AudioProcessor::createLay
     pct ("rate", "Rate / Speed / Freq", 55.0f);
     pct ("depth", "Depth / Intensity", 70.0f);
     pct ("mix", "Mix", 100.0f);
-    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "level", 1 }, "Level", NormalisableRange<float> (-24.0f, 12.0f, 1.0f), 0.0f));
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "level", 1 }, "Level", NormalisableRange<float> (-24.0f, 12.0f, 1.0f), 0.0f, AudioParameterFloatAttributes().withLabel ("dB")));
     return layout;
 }
 

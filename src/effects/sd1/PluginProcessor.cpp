@@ -30,6 +30,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout SDD1000AudioProcessor::creat
     knob ("effect",        "Effect",               5.0f);
     l.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "bypass", 1 }, "Bypass", false));
     l.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "power", 1 },  "Power",  true));
+    l.add (vibr::makeBypassParam());
     return l;
 }
 

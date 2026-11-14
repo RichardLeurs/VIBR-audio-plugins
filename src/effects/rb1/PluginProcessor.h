@@ -1,6 +1,8 @@
 // VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
 #pragma once
 
+#include "BypassLink.h"
+
 #include <JuceHeader.h>
 #include "ReverbLabEngine.h"
 #include "ui/Presets.h"
@@ -27,11 +29,29 @@ public:
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
     double getTailLengthSeconds() const override { return 40.0; }
+    juce::AudioProcessorParameter* getBypassParameter() const override { return apvts.getParameter ("bypass"); }
 
-    int getNumPrograms() override { return 1; }
-    int getCurrentProgram() override { return 0; }
-    void setCurrentProgram (int) override {}
-    const juce::String getProgramName (int) override { return {}; }
+    // the factory presets are the host's programs (the preset menu in the editor stays in step through the preset name)
+    int getNumPrograms() override { return juce::jmax (1, (int) presets.factory().size()); }
+    int getCurrentProgram() override
+    {
+        const auto& list = presets.factory();
+        for (int i = 0; i < (int) list.size(); ++i)
+            if (list[(size_t) i].name == presets.name()) return currentProgram = i;
+        return currentProgram;
+    }
+    void setCurrentProgram (int index) override
+    {
+        if (index < 0 || index >= (int) presets.factory().size()) return;
+        currentProgram = index;
+        if (juce::MessageManager::getInstance()->isThisTheMessageThread()) presets.applyFactory (index);
+        else juce::MessageManager::callAsync ([weak = juce::WeakReference<RB1AudioProcessor> (this), index] { if (weak != nullptr) weak->presets.applyFactory (index); });
+    }
+    const juce::String getProgramName (int index) override
+    {
+        const auto& list = presets.factory();
+        return index >= 0 && index < (int) list.size() ? list[(size_t) index].name : juce::String();
+    }
     void changeProgramName (int, const juce::String&) override {}
 
     void getStateInformation (juce::MemoryBlock&) override;
@@ -39,7 +59,10 @@ public:
 
     juce::UndoManager undoManager { 30000, 100 };
     juce::AudioProcessorValueTreeState apvts;
+    vibr::BypassLink bypassLink { apvts };                // host bypass <-> OFF / ON switch
     vibr::PresetManager presets;
+    int currentProgram = 0;
+    JUCE_DECLARE_WEAK_REFERENCEABLE (RB1AudioProcessor)
     const rb1::Engine& getEngine() const { return engine; }
 
 private:
