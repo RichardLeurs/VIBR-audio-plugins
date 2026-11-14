@@ -5,7 +5,9 @@ Are you interested in audio plugins and want to help improving and expanding the
 
 # VIBR Audio Plugins
 
-A collection of Vintage effects pedals (and some new) redesigned as audio plugins (VST3, Audio Unit and Standalone), vibe coded with JUCE 8 and C++20.
+A collection of guitar effects inspired by iconic vintage pedals and original experimental designs. From timeless tones and familiar textures to unconventional soundscapes and creative effects, VIBR brings together the character of classic hardware and the freedom of modern audio processing.
+
+VIBR is open source by design. Every plugin, its code and artwork are free to explore, modify and share. Made for creativity, collaboration and a shared passion for audio.
 
 ![DM-1 Delay Machine front panel](src/effects/dm1/assets/dm-1.png)
 
