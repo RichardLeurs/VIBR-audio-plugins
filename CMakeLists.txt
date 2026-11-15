@@ -249,6 +249,10 @@ add_subdirectory(src/mastering/ms1)       # MS-1: the mastering suite (src/maste
 #add_subdirectory(src/drumcomputer/tr08)
 
 # Screenshot tools for the website (not part of the normal build): tools/screenshot
-add_subdirectory(tools/screenshot)
+if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/tools/screenshot")      # tools/ is not in the repository (.gitignore): skipped when missing, e.g. on the GitHub runners
+  add_subdirectory(tools/screenshot)
+endif()
 # Unit test for the shared MIDI map (not part of the normal build): tools/midi-test
-add_subdirectory(tools/midi-test)
+if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/tools/midi-test")
+  add_subdirectory(tools/midi-test)
+endif()
