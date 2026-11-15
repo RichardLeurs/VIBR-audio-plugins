@@ -11,7 +11,7 @@ constexpr float kPanelY = 134.0f, kPanelH = 236.0f, kKnobR = 24.0f, kPad = 5.0f,
 constexpr float kPanelX[5] = { 20.0f, 290.0f, 560.0f, 830.0f, 930.0f }, kPanelW[5] = { 260.0f, 260.0f, 260.0f, 350.0f, 250.0f };
 constexpr const char* kPanelName[5] = { "BOOST", "TUBE", "TAPE", "CRUSH", "OUTPUT" };
 
-const juce::Colour kBody (201, 54, 104), kDark (38, 6, 18), kPanel (26, 27, 30), kInk (238, 238, 232);
+const juce::Colour kBody (201, 54, 104), kDark (38, 6, 18), kLight (244, 246, 250), kPanel (26, 27, 30), kInk (238, 238, 232);
 
 juce::Font font (float h, bool bold = false, bool italic = false)
 {
@@ -288,10 +288,10 @@ void SA1AudioProcessorEditor::paint (juce::Graphics& g)
     g.drawLine (kW - 1.5f, 0.0f, kW - 1.5f, kH, 3.0f);
 
     // header: name left, two description lines right, power switch, rule
-    drawText (g, "SA-1", kMargin + 3.0f, 55.0f, 70.0f, kDark, true, 0.0f, juce::Justification::centredLeft, true);
-    drawText (g, "LO-FI SATURATOR", kW - kMargin - 95.0f, 43.0f, 20.0f, kDark, false, 0.2f, juce::Justification::centredRight);
-    drawText (g, "WARMTH AND GRIT", kW - kMargin - 95.0f, 67.0f, 17.0f, kDark, false, 0.2f, juce::Justification::centredRight);
-    g.setColour (kDark.withAlpha (0.85f));
+    drawText (g, "SA-1", kMargin + 3.0f, 55.0f, 70.0f, kLight, true, 0.0f, juce::Justification::centredLeft, true);
+    drawText (g, "LO-FI SATURATOR", kW - kMargin - 95.0f, 43.0f, 20.0f, kLight, false, 0.2f, juce::Justification::centredRight);
+    drawText (g, "WARMTH AND GRIT", kW - kMargin - 95.0f, 67.0f, 17.0f, kLight, false, 0.2f, juce::Justification::centredRight);
+    g.setColour (kLight.withAlpha (0.85f));
     g.fillRect (kMargin, kRuleY, kW - 2.0f * kMargin, 1.6f);
 
     {   // power switch: slot, chrome ball, OFF / ON legend
@@ -307,7 +307,7 @@ void SA1AudioProcessorEditor::paint (juce::Graphics& g)
         g.fillEllipse (ball.translated (0.5f, 1.2f));
         g.setGradientFill (juce::ColourGradient (juce::Colour (0xfffafbfd), ball.getX() + 3.0f, ball.getY() + 2.0f, juce::Colour (0xff6e727e), ball.getRight(), ball.getBottom(), false));
         g.fillEllipse (ball);
-        drawText (g, "OFF / ON", kW - kMargin, 68.5f, 13.0f, kDark, false, 0.12f, juce::Justification::centredRight);
+        drawText (g, "OFF / ON", kW - kMargin, 68.5f, 13.0f, kLight, false, 0.12f, juce::Justification::centredRight);
     }
 
     // panels: charcoal, light outline, title pill on the top edge (the pill of a stage is its on / off switch: lit = on, with a dark border)
@@ -377,8 +377,8 @@ void SA1AudioProcessorEditor::paint (juce::Graphics& g)
         drawText (g, txt, c.x, kPanelY + valueOffset (k.panel) + (k.panel == 4 ? kRow2Y - kPanelY : 0.0f), 14.0f, kBody.withAlpha (dim), false, 0.04f);
     }
 
-    drawText (g, "Made by Richard Leurs | VIBR", kW - kMargin - 20.0f, kRow2Y + kRow2H + 35.0f, 13.0f, kDark, false, 0.06f, juce::Justification::centredRight);
-    drawVibrLogo (g, juce::Rectangle<float> (13.0f, 13.0f).withCentre ({ kW - kMargin - 6.5f, kRow2Y + kRow2H + 35.0f }), kDark);
+    drawText (g, "Made by Richard Leurs | VIBR", kW - kMargin - 20.0f, kRow2Y + kRow2H + 35.0f, 13.0f, kLight, false, 0.06f, juce::Justification::centredRight);
+    drawVibrLogo (g, juce::Rectangle<float> (13.0f, 13.0f).withCentre ({ kW - kMargin - 6.5f, kRow2Y + kRow2H + 35.0f }), kLight);
 }
 
 void SA1AudioProcessorEditor::mouseDown (const juce::MouseEvent& e)

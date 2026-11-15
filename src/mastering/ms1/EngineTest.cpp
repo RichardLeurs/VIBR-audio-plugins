@@ -437,6 +437,46 @@ int main()
         check (std::abs (r1 - 10.0f) < 1.0f && std::abs (r2 - 5.0f) < 1.0f && std::abs (r3 - 20.0f) < 1.0f && std::abs (r4 - 15.0f) < 1.0f, "3342 cases 1 to 4: loudness range 10 / 5 / 20 / 15 LU within +-1");
     }
 
+    std::printf ("bus compressor: external sidechain key\n");
+    {
+        const float fs = 48000.0f; const int total = 96000;
+        ms1::BusParams p; p.on = true; p.mix = 1.0f; p.thresholdDb = -20.0f; p.ratio = 2; p.attack = 2; p.release = 1; p.sidechain = 0; p.makeupDb = 0.0f;
+        const auto tone = [&] (float db, float hz) { std::vector<float> v ((size_t) total); for (int i = 0; i < total; ++i) v[(size_t) i] = ms1::dbToGain (db) * std::sin (6.2831853f * hz * (float) i / fs); return v; };
+        const auto runKey = [&] (const ms1::BusParams& pp, const std::vector<float>& in, const std::vector<float>* key, float* gr)
+        {
+            ms1::BusCompressor c; c.prepare (fs);
+            auto l = in, r = in;
+            for (size_t pos = 0; pos < l.size(); pos += 256)
+            {
+                const int n = (int) std::min<size_t> (256, l.size() - pos);
+                c.process (l.data() + pos, r.data() + pos, n, pp, key ? key->data() + pos : nullptr, key ? key->data() + pos : nullptr);
+            }
+            if (gr) *gr = c.grDb.load();
+            return l;
+        };
+        const auto quiet = tone (-40.0f, 1000.0f), loud = tone (-8.0f, 1000.0f), silent = std::vector<float> ((size_t) total, 0.0f);
+        {
+            const auto a = runKey (p, loud, nullptr, nullptr), b = runKey (p, loud, &loud, nullptr);
+            check (a == b, "the key equal to the signal is bit exact with no key");
+        }
+        {
+            float grQuiet = 0.0f, grLoud = 0.0f;
+            const auto o1 = runKey (p, quiet, &silent, &grQuiet);
+            const auto o2 = runKey (p, quiet, &loud, &grLoud);
+            std::printf ("  quiet signal: gain reduction %.2f dB with a silent key, %.2f dB with a loud key\n", grQuiet, grLoud);
+            check (grQuiet > -0.1f, "a silent key does not compress a quiet signal");
+            check (grLoud < -4.0f, "a loud key compresses a quiet signal by more than 4 dB");
+            (void) o1; (void) o2;
+        }
+        {   // the sidechain high-pass works on the key: a 40 Hz key moves the compressor much less with the 150 Hz filter on
+            auto pf = p; pf.sidechain = 3;
+            float grOff = 0.0f, grOn = 0.0f;
+            const auto lowKey = tone (-8.0f, 40.0f);
+            runKey (p, quiet, &lowKey, &grOff); runKey (pf, quiet, &lowKey, &grOn);
+            std::printf ("  40 Hz key: gain reduction %.2f dB without, %.2f dB with the 150 Hz high-pass\n", grOff, grOn);
+            check (grOn > grOff + 3.0f, "the sidechain high-pass is applied to the external key");
+        }
+    }
     std::printf ("%d problems\n", problems);
     return problems == 0 ? 0 : 1;
 }

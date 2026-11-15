@@ -6,8 +6,10 @@
 #include <JuceHeader.h>
 #include "MasteringEngine.h"
 #include "MasteringStages.h"
+#include "AutoAnalyzer.h"
 #include "ReferencePlayer.h"
 #include "ui/Presets.h"
+#include "ui/OutputMeter.h"
 
 // MS-1 Mastering Suite, version 0.8: input trim (gain, polarity, rumble high-pass) -> corrective EQ (8 bands, minimum or linear phase) -> multiband compressor (minimum or linear phase crossovers) -> stereo imager -> colour -> bus compressor -> limiter (true-peak safe, optional loudness target) -> output (gain, dither), with loudness,
 // true-peak and spectrum meters (see MasteringEngine.h and .claude/mastering_specs.md).
@@ -72,6 +74,11 @@ public:
     int specOption (SpecOption o) const { return o == SpecMode ? specModeOpt.load() : o == SpecSource ? specSourceOpt.load() : specSlopeOpt.load(); }
     void setSpecOption (SpecOption o, int v);
     std::atomic<float> grDb { 0.0f }, tpNowL { -120.0f }, tpNowR { -120.0f }, tpMaxDb { -120.0f }, autoGainDb { 0.0f };
+    // the OUTPUT meters: the true peak of each channel since the editor last read it (the editor takes it with exchange (-120), so a peak between two
+    // repaints is never missed), and the OVER lamp: latched when the output true peak went above the limiter ceiling; cleared by RESET or a click on the lamp
+    std::atomic<float> tpBarL { -120.0f }, tpBarR { -120.0f };
+    std::atomic<bool> overLatch { false };
+    vibr::ui::PeakTap outMeter;                                                     // sample peak of the output per channel, read by the editor's L / R dB meters (30 Hz)
     ms1::MultibandComp mband;
     ms1::Imager imager;
     ReferencePlayer reference;                                                      // the reference track (loaded from the editor)
@@ -91,10 +98,22 @@ public:
     bool matchEq();                                                                // false: no reference or not enough input yet
     void requestReset() { resetFlag.store (true); }                 // the RESET button: integrated loudness, range and the true-peak hold start again
 
+    // AUTO (stages 1 to 3, see AutoMaster.h / AutoAnalyzer.h): the measurements of the chain input run on the audio thread while `autoAn.learning`; the editor reads snapshots
+    ms1::AutoAnalyzer autoAn;
+    std::atomic<int> autoStyle { 0 };                               // Neutral / Warm / Bright / Club: stored here, not a host parameter (the style curve of the AUTO EQ rule)
+    void autoStart() { autoAn.learning.store (true); }
+    void autoStop() { autoAn.learning.store (false); }
+    void autoClear() { autoAn.clearRequest.store (true); }
+    ms1::autom::AutoContext autoContext() const;                    // the current settings and the target, for ms1::autom::propose
+    // writes the checked rows through the parameters, in ONE undo transaction (one host automation write per changed parameter); returns the number of parameters written
+    int autoApply (const ms1::autom::Proposal&, bool input, bool eq, bool multiband, bool imager, bool bus, bool limiter, bool output = false);
+    // the current state goes to slot A, the current state with the proposal to slot B; the plugin ends on B
+    int autoApplyToB (const ms1::autom::Proposal&, bool input, bool eq, bool multiband, bool imager, bool bus, bool limiter, bool output = false);
+
 private:
     void handleAsyncUpdate() override { const int i = pendingProgram.exchange (-1); if (i >= 0) presets.applyFactory (i); }
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
-    void processChunk (float* l, float* r, int n);          // a part of a block that fits the scratch buffers
+    void processChunk (float* l, float* r, int n, const float* keyL = nullptr, const float* keyR = nullptr);          // a part of a block that fits the scratch buffers
 
     ms1::Eq eq;
     juce::dsp::Convolution linConv;                                                 // the linear-phase EQ (a symmetric FIR from the bands)
@@ -118,6 +137,9 @@ private:
     void updateMessageThread();                                                     // 20 Hz on the message thread: the linear-phase IR, the learning of the input spectrum
     ms1::Colour colour;
     ms1::BusCompressor bus;
+public:
+    std::atomic<bool> extKey { false };                 // true while the host's sidechain is the bus compressor key (the EXT lamp)
+private:
     ms1::Limiter limiter;
     ms1::Dither dither;
     ms1::TruePeak meterTp[2];
@@ -135,6 +157,8 @@ private:
     std::array<std::vector<float>, 2> refBuf;
     float refAct = 0.0f, refGainDb = 0.0f;
     juce::SmoothedValue<float> powerSmooth, inSmooth, outSmooth;
+    std::array<std::vector<float>, 2> keyIn, keyDelay, keyOut;     // the sidechain key of the block, its delay line and the key delayed to meet the bus compressor
+    int keyPos = 0;
     std::array<std::vector<float>, 2> dryDelay, dryOut;     // the delay line of the dry sound and the delayed dry sound of the block being processed
     int dryPos = 0, lastLatency = -1;
     float autoGain = 0.0f, sampleRateNow = 48000.0f;

@@ -12,7 +12,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout DY1AudioProcessor::createLay
     };
     const auto flag = [&layout] (const char* id, const char* name, bool def)
     {
-        layout.add (std::make_unique<AudioParameterBool> (ParameterID { id, 1 }, name, def));
+        layout.add (std::make_unique<AudioParameterBool> (ParameterID { id, 1 }, name, def, AudioParameterBoolAttributes().withMeta (juce::String (id) == "power" || juce::String (id) == "bypass")));
     };
     // the release knobs are logarithmic: 10 ms .. 800 ms
     const auto rel = [&layout] (const char* id, const char* name, float def)
@@ -41,7 +41,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout DY1AudioProcessor::createLay
 DY1AudioProcessor::DY1AudioProcessor()
     : AudioProcessor (BusesProperties()
                           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
-                          .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
+                          .withOutput ("Output", juce::AudioChannelSet::stereo(), true)
+                          .withInput  ("Sidechain", juce::AudioChannelSet::stereo(), false)),
       apvts (*this, nullptr, "DY1", createLayout())
 {
     const auto get = [this] (const char* id) { return apvts.getRawParameterValue (id); };
@@ -53,7 +54,9 @@ DY1AudioProcessor::DY1AudioProcessor()
 
 bool DY1AudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
-    return layouts.getMainOutputChannelSet() == juce::AudioChannelSet::stereo() && layouts.getMainInputChannelSet() == juce::AudioChannelSet::stereo();
+    if (layouts.getMainOutputChannelSet() != juce::AudioChannelSet::stereo() || layouts.getMainInputChannelSet() != juce::AudioChannelSet::stereo()) return false;
+    const auto sc = layouts.getChannelSet (true, 1);                       // the sidechain: off, mono or stereo
+    return sc.isDisabled() || sc == juce::AudioChannelSet::mono() || sc == juce::AudioChannelSet::stereo();
 }
 
 void DY1AudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
@@ -62,6 +65,7 @@ void DY1AudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     powerSmooth.reset (sampleRate, 0.02);
     powerSmooth.setCurrentAndTargetValue (pPower->load() > 0.5f ? 1.0f : 0.0f);
     dryBuf.setSize (2, juce::jmax (samplesPerBlock, 8192));
+    keyBuf.setSize (2, juce::jmax (samplesPerBlock, 8192));
 }
 
 void DY1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
@@ -70,6 +74,24 @@ void DY1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     juce::ScopedNoDenormals noDenormals;
     const int n = buffer.getNumSamples();
     if (n == 0 || buffer.getNumChannels() < 2 || n > dryBuf.getNumSamples()) return;
+
+    // the external key: the sidechain bus when the host has connected it (a mono key feeds both channels); it drives the gate, expander and transient detectors
+    const float* keyL = nullptr; const float* keyR = nullptr;
+    if (auto* scBus = getBus (true, 1); scBus != nullptr && scBus->isEnabled() && n <= keyBuf.getNumSamples())
+    {
+        const auto sc = getBusBuffer (buffer, true, 1);
+        if (sc.getNumChannels() > 0)
+        {
+            for (int c = 0; c < 2; ++c)
+            {
+                const auto* src = sc.getReadPointer (juce::jmin (c, sc.getNumChannels() - 1));
+                auto* k = keyBuf.getWritePointer (c);
+                for (int i = 0; i < n; ++i) k[i] = std::abs (src[i]) < 1.0e4f ? src[i] : 0.0f;
+            }
+            keyL = keyBuf.getReadPointer (0); keyR = keyBuf.getReadPointer (1);
+        }
+    }
+    extKey.store (keyL != nullptr, std::memory_order_relaxed);
 
     const float from = powerSmooth.getCurrentValue();
     powerSmooth.setTargetValue (pPower->load() > 0.5f ? 1.0f : 0.0f);
@@ -83,7 +105,7 @@ void DY1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     p.expOn = pExpOn->load() > 0.5f;      p.expThresh = pExpThresh->load();      p.expRatio = pExpRatio->load();   p.expRelease = pExpRelease->load();
     p.transOn = pTransOn->load() > 0.5f;  p.attack = pAttack->load();            p.sustain = pSustain->load();
     p.mix = pMix->load() * 0.01f;
-    engine.process (buffer.getWritePointer (0), buffer.getWritePointer (1), n, p, juce::Decibels::decibelsToGain (pLevel->load()));
+    engine.process (buffer.getWritePointer (0), buffer.getWritePointer (1), n, p, juce::Decibels::decibelsToGain (pLevel->load()), keyL, keyR);
 
     if (from != 1.0f || to != 1.0f)                                  // power switch: crossfade to the untouched signal
         for (int c = 0; c < 2; ++c)

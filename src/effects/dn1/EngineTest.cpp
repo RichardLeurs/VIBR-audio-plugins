@@ -31,6 +31,17 @@ std::vector<float> run (const dn1::Params& p, const std::vector<float>& inL, con
     if (outR) *outR = r;
     return l;
 }
+std::vector<float> runKey (const dn1::Params& p, const std::vector<float>& in, const std::vector<float>& key, float level = 1.0f)
+{
+    dn1::Engine e; e.prepare (fs);
+    auto l = in, r = in;
+    for (size_t pos = 0; pos < l.size(); pos += 480)
+    {
+        const int n = (int) std::min<size_t> (480, l.size() - pos);
+        e.process (l.data() + pos, r.data() + pos, n, p, level, key.data() + pos, key.data() + pos);
+    }
+    return l;
+}
 double rms (const std::vector<float>& v, int a, int b) { double s = 0; for (int i = a; i < b; ++i) s += (double) v[(size_t) i] * v[(size_t) i]; return std::sqrt (s / (b - a)); }
 double diffDb (const std::vector<float>& a, const std::vector<float>& b, int from, int shiftA)       // a is delayed by shiftA samples against b
 {
@@ -171,6 +182,45 @@ int main()
         check (ok, "every mode, type and extreme setting stays finite and bounded");
         std::vector<float> silent ((int) fs, 0.0f); dn1::Params p; p.mode = dn1::Compressor; const auto so = run (p, silent, silent); double e = 0; for (float y : so) e += (double) y * y;
         check (e == 0.0, "silence in, silence out");
+    }
+    std::printf ("external sidechain key\n");
+    {
+        const auto loud = noise ((int) (3.0f * fs), 0.5f, 21), quiet = noise ((int) (3.0f * fs), 0.01f, 22), silent = std::vector<float> ((size_t) (3.0f * fs), 0.0f);
+        const int a = (int) (1.5f * fs), b = (int) (3.0f * fs);
+        dn1::Params sh; sh.mode = dn1::Shaper; sh.shaper.gateOn = true; sh.shaper.gateThresh = -40.0f; sh.shaper.gateRelease = 50.0f;
+        dn1::Params cv; cv.mode = dn1::Compressor; cv.variant = dn1::Vca; cv.compThresh = -30.0f; cv.compRatio = 8.0f; cv.compMakeup = 0.0f; cv.compAttackMs = 1.0f; cv.compReleaseMs = 100.0f;
+        dn1::Params cs = cv; cs.variant = dn1::Sustain; cs.sustain = 0.7f;
+        dn1::Params pk; pk.mode = dn1::Limiter; pk.variant = dn1::Peak; pk.limThresh = -20.0f; pk.limCeiling = -1.0f; pk.limRelease = 80.0f;
+        dn1::Params tp = pk; tp.variant = dn1::TruePeak;
+
+        for (const auto* pp : { &sh, &cv, &cs })                                           // the key equal to the input = no key, bit exact
+        {
+            const auto x = music, ref = run (*pp, x, x), o = runKey (*pp, x, x);
+            bool same = ref.size() == o.size(); for (size_t i = 0; same && i < ref.size(); ++i) same = ref[i] == o[i];
+            check (same, pp == &sh ? "SHAPER: the key equal to the input is bit exact with no key" : pp == &cv ? "VCA: the key equal to the input is bit exact with no key" : "SUSTAIN: the key equal to the input is bit exact with no key");
+        }
+        {   // a quiet signal is not compressed by a silent key and is compressed by a loud key
+            const auto none = runKey (cv, in, silent), pumped = runKey (cv, quiet, loud), clean = runKey (cv, quiet, silent);
+            const double cleanDb = 20.0 * std::log10 (rms (clean, a, b) / rms (quiet, a - lat, b - lat)), pumpDb = 20.0 * std::log10 (rms (pumped, a, b) / rms (quiet, a - lat, b - lat));
+            std::printf ("  VCA: quiet signal, silent key %.2f dB, loud key %.2f dB\n", cleanDb, pumpDb);
+            check (std::abs (cleanDb) < 0.5, "VCA: a silent key leaves a quiet signal alone");
+            check (pumpDb < -6.0, "VCA: a loud key pulls a quiet signal down by more than 6 dB");
+            (void) none;
+        }
+        {   // the gate: a silent key closes it, a loud key opens it
+            const auto tone = noise ((int) (3.0f * fs), 0.2f, 23);
+            const auto closed = runKey (sh, tone, silent), open = runKey (sh, tone, loud);
+            const double closedDb = 20.0 * std::log10 (rms (closed, a, b) / rms (tone, a, b) + 1e-12), openDb = 20.0 * std::log10 (rms (open, a, b) / rms (tone, a, b));
+            std::printf ("  gate: silent key %.1f dB, loud key %.2f dB\n", closedDb, openDb);
+            check (closedDb < -40.0, "gate: a silent key closes the gate on a loud signal");
+            check (std::abs (openDb) < 1.0, "gate: a loud key keeps it open");
+        }
+        for (const auto* pp : { &pk, &tp })                                                // the limiters protect their own signal and ignore the key
+        {
+            const auto x = noise ((int) (3.0f * fs), 0.8f, 24), ref = run (*pp, x, x), o = runKey (*pp, x, silent);
+            bool same = ref.size() == o.size(); for (size_t i = 0; same && i < ref.size(); ++i) same = ref[i] == o[i];
+            check (same, pp == &pk ? "PEAK limiter ignores the key" : "TRUE PEAK limiter ignores the key");
+        }
     }
     std::printf ("%d problems\n", problems);
     return problems == 0 ? 0 : 1;

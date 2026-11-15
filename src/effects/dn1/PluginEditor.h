@@ -2,6 +2,7 @@
 #pragma once
 
 #include "PluginProcessor.h"
+#include "ui/OutputMeter.h"
 #include "ui/VibrUI.h"
 
 // DN-1 window (1200 x 690), on the shared UI of src/common/ui: header (name, preset chip, A / B, undo), the CONTROLS panel with the mode tab pills on its top edge
@@ -51,8 +52,11 @@ private:
     juce::Image grain;
     std::array<Knob, 25> knobs;
     std::unique_ptr<MidiLearnUI> midiUI;       // right-click a knob: MIDI learn (rebuilt when the shown knobs change)
+    bool extShown = false;
+    vibr::ui::OutputMeter meter;                                           // output dB meters
     juce::uint64 midiShown = 0;
     vibr::ui::PresetBarState barState;
+    int shownKey = -1;
     juce::ParameterAttachment powerAtt;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DN1AudioProcessorEditor)

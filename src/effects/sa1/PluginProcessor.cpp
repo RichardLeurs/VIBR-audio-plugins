@@ -12,7 +12,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout SA1AudioProcessor::createLay
     };
     const auto flag = [&layout] (const char* id, const char* name, bool def)
     {
-        layout.add (std::make_unique<AudioParameterBool> (ParameterID { id, 1 }, name, def));
+        layout.add (std::make_unique<AudioParameterBool> (ParameterID { id, 1 }, name, def, AudioParameterBoolAttributes().withMeta (juce::String (id) == "power" || juce::String (id) == "bypass")));
     };
     flag ("power", "Power", true);
     flag ("bypass", "Bypass", false);

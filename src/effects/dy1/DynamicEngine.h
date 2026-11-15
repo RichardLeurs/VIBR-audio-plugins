@@ -52,7 +52,8 @@ public:
         histPos.store (0);
     }
 
-    void process (float* l, float* r, int n, const Params& p, float levelGain)
+    // keyL / keyR: an external key (sidechain) for the gate, expander and transient detectors; null = the input itself (the same as before)
+    void process (float* l, float* r, int n, const Params& p, float levelGain, const float* keyL = nullptr, const float* keyR = nullptr)
     {
         const float thrG = dbToGain (p.gateThresh), closeThr = thrG * 0.7f;
         const float envRelG = timeCoef (0.03f, fs), openG = timeCoef (0.001f, fs), closeG = timeCoef (p.gateRelease * 0.001f, fs);
@@ -65,7 +66,7 @@ public:
         for (int i = 0; i < n; ++i)
         {
             const float dryL = l[i], dryR = r[i];
-            const float inLevel = std::max (std::abs (dryL), std::abs (dryR));
+            const float inLevel = keyL != nullptr ? std::max (std::abs (keyL[i]), std::abs (keyR[i])) : std::max (std::abs (dryL), std::abs (dryR));
             float xl = dryL, xr = dryR, g = 1.0f;
 
             if (p.gateOn)
@@ -80,7 +81,7 @@ public:
 
             if (p.expOn)
             {
-                const float a = std::max (std::abs (xl), std::abs (xr));
+                const float a = keyL != nullptr ? inLevel : std::max (std::abs (xl), std::abs (xr));
                 envE = a > envE ? a : a + (envE - a) * envRelE;
                 const float under = p.expThresh - gainToDb (envE);                 // dB below the threshold
                 float red = 0.0f;
@@ -95,7 +96,7 @@ public:
 
             if (p.transOn)
             {
-                const float a = std::max (std::abs (xl), std::abs (xr));
+                const float a = keyL != nullptr ? inLevel : std::max (std::abs (xl), std::abs (xr));
                 fast = a > fast ? a + (fast - a) * fa : a + (fast - a) * fr;
                 slow = a > slow ? a + (slow - a) * sa : a + (slow - a) * sr2;
                 const float d = gainToDb (fast + 1.0e-6f) - gainToDb (slow + 1.0e-6f);      // > 0 at an onset, < 0 in the tail

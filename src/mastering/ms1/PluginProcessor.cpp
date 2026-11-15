@@ -81,7 +81,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout MS1AudioProcessor::createLay
     {
         layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id, 1 }, name, NormalisableRange<float> (lo, hi, step), def, attrsFor (id)));
     };
-    layout.add (std::make_unique<AudioParameterBool> (ParameterID { "power", 1 }, "Power", true));
+    layout.add (std::make_unique<AudioParameterBool> (ParameterID { "power", 1 }, "Power", true, juce::AudioParameterBoolAttributes().withMeta (true)));
     layout.add (vibr::makeBypassParam());
     flt ("inGain", "Input Gain", -24.0f, 24.0f, 0.1f, 0.0f);
     flt ("limGain", "Limiter Gain", 0.0f, 24.0f, 0.1f, 0.0f);
@@ -203,7 +203,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout MS1AudioProcessor::createLay
 MS1AudioProcessor::MS1AudioProcessor()
     : AudioProcessor (BusesProperties()
                           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
-                          .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
+                          .withOutput ("Output", juce::AudioChannelSet::stereo(), true)
+                          .withInput  ("Sidechain", juce::AudioChannelSet::stereo(), false)),
       apvts (*this, &undoManager, "MS1", createLayout()),
       presets (*this, apvts, undoManager, "MS-1 Presets", ms1FactoryPresets(), { "power", "bypass", "delta", "refAB", "refPlay", "refMatch", "refFollow" }, { "refPath" })
 {
@@ -258,7 +259,9 @@ MS1AudioProcessor::~MS1AudioProcessor()
 
 bool MS1AudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
-    return layouts.getMainOutputChannelSet() == juce::AudioChannelSet::stereo() && layouts.getMainInputChannelSet() == juce::AudioChannelSet::stereo();
+    if (layouts.getMainOutputChannelSet() != juce::AudioChannelSet::stereo() || layouts.getMainInputChannelSet() != juce::AudioChannelSet::stereo()) return false;
+    const auto sc = layouts.getChannelSet (true, 1);                       // the sidechain: off, mono or stereo
+    return sc.isDisabled() || sc == juce::AudioChannelSet::mono() || sc == juce::AudioChannelSet::stereo();
 }
 
 void MS1AudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
@@ -294,12 +297,17 @@ void MS1AudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     for (auto& b : refBuf) b.assign ((size_t) juce::jmax (samplesPerBlock, 4096), 0.0f);
     refAct = 0.0f;
     loudness.prepare (sampleRateNow);
+    autoAn.prepare (sampleRateNow);
     specPre.prepare (sampleRateNow); specPost.prepare (sampleRateNow);
     levels.prepare (sampleRateNow); stereoMeter.prepare (sampleRateNow);
     dither.reset();
     for (auto& t : meterTp) t.reset();
     for (auto& d : dryDelay) d.assign (16384, 0.0f);
+    for (auto& d : keyDelay) d.assign (16384, 0.0f);
+    for (auto& d : keyIn) d.assign ((size_t) juce::jmax (samplesPerBlock, 4096), 0.0f);
+    keyPos = 0;
     for (auto& d : dryOut) d.assign ((size_t) juce::jmax (samplesPerBlock, 4096), 0.0f);
+    for (auto& d : keyOut) d.assign ((size_t) juce::jmax (samplesPerBlock, 4096), 0.0f);
     dryPos = 0;
     powerSmooth.reset (sampleRate, 0.02); powerSmooth.setCurrentAndTargetValue (pPower->load() > 0.5f ? 1.0f : 0.0f);
     inSmooth.reset (sampleRate, 0.02);    inSmooth.setCurrentAndTargetValue (juce::Decibels::decibelsToGain (pInGain->load()));
@@ -313,19 +321,45 @@ void MS1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
 {
     juce::ScopedNoDenormals noDenormals;
     const int total = buffer.getNumSamples(), chunk = (int) dryOut[0].size();
-    if (total == 0 || buffer.getNumChannels() < 2) return;
+    if (total == 0 || buffer.getNumChannels() < 2) { outMeter.measure (buffer, total); return; }
     for (int c = 0; c < 2; ++c)                                                     // NaN, inf and absurd values from the host become silence / a safe level: the chain never sees them
     {
         auto* d = buffer.getWritePointer (c);
         for (int i = 0; i < total; ++i) if (! (std::abs (d[i]) < 1.0e4f)) d[i] = 0.0f;          // false for NaN and inf too
     }
+    // the external key (the bus compressor's sidechain): the sidechain bus when the host has connected it; a mono key feeds both channels
+    bool haveKey = false;
+    if (auto* scBus = getBus (true, 1); scBus != nullptr && scBus->isEnabled() && total <= (int) keyIn[0].size())
+    {
+        const auto sc = getBusBuffer (buffer, true, 1);
+        if (sc.getNumChannels() > 0)
+        {
+            for (int c = 0; c < 2; ++c)
+            {
+                const auto* src = sc.getReadPointer (juce::jmin (c, sc.getNumChannels() - 1));
+                auto* k = keyIn[(size_t) c].data();
+                for (int i = 0; i < total; ++i) k[i] = std::abs (src[i]) < 1.0e4f ? src[i] : 0.0f;
+            }
+            haveKey = true;
+        }
+    }
+    extKey.store (haveKey, std::memory_order_relaxed);
     for (int pos = 0; pos < total; pos += chunk)                    // a host block larger than the scratch buffers is processed in parts
-        processChunk (buffer.getWritePointer (0) + pos, buffer.getWritePointer (1) + pos, std::min (chunk, total - pos));
+        processChunk (buffer.getWritePointer (0) + pos, buffer.getWritePointer (1) + pos, std::min (chunk, total - pos),
+                      haveKey ? keyIn[0].data() + pos : nullptr, haveKey ? keyIn[1].data() + pos : nullptr);
+    outMeter.measure (buffer, total);                               // the OUTPUT dB meters of the editor (sample peak of what leaves the plugin)
 }
 
-void MS1AudioProcessor::processChunk (float* l, float* r, int n)
+void MS1AudioProcessor::processChunk (float* l, float* r, int n, const float* keyL, const float* keyR)
 {
-    if (resetFlag.exchange (false)) { loudness.resetIntegrated(); levels.reset(); stereoMeter.reset(); tpMaxDb.store (-120.0f); }
+    if (resetFlag.exchange (false)) { loudness.resetIntegrated(); levels.reset(); stereoMeter.reset(); tpMaxDb.store (-120.0f); overLatch.store (false); autoAn.clear(); }
+    {   // AUTO: measures the chain input (before the trim); only reads l / r, so the output does not depend on it
+        float xo[3] = { pXover[0]->load(), pXover[1]->load(), pXover[2]->load() };
+        xo[1] = std::max (xo[1], xo[0] * 1.2f); xo[2] = std::max (xo[2], xo[1] * 1.2f);           // the crossovers keep their order, as in the multiband
+        float ix[2] = { pImgX[0]->load(), 0.0f };
+        ix[1] = std::max (pImgX[1]->load(), ix[0] * 1.2f);                                          // the imager's crossovers, ordered as in the imager
+        autoAn.process (l, r, n, pPower->load() > 0.5f, xo, ix);
+    }
     const int specSrc = specSourceOpt.load (std::memory_order_relaxed), specMd = specModeOpt.load (std::memory_order_relaxed);
     specPre.setMode (specMd); specPost.setMode (specMd);
     const auto pick = [specSrc] (float a, float b) { return specSrc == 1 ? 0.5f * (a - b) : specSrc == 2 ? a : specSrc == 3 ? b : 0.5f * (a + b); };          // the spectrum source: mid, side, left, right
@@ -340,6 +374,19 @@ void MS1AudioProcessor::processChunk (float* l, float* r, int n)
     const bool linearMb = pMbPhase->load() > 0.5f;
     const int latency = limiter.latency() + ms1::Colour::kLatency + (linearEq ? ms1::linearIrLength (sampleRateNow) / 2 : 0) + (linearMb ? ms1::linearIrLength (sampleRateNow) / 2 : 0);          // the lookahead + the true-peak filter + the oversampling filters of the colour stage
     if (latency != lastLatency) { lastLatency = latency; setLatencySamples (latency); }
+
+    // the sidechain key, delayed like the signal that reaches the bus compressor (the linear-phase stages and the colour stage come before it; the limiter after)
+    const int keyLatency = ms1::Colour::kLatency + (linearEq ? ms1::linearIrLength (sampleRateNow) / 2 : 0) + (linearMb ? ms1::linearIrLength (sampleRateNow) / 2 : 0);
+    for (int c = 0; c < 2; ++c)
+    {
+        const auto* kin = c == 0 ? keyL : keyR;
+        for (int i = 0; i < n; ++i)
+        {
+            keyDelay[(size_t) c][(size_t) ((keyPos + i) & 16383)] = kin != nullptr ? kin[i] : 0.0f;
+            keyOut[(size_t) c][(size_t) i] = keyDelay[(size_t) c][(size_t) ((keyPos + i - keyLatency) & 16383)];
+        }
+    }
+    keyPos = (keyPos + n) & 16383;
 
     // the loudness target: a slow, bounded controller moves the limiter gain so the short-term loudness of the output reaches the target
     const bool autoOn = pAuto->load() > 0.5f;
@@ -481,7 +528,7 @@ void MS1AudioProcessor::processChunk (float* l, float* r, int n)
         bp.on = pBusOn->load() > 0.5f;  bp.thresholdDb = pBusThresh->load();  bp.makeupDb = pBusMakeup->load();  bp.mix = pBusMix->load() * 0.01f;
         bp.ratio = (int) std::lround (pBusRatio->load());  bp.attack = (int) std::lround (pBusAttack->load());
         bp.release = (int) std::lround (pBusRelease->load());  bp.sidechain = (int) std::lround (pBusSc->load());
-        bus.process (l, r, n, bp);
+        bus.process (l, r, n, bp, keyL != nullptr ? keyOut[0].data() : nullptr, keyL != nullptr ? keyOut[1].data() : nullptr);
     }
 
     // limiter
@@ -549,6 +596,9 @@ void MS1AudioProcessor::processChunk (float* l, float* r, int n)
     }
     if (pMonoCheck->load() > 0.5f) for (int i = 0; i < n; ++i) { const float m = 0.5f * (io[0][i] + io[1][i]); io[0][i] = io[1][i] = m; }        // a listening aid: the output summed to mono (the meters above measured the stereo signal)
     tpNowL.store (dL, std::memory_order_relaxed); tpNowR.store (dR, std::memory_order_relaxed);
+    if (dL > tpBarL.load (std::memory_order_relaxed)) tpBarL.store (dL, std::memory_order_relaxed);
+    if (dR > tpBarR.load (std::memory_order_relaxed)) tpBarR.store (dR, std::memory_order_relaxed);
+    if (std::max (dL, dR) > pCeiling->load() + 0.05f) overLatch.store (true, std::memory_order_relaxed);
     if (std::max (dL, dR) > tpMaxDb.load (std::memory_order_relaxed)) tpMaxDb.store (std::max (dL, dR), std::memory_order_relaxed);
 }
 
@@ -638,6 +688,59 @@ bool MS1AudioProcessor::matchEq()
         set (id + "Mode", 0.0f); set (id + "Dyn", 0.0f);
     }
     return true;
+}
+
+//==============================================================================
+// AUTO: the settings the proposal is compared with, and writing a proposal through the parameters
+ms1::autom::AutoContext MS1AudioProcessor::autoContext() const
+{
+    ms1::autom::AutoContext c;
+    c.targetLufs = pTarget->load(); c.ceilingDb = pCeiling->load(); c.style = autoStyle.load();
+    c.curInGain = pInGain->load(); c.curHpf = pHpf->load() < 1.0f ? 0.0f : std::max (10.0f, pHpf->load());
+    c.curBusOn = pBusOn->load() > 0.5f; c.curBusRatio = (int) std::lround (pBusRatio->load()); c.curBusAttack = (int) std::lround (pBusAttack->load());
+    c.curBusRelease = (int) std::lround (pBusRelease->load()); c.curBusThresh = pBusThresh->load();
+    c.curEqOn = pEqOn->load() > 0.5f;
+    for (size_t i = 0; i < c.curEq.size(); ++i)
+    {
+        const auto& e = pEq[i];
+        c.curEq[i] = { e.on->load() > 0.5f, e.freq->load(), e.gain->load(), e.q->load(), (int) std::lround (e.mode->load()), pEqDyn[i].dyn->load() > 0.5f };
+    }
+    if (const float* ref = reference.spectrum()) { c.hasRef = true; std::copy (ref, ref + ms1::kBands, c.refDb.begin()); }
+    c.curMbOn = pMbOn->load() > 0.5f; c.curMbMix = pMbMix->load();
+    for (size_t k = 0; k < c.curMb.size(); ++k)
+    {
+        const auto& m = pMb[k];
+        c.curMb[k] = { m.on->load() > 0.5f, m.autoRel->load() > 0.5f, m.thresh->load(), m.ratio->load(), m.attack->load(), m.make->load() };
+    }
+    c.curImgOn = pImgOn->load() > 0.5f; c.curImgSafe = pImgSafe->load() > 0.5f; c.curMonoBelow = pMonoBelow->load() < 1.0f ? 0.0f : pMonoBelow->load();
+    for (int k = 0; k < 3; ++k) c.curWidth[k] = pWidth[k]->load();
+    c.curOutGain = pOutGain->load(); c.curDither = (int) std::lround (pBits->load());
+    c.curLimAuto = pAuto->load() > 0.5f; c.curLimRelAuto = pLimRelAuto->load() > 0.5f; c.curLimChar = (int) std::lround (pChar->load());
+    return c;
+}
+
+int MS1AudioProcessor::autoApply (const ms1::autom::Proposal& p, bool input, bool eq, bool multiband, bool imager, bool bus, bool limiter, bool output)
+{
+    const auto writes = ms1::autom::paramWrites (p, input, eq, multiband, imager, bus, limiter, output);
+    if (writes.empty()) return 0;
+    undoManager.beginNewTransaction ("AUTO");
+    int n = 0;
+    for (const auto& w : writes)
+        if (auto* par = apvts.getParameter (w.id))
+        {
+            const float v = par->convertTo0to1 (w.value);
+            if (std::abs (par->getValue() - v) < 1.0e-6f) continue;                    // unchanged: no automation write
+            par->beginChangeGesture(); par->setValueNotifyingHost (v); par->endChangeGesture();
+            ++n;
+        }
+    return n;
+}
+
+int MS1AudioProcessor::autoApplyToB (const ms1::autom::Proposal& p, bool input, bool eq, bool multiband, bool imager, bool bus, bool limiter, bool output)
+{
+    presets.copyToOtherSlot();                                                          // the other slot holds the current state
+    if (presets.abSlot() == 0) presets.switchAB (1);                                    // slot A keeps the state from before; the live state is B, which gets the proposal
+    return autoApply (p, input, eq, multiband, imager, bus, limiter, output);
 }
 
 void MS1AudioProcessor::setSpecOption (SpecOption o, int v)

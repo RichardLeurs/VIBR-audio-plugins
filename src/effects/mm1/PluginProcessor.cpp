@@ -25,7 +25,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout MemoryManAudioProcessor::cre
     knob ("chrsVibr", "Chrs/Vibr",     3.0f);   // modulation rate
     knob ("depth",    "Depth",         2.0f);   // modulation depth
     knob ("delay",    "Delay",         5.0f);
-    l.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "effect", 1 }, "Effect On", true));   // footswitch
+    l.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "effect", 1 }, "Effect On", true, juce::AudioParameterBoolAttributes().withMeta (true)));   // footswitch
     l.add (vibr::makeBypassParam());
     // Tempo sync (added later, appended so the existing ids keep their order). Off = the Delay knob works as before.
     l.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "sync", 1 }, "Sync (delay time follows the host tempo)", false));

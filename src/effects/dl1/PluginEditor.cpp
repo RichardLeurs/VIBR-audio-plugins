@@ -11,15 +11,17 @@ constexpr float kW = 1200.0f, kH = 690.0f, kRow1Y = 134.0f, kRow1H = 247.0f, kRo
 const ui::Palette kPal { juce::Colour (53, 184, 232), juce::Colour (10, 33, 42) };            // the Delay & Echo colour #35B8E8 and its print
 
 // panels: 0 TIME (with the mode tabs), 1 VOICING, 2 ECHOES (display), 3 OUTPUT
-constexpr float kPanelX[4] = { 20.0f, 730.0f, 20.0f, 930.0f }, kPanelW[4] = { 700.0f, 450.0f, 900.0f, 250.0f };
+constexpr float kPanelX[4] = { 20.0f, 730.0f, 20.0f, 840.0f }, kPanelW[4] = { 700.0f, 450.0f, 810.0f, 340.0f };
 juce::Rectangle<float> panelRect (int i) { return { kPanelX[i], i < 2 ? kRow1Y : kRow2Y, kPanelW[i], i < 2 ? kRow1H : kRow2H }; }
 juce::Point<float> knobCentre (int panel, int k, int n)
 {
     const auto r = panelRect (panel);
-    const float pitch = panel == 0 ? 96.0f : n >= 5 ? 86.0f : 108.0f;
-    return { r.getCentreX() + pitch * ((float) k - 0.5f * (float) (n - 1)), r.getY() + 92.0f };
+    const float pitch = panel == 0 ? 96.0f : panel == 3 ? 96.0f : n >= 5 ? 86.0f : 108.0f;
+    const float cx = panel == 3 ? r.getX() + 116.0f : r.getCentreX();             // the output knobs left of the dB meters, the pair centred in the panel
+    return { cx + pitch * ((float) k - 0.5f * (float) (n - 1)), r.getY() + 92.0f };
 }
-juce::Rectangle<float> plotRect() { const auto r = panelRect (2); return { r.getX() + 24.0f, r.getY() + 34.0f, r.getWidth() - 48.0f, r.getHeight() - 74.0f }; }
+juce::Point<float> meterOrigin() { const auto r = panelRect (3); return { r.getRight() - 96.0f, r.getY() + 46.0f }; }       // 110 high: the bars end on the MIX / LEVEL labels (y + 156), the peak values sit on the readout row (y + 182)
+juce::Rectangle<float> plotRect() { const auto r = panelRect (2); return { r.getX() + 24.0f, r.getY() + 30.0f, r.getWidth() - 48.0f, r.getHeight() - 95.0f }; }
 
 // the flat buttons of the TIME panel: the types (2 or 3), SYNC, the note length, HOLD, TAP
 juce::Rectangle<float> variantRect (int i) { const auto r = panelRect (0); return { r.getX() + 30.0f + (float) i * 96.0f, r.getY() + 204.0f, 90.0f, 30.0f }; }
@@ -81,6 +83,9 @@ DL1AudioProcessorEditor::~DL1AudioProcessorEditor()
 
 void DL1AudioProcessorEditor::timerCallback()
 {
+    meter.update (proc.outMeter);
+    if (const int shown = mode() * 8 + choice ("variant"); shown != shownKey) { shownKey = shown; layoutKnobs(); repaint(); }       // a preset, undo, A / B or automation changed the tab
+    repaint (panelRect (3).withTrimmedLeft (panelRect (3).getWidth() - 150.0f).expanded (2.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer());
     if (midiUI.needsRepaint()) { midiUI.tick(); repaint(); }
     repaint (panelRect (2).expanded (4.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer());
     if (barState.copiedAt != 0) { repaint (juce::Rectangle<float> (0.0f, 30.0f, 900.0f, 50.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer()); if (! barState.copiedRecently()) barState.copiedAt = 0; }
@@ -128,7 +133,7 @@ void DL1AudioProcessorEditor::drawEchoes (juce::Graphics& g)
     {
         g.setColour (kPal.ink.withAlpha (0.1f));
         g.drawLine (xOf (ms), r.getY() + 4.0f, xOf (ms), r.getBottom() - 4.0f, 1.0f);
-        drawText (g, ms < 1.0f ? "0" : ms >= 1000.0f ? juce::String (ms / 1000.0f, 1) + " s" : juce::String ((int) ms) + " ms", xOf (ms), r.getBottom() + 14.0f, 10.0f, kPal.ink.withAlpha (0.5f), false, 0.0f);
+        drawText (g, ms < 1.0f ? "0" : ms >= 1000.0f ? juce::String (ms / 1000.0f, 1) + " s" : juce::String ((int) ms) + " ms", xOf (ms), r.getBottom() + 18.0f, 13.0f, kPal.ink.withAlpha (0.5f), false, 0.0f);
     }
 
     const auto& eng = proc.getEngine();
@@ -145,7 +150,7 @@ void DL1AudioProcessorEditor::drawEchoes (juce::Graphics& g)
         g.setColour (kPal.ink.withAlpha (0.8f));
         const float dh = std::max (3.0f, half * std::clamp (0.25f + inLevel * 1.4f, 0.0f, 1.0f) * (0.4f + 0.6f * std::clamp (dryBase, 0.0f, 1.0f) * (1.0f - 0.4f * mixAmt)));
         g.fillRoundedRectangle (juce::Rectangle<float> (8.0f, 2.0f * dh).withCentre ({ xOf (0.0f), r.getCentreY() }), 3.0f);
-        drawText (g, "IN", xOf (0.0f), r.getY() + 8.0f, 10.0f, kPal.ink.withAlpha (0.55f), true, 0.1f);
+        drawText (g, "IN", xOf (0.0f), r.getY() + 10.0f, 13.0f, kPal.ink.withAlpha (0.55f), true, 0.1f);
         // the repeats. Every tap is one bar: tape heads and the DUAL delay B are further taps of the same kind; `fall` is what each pass of the loop keeps
         const int m = mode();
         const float effGain = analog ? std::sin (value ("anaBlend") * 0.01f * 0.5f * juce::MathConstants<float>::pi) : m == 0 ? std::pow (value ("digEffect") * 0.01f, 1.4f) : 0.7f;
@@ -198,7 +203,7 @@ void DL1AudioProcessorEditor::drawEchoes (juce::Graphics& g)
     const juce::String t = timeMs >= 1000.0f ? juce::String (timeMs / 1000.0f, 2) + " s" : juce::String ((int) std::lround (timeMs)) + " ms";
     drawText (g, "TIME " + t + (isOn ("sync") ? "   (" + juce::String (dl1::divisionName (choice ("division"))) + " AT " + juce::String ((int) std::lround (proc.hostBpm())) + " BPM)" : "")
                  + "     FEEDBACK " + juce::String ((int) std::lround (value ("feedback"))) + " %" + (hold ? "     HOLD" : ""),
-              r.getX() + 12.0f, r.getY() + r.getHeight() + 34.0f, 11.0f, kPal.ink.withAlpha (0.6f), true, 0.1f, juce::Justification::centredLeft);
+              r.getX() + 12.0f, r.getBottom() + 42.0f, 13.0f, kPal.ink.withAlpha (0.6f), true, 0.1f, juce::Justification::centredLeft);
 }
 
 //==============================================================================
@@ -212,7 +217,7 @@ void DL1AudioProcessorEditor::paint (juce::Graphics& g)
     g.addTransform (juce::AffineTransform::scale (scale()));
     ui::paintBody (g, kPal, kW, kH, grain);
     ui::paintHeader (g, kPal, "DL-1", "DELAY LAB", "ECHO EVOLUTION", isOn ("power"));
-    ui::paintPresetBar (g, kPal, proc.presets, proc.undoManager, kBarY, barState, false);
+    ui::paintPresetBar (g, kPal, proc.presets, proc.undoManager, kBarY, barState, false, 6.0f);
 
     const int m = mode();
     ui::paintPanel (g, kPal, panelRect (0), {});
@@ -224,17 +229,17 @@ void DL1AudioProcessorEditor::paint (juce::Graphics& g)
 
     // buttons: the types of the mode, SYNC, the note length, HOLD, TAP
     const int variant = juce::jlimit (0, dl1::variantCount (m) - 1, choice ("variant"));
-    if (m == 4) ui::paintFlatButton (g, kPal, variantRect (0).withWidth (282.0f), juce::String (dl1::voiceName (choice ("modVoice"))) + "  v", true, 11.0f);
+    if (m == 4) ui::paintFlatButton (g, kPal, variantRect (0).withWidth (282.0f), juce::String (dl1::voiceName (choice ("modVoice"))) + "  v", true, 13.0f);
     else for (int v = 0; v < dl1::variantCount (m); ++v)
-        ui::paintFlatButton (g, kPal, variantRect (v), dl1::variantName (m, v), v == variant, 11.0f);
-    ui::paintFlatButton (g, kPal, timeButtonRect (0), "SYNC", isOn ("sync"), 11.0f);
-    ui::paintFlatButton (g, kPal, timeButtonRect (1), dl1::divisionName (choice ("division")), isOn ("sync"), 11.0f, isOn ("sync") ? 1.0f : 0.55f);
-    ui::paintFlatButton (g, kPal, timeButtonRect (2), "HOLD", isOn ("hold"), 11.0f);
-    ui::paintFlatButton (g, kPal, timeButtonRect (3), "TAP", false, 11.0f);
+        ui::paintFlatButton (g, kPal, variantRect (v), dl1::variantName (m, v), v == variant, 13.0f);
+    ui::paintFlatButton (g, kPal, timeButtonRect (0), "SYNC", isOn ("sync"), 13.0f);
+    ui::paintFlatButton (g, kPal, timeButtonRect (1), dl1::divisionName (choice ("division")), isOn ("sync"), 13.0f, isOn ("sync") ? 1.0f : 0.55f);
+    ui::paintFlatButton (g, kPal, timeButtonRect (2), "HOLD", isOn ("hold"), 13.0f);
+    ui::paintFlatButton (g, kPal, timeButtonRect (3), "TAP", false, 13.0f);
     if (m == 3)
     {
-        ui::paintFlatButton (g, kPal, pingRect (0), "PING A", isOn ("dualPingA"), 11.0f);
-        ui::paintFlatButton (g, kPal, pingRect (1), "PING B", isOn ("dualPingB"), 11.0f);
+        ui::paintFlatButton (g, kPal, pingRect (0), "PING A", isOn ("dualPingA"), 13.0f);
+        ui::paintFlatButton (g, kPal, pingRect (1), "PING B", isOn ("dualPingB"), 13.0f);
     }
 
     // knobs
@@ -255,7 +260,9 @@ void DL1AudioProcessorEditor::paint (juce::Graphics& g)
         }
         const auto c = knobCentre (k.panel, k.index, k.count);
         ui::paintKnob (g, kPal, c, k.name, txt, lo, hi, panelRect (k.panel).getY() + 154.0f, panelRect (k.panel).getY() + 182.0f);
+        ui::paintValueArc (g, c, kKnobR, (float) k.slider.valueToProportionOfLength (k.slider.getValue()), kPal.body);
     }
+    meter.paint (g, meterOrigin().x, meterOrigin().y, isOn ("power"), kPal.body, kPal.ink, 110.0f, 26.0f, 13.0f);
     ui::paintFooter (g, kPal, kRow2Y + kRow2H + 35.0f);
 }
 

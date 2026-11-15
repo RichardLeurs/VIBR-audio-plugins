@@ -27,6 +27,9 @@ target_sources(MS-1
     MasteringStages.h
     ReferencePlayer.h
     MasteringEngine.h
+    AutoMaster.h
+    AutoAnalyzer.h
+    AutoTargets.h
 )
 
 target_compile_definitions(MS-1
@@ -81,3 +84,12 @@ target_sources(MS1HostTest PRIVATE HostTest.cpp)
 target_compile_definitions(MS1HostTest PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_MODAL_LOOPS_PERMITTED=1)
 target_link_libraries(MS1HostTest PRIVATE MS-1 rl_common juce::juce_audio_utils juce::juce_dsp juce::juce_recommended_config_flags juce::juce_recommended_lto_flags)
 set_target_properties(MS1HostTest PROPERTIES EXCLUDE_FROM_ALL TRUE)
+
+# MS-1 AUTO stage 1 (measurements, rules, apply): the analyser and the rules on synthetic signals, and the real processor (bit-exact output while learning, no
+# allocation, one undo step):  cmake --build <build dir> --target MS1AutoTest
+juce_add_console_app(MS1AutoTest PRODUCT_NAME "MS1AutoTest")
+juce_generate_juce_header(MS1AutoTest)
+target_sources(MS1AutoTest PRIVATE AutoTest.cpp)
+target_compile_definitions(MS1AutoTest PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_MODAL_LOOPS_PERMITTED=1)
+target_link_libraries(MS1AutoTest PRIVATE MS-1 rl_common juce::juce_audio_utils juce::juce_dsp juce::juce_recommended_config_flags juce::juce_recommended_lto_flags)
+set_target_properties(MS1AutoTest PROPERTIES EXCLUDE_FROM_ALL TRUE)

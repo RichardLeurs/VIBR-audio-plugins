@@ -8,6 +8,7 @@
 #include "TapTempo.h"
 #include "DelayEngine.h"
 #include "ui/Presets.h"
+#include "ui/OutputMeter.h"
 
 // DL-1 Delay Lab: digital (SD-1) and analog (MM-1) delay voicings in one plugin (see DelayEngine.h and .claude/lab_specs.md).
 // Host parameters: power, mode, variant, sync, division, time, feedback, low, high, modRate, modDepth, spread, hold, mix, level,
@@ -63,6 +64,7 @@ public:
     vibr::TapTempo midiTap { [this] (double ms) { tapAt (ms); } };   // MIDI tap (note-on or CC85) and the TAP button
     vibr::BypassLink bypassLink { apvts };                // host bypass <-> OFF / ON switch
     vibr::PresetManager presets;
+    vibr::ui::PeakTap outMeter;                                   // sample peak of the output, read by the editor
     std::atomic<int> currentProgram { 0 };
     std::atomic<int> pendingProgram { -1 };
     const dl1::Engine& getEngine() const { return engine; }

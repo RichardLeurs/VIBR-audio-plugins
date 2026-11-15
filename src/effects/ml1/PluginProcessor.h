@@ -7,6 +7,7 @@
 #include <JuceHeader.h>
 #include "ModEngine.h"
 #include "ui/Presets.h"
+#include "ui/OutputMeter.h"
 
 // ML-1 Modulation Lab: chorus, vibrato, flanger and phaser (see ModEngine.h).
 // Host parameters: power, mode, variant, sync, rate, depth, extra (width / feedback), mix, level.
@@ -60,6 +61,7 @@ public:
     vibr::PresetManager presets;
     std::atomic<int> currentProgram { 0 };
     std::atomic<int> pendingProgram { -1 };
+    vibr::ui::PeakTap outMeter;                                         // sample peak of the output, read by the editor
     const ml1::Engine& getEngine() const { return engine; }       // for the MOTION display of the editor
 
 private:

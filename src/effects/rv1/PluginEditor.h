@@ -49,6 +49,7 @@ private:
     vibr::ui::PresetBarState barState;
     juce::ParameterAttachment powerAtt;
     float scroll = 0.0f;
+    vibr::ui::OutputMeter meter;                                                                       // output dB meters
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (RV1AudioProcessorEditor)
 };

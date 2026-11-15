@@ -11,13 +11,15 @@ constexpr float kW = 1200.0f, kH = 690.0f, kRow1Y = 134.0f, kRow1H = 247.0f, kRo
 const ui::Palette kPal { juce::Colour (50, 196, 201), juce::Colour (9, 35, 36) };            // the Modulation colour #32C4C9 and its print
 
 // panels: 0 CONTROL (source tabs), 1 DESTINATION (destination tabs), 2 PATTERN (display), 3 OUTPUT
-constexpr float kPanelX[4] = { 20.0f, 730.0f, 20.0f, 930.0f }, kPanelW[4] = { 700.0f, 450.0f, 900.0f, 250.0f };
+constexpr float kPanelX[4] = { 20.0f, 730.0f, 20.0f, 840.0f }, kPanelW[4] = { 700.0f, 450.0f, 810.0f, 340.0f };
 juce::Rectangle<float> panelRect (int i) { return { kPanelX[i], i < 2 ? kRow1Y : kRow2Y, kPanelW[i], i < 2 ? kRow1H : kRow2H }; }
 juce::Point<float> knobCentre (int panel, int k, int n)
 {
     const auto r = panelRect (panel);
+    if (panel == 3) return { r.getX() + 68.0f + 96.0f * (float) k, r.getY() + 92.0f };      // the output knobs left of the dB meters, the pair centred in the panel
     return { r.getCentreX() + 108.0f * ((float) k - 0.5f * (float) (n - 1)), r.getY() + 92.0f };
 }
+juce::Point<float> meterOrigin() { const auto r = panelRect (3); return { r.getRight() - 96.0f, r.getY() + 46.0f }; }       // 110 high: the bars end on the knob name row (y + 156), the peak values sit on the readout row (y + 182)
 // the buttons of CONTROL: SYNC, the note length, FOLLOW HOST
 juce::Rectangle<float> controlButtonRect (int i)
 {
@@ -25,11 +27,14 @@ juce::Rectangle<float> controlButtonRect (int i)
     const auto r = panelRect (0);
     return { r.getX() + x[i], r.getY() + 204.0f, w[i], 30.0f };
 }
-juce::Rectangle<float> typeRect (int i) { const auto r = panelRect (1); return { r.getX() + 16.0f + (float) i * 85.0f, r.getY() + 204.0f, 80.0f, 30.0f }; }
+juce::Rectangle<float> typeRect (int i) { const auto r = panelRect (1); return { r.getX() + 15.0f + (float) i * 85.0f, r.getY() + 204.0f, 80.0f, 30.0f }; }
 // the PATTERN display: the lane, the traces, the pattern buttons
-juce::Rectangle<float> laneRect() { const auto r = panelRect (2); return { r.getX() + 24.0f, r.getY() + 30.0f, r.getWidth() - 48.0f, 82.0f }; }
-juce::Rectangle<float> traceRect() { const auto r = panelRect (2); return { r.getX() + 24.0f, r.getY() + 122.0f, r.getWidth() - 48.0f, 48.0f }; }
-juce::Rectangle<float> patternButtonRect (int i) { const auto r = panelRect (2); return { r.getX() + 24.0f + (float) i * 77.5f, r.getY() + 180.0f, 72.0f, 24.0f }; }
+juce::Rectangle<float> laneRect() { const auto r = panelRect (2); return { r.getX() + 24.0f, r.getY() + 26.0f, r.getWidth() - 48.0f, 48.0f }; }
+juce::Rectangle<float> traceRect() { const auto r = panelRect (2); return { r.getX() + 24.0f, r.getY() + 123.0f, r.getWidth() - 48.0f, 40.0f }; }
+juce::Rectangle<float> patternButtonRect (int i)
+{
+    const auto r = panelRect (2); const float pitch = (r.getWidth() - 48.0f + 5.5f) / (float) rh1::kNumPatterns;       // the eleven buttons share the panel width
+    return { r.getX() + 24.0f + (float) i * pitch, r.getY() + 177.0f, pitch - 5.5f, 24.0f }; }
 const std::vector<juce::String> kSourceTabs { "LFO", "ENVELOPE", "STEPS" }, kModeTabs { "FILTER", "TREMOLO", "SLICER" };
 }
 
@@ -82,6 +87,9 @@ void RH1AudioProcessorEditor::paintOverChildren (juce::Graphics& g)
 
 void RH1AudioProcessorEditor::timerCallback()
 {
+    meter.update (proc.outMeter);
+    if (const int shown = (mode() * 8 + variant()) * 4 + source(); shown != shownKey) { shownKey = shown; layoutKnobs(); repaint(); }       // a preset, undo, A / B or automation changed the tab
+    repaint (panelRect (3).withTrimmedLeft (panelRect (3).getWidth() - 110.0f).expanded (2.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer());
     if (midiUI.needsRepaint()) { midiUI.tick(); repaint(); }
     repaint (panelRect (2).expanded (4.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer());
     if (barState.copiedAt != 0) { repaint (juce::Rectangle<float> (0.0f, 30.0f, 900.0f, 50.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer()); if (! barState.copiedRecently()) barState.copiedAt = 0; }
@@ -159,9 +167,10 @@ void RH1AudioProcessorEditor::drawPattern (juce::Graphics& g)
         const float h = std::max (3.0f, col.getHeight() * v);
         g.setColour ((s == cur ? kPal.ink : kPal.body).withAlpha (on ? 1.0f : 0.35f));
         g.fillRoundedRectangle (col.withTop (col.getBottom() - h), 3.0f);
-        if (s % 4 == 0) drawText (g, juce::String (s / 4 + 1), col.getCentreX(), lane.getBottom() + 4.0f, 9.0f, kPal.ink.withAlpha (0.4f), false, 0.0f);
+        if (s % 4 == 0) drawText (g, juce::String (s / 4 + 1), col.getCentreX(), lane.getBottom() + 15.0f, 13.0f, kPal.ink.withAlpha (0.7f), false, 0.0f);
     }
-    drawText (g, slicer ? "A STEP AT OR ABOVE 50 % IS ON" : "THE HEIGHT OF A STEP IS ITS VALUE (THE STEPS SOURCE)", lane.getRight() - 4.0f, lane.getY() + 8.0f, 9.0f, kPal.ink.withAlpha (0.4f), true, 0.1f, juce::Justification::centredRight);
+    const float noteY = lane.getBottom() + 33.0f;                                                       // the notes sit in their own row between the lane and the trace, not over the plot
+    drawText (g, slicer ? "A STEP AT OR ABOVE 50 % IS ON" : "STEP HEIGHT = VALUE (STEPS SOURCE)", lane.getX(), noteY, 13.0f, kPal.ink.withAlpha (0.7f), true, 0.03f, juce::Justification::centredLeft);
 
     g.setColour (juce::Colours::black.withAlpha (0.45f)); g.fillRoundedRectangle (tr.expanded (6.0f), 8.0f);
     juce::Path ctl, dest;
@@ -177,7 +186,7 @@ void RH1AudioProcessorEditor::drawPattern (juce::Graphics& g)
     g.setColour (kPal.ink.withAlpha (0.5f)); g.strokePath (ctl, juce::PathStrokeType (1.3f));
     g.setColour (kPal.body); g.strokePath (dest, juce::PathStrokeType (2.0f));
     static const char* destName[3] = { "CUTOFF", "LEVEL", "SLICE" };
-    drawText (g, "CONTROL (GREY) AND " + juce::String (destName[mode()]) + " OVER FIVE SECONDS", tr.getX() + 8.0f, tr.getY() + 8.0f, 9.0f, kPal.ink.withAlpha (0.5f), true, 0.1f, juce::Justification::centredLeft);
+    drawText (g, "CONTROL (GREY) AND " + juce::String (destName[mode()]) + ", 5 SECONDS", lane.getRight(), noteY, 13.0f, kPal.ink.withAlpha (0.7f), true, 0.03f, juce::Justification::centredRight);
 }
 
 //==============================================================================
@@ -186,7 +195,7 @@ void RH1AudioProcessorEditor::paint (juce::Graphics& g)
     g.addTransform (juce::AffineTransform::scale (scale()));
     ui::paintBody (g, kPal, kW, kH, grain);
     ui::paintHeader (g, kPal, "RH-1", "RHYTHM LAB", "RHYTHMIC MOTION", isOn ("power"));
-    ui::paintPresetBar (g, kPal, proc.presets, proc.undoManager, kBarY, barState, false);
+    ui::paintPresetBar (g, kPal, proc.presets, proc.undoManager, kBarY, barState, false, 6.0f);
 
     const int m = mode();
     ui::paintPanel (g, kPal, panelRect (0), {});
@@ -197,15 +206,15 @@ void RH1AudioProcessorEditor::paint (juce::Graphics& g)
     ui::paintPanel (g, kPal, panelRect (3), "OUTPUT");
     drawPattern (g);
 
-    ui::paintFlatButton (g, kPal, controlButtonRect (0), "SYNC", isOn ("sync"), 11.0f);
-    ui::paintFlatButton (g, kPal, controlButtonRect (1), rh1::divisionName (choice ("division")), isOn ("sync"), 11.0f, isOn ("sync") ? 1.0f : 0.55f);
-    ui::paintFlatButton (g, kPal, controlButtonRect (2), "FOLLOW HOST", isOn ("followHost"), 11.0f);
-    for (int v = 0; v < rh1::variantCount (m); ++v) ui::paintFlatButton (g, kPal, typeRect (v), rh1::variantName (m, v), v == variant(), 9.0f);
+    ui::paintFlatButton (g, kPal, controlButtonRect (0), "SYNC", isOn ("sync"), 13.0f);
+    ui::paintFlatButton (g, kPal, controlButtonRect (1), rh1::divisionName (choice ("division")), isOn ("sync"), 13.0f, isOn ("sync") ? 1.0f : 0.55f);
+    ui::paintFlatButton (g, kPal, controlButtonRect (2), "FOLLOW HOST", isOn ("followHost"), 13.0f);
+    for (int v = 0; v < rh1::variantCount (m); ++v) ui::paintFlatButton (g, kPal, typeRect (v), rh1::variantName (m, v), v == variant(), 13.0f, 1.0f, 9.0f, 0.02f);
     for (int i = 0; i < rh1::kNumPatterns; ++i)
     {
         bool same = true;
         for (int s = 0; s < rh1::kSteps; ++s) if ((value (("step" + juce::String (s + 1)).toRawUTF8()) >= 50.0f) != (rh1::patternString (i)[s] == 'x')) same = false;
-        ui::paintFlatButton (g, kPal, patternButtonRect (i), juce::String (i + 1), same, 10.0f, 1.0f, 7.0f);
+        ui::paintFlatButton (g, kPal, patternButtonRect (i), juce::String (i + 1), same, 13.0f, 1.0f, 7.0f);
     }
 
     static const char* lo[6] = { "", "0", "sine", "30", "-24", "0" }, *hi[6] = { "", "100", "rnd", "300", "+12", "10" };
@@ -227,7 +236,9 @@ void RH1AudioProcessorEditor::paint (juce::Graphics& g)
         int idx = k.index, cnt = k.count;
         if (k.panel == 0) { idx = 0; cnt = 0; for (int j = 0; j < (int) knobs.size(); ++j) if (knobs[(size_t) j].panel == 0 && knobShown (j)) { if (j < i) ++idx; ++cnt; } }
         ui::paintKnob (g, kPal, knobCentre (k.panel, idx, cnt), k.name, txt, l, h, panelRect (k.panel).getY() + 154.0f, panelRect (k.panel).getY() + 182.0f);
+        ui::paintValueArc (g, knobCentre (k.panel, idx, cnt), kKnobR, (float) k.slider.valueToProportionOfLength (k.slider.getValue()), kPal.body);
     }
+    meter.paint (g, meterOrigin().x, meterOrigin().y, isOn ("power"), kPal.body, kPal.ink, 110.0f, 26.0f, 13.0f);
     ui::paintFooter (g, kPal, kRow2Y + kRow2H + 35.0f);
 }
 

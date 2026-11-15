@@ -27,6 +27,17 @@ std::vector<float> run (const rb1::Params& p, const std::vector<float>& inL, con
     if (outR) *outR = r;
     return l;
 }
+std::vector<float> runKey (const rb1::Params& p, const std::vector<float>& in, const std::vector<float>& key)
+{
+    rb1::Engine e; e.prepare (fs);
+    auto l = in, r = in;
+    for (size_t pos = 0; pos < l.size(); pos += 480)
+    {
+        const int n = (int) std::min<size_t> (480, l.size() - pos);
+        e.process (l.data() + pos, r.data() + pos, n, p, 1.0f, key.data() + pos, key.data() + pos);
+    }
+    return l;
+}
 double rms (const std::vector<float>& v, int a, int b) { double s = 0; for (int i = std::max (0, a); i < std::min ((int) v.size(), b); ++i) s += (double) v[(size_t) i] * v[(size_t) i]; return std::sqrt (s / std::max (1, b - a)); }
 double diffDb (const std::vector<float>& a, const std::vector<float>& b, int from = 100)
 {
@@ -149,6 +160,31 @@ int main()
         check (o == in, "MIX 0 passes the input bit-exact");
         std::vector<float> silent ((int) fs, 0.0f); const auto so = run (p, silent, silent); double e = 0; for (float y : so) e += (double) y * y;
         check (e == 0.0, "silence in, silence out");
+    }
+    std::printf ("external sidechain key for DUCK\n");
+    {
+        std::mt19937 rng (7); std::uniform_real_distribution<float> u (-1.0f, 1.0f);
+        std::vector<float> loud ((size_t) (3.0f * fs)), quiet ((size_t) (3.0f * fs), 0.0f), burst ((size_t) (3.0f * fs), 0.0f), dry ((size_t) (3.0f * fs), 0.0f);
+        for (auto& x : loud) x = 0.5f * u (rng);
+        for (size_t i = 0; i < dry.size(); ++i) dry[i] = 0.2f * std::sin (6.2831853f * 220.0f * (float) i / fs);
+        for (size_t i = (size_t) (1.0f * fs); i < (size_t) (2.0f * fs); ++i) burst[i] = 0.5f * u (rng);     // the key is loud only between 1 s and 2 s
+        rb1::Params p; p.mix = 1.0f; p.duck = 1.0f; p.decay = 0.5f;
+        {
+            const auto ref = run (p, dry, dry), same = runKey (p, dry, dry);
+            check (ref == same, "the key equal to the input is bit exact with no key");
+        }
+        {
+            const auto silentKey = runKey (p, dry, quiet), loudKey = runKey (p, dry, loud);
+            const double a = rms (silentKey, (int) (1.2f * fs), (int) (2.8f * fs)), b = rms (loudKey, (int) (1.2f * fs), (int) (2.8f * fs));
+            std::printf ("  DUCK 100 %%: wet level with a silent key %.4f, with a loud key %.5f\n", a, b);
+            check (a > 0.01 && b < 0.1 * a, "a loud key ducks the reverb by more than 20 dB, a silent key does not");
+        }
+        {
+            const auto o = runKey (p, dry, burst);
+            const double during = rms (o, (int) (1.3f * fs), (int) (1.9f * fs)), before = rms (o, (int) (0.6f * fs), (int) (0.9f * fs)), after = rms (o, (int) (2.6f * fs), (int) (2.9f * fs));
+            std::printf ("  key burst 1 s to 2 s: wet level before %.4f, during %.5f, after %.4f\n", before, during, after);
+            check (during < 0.2 * before && after > 0.5 * before, "the reverb ducks while the key is loud and recovers after");
+        }
     }
     std::printf ("%d problems\n", problems);
     return problems == 0 ? 0 : 1;

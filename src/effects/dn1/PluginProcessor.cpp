@@ -57,7 +57,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout DN1AudioProcessor::createLay
         if (centre > 0.0f) r.setSkewForCentre (centre);
         layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id, 1 }, name, r, def, unitAttrs (unitFor (id, hi), decimalsFor (step))));
     };
-    const auto flag = [&layout] (const char* id, const char* name, bool def) { layout.add (std::make_unique<AudioParameterBool> (ParameterID { id, 1 }, name, def)); };
+    const auto flag = [&layout] (const char* id, const char* name, bool def) { layout.add (std::make_unique<AudioParameterBool> (ParameterID { id, 1 }, name, def, AudioParameterBoolAttributes().withMeta (juce::String (id) == "power" || juce::String (id) == "bypass"))); };
     flag ("power", "Power", true);
     flag ("bypass", "Bypass", false);
     layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "mode", 1 }, "Mode", StringArray { "Shaper", "Compressor", "Limiter" }, 0));
@@ -95,7 +95,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout DN1AudioProcessor::createLay
 DN1AudioProcessor::DN1AudioProcessor()
     : AudioProcessor (BusesProperties()
                           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
-                          .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
+                          .withOutput ("Output", juce::AudioChannelSet::stereo(), true)
+                          .withInput  ("Sidechain", juce::AudioChannelSet::stereo(), false)),
       apvts (*this, &undoManager, "DN1", createLayout()),
       presets (*this, apvts, undoManager, "DN-1 Presets", dn1FactoryPresets(), { "power", "bypass" })
 {
@@ -110,7 +111,9 @@ DN1AudioProcessor::DN1AudioProcessor()
 
 bool DN1AudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
-    return layouts.getMainOutputChannelSet() == juce::AudioChannelSet::stereo() && layouts.getMainInputChannelSet() == juce::AudioChannelSet::stereo();
+    if (layouts.getMainOutputChannelSet() != juce::AudioChannelSet::stereo() || layouts.getMainInputChannelSet() != juce::AudioChannelSet::stereo()) return false;
+    const auto sc = layouts.getChannelSet (true, 1);                       // the sidechain: off, mono or stereo
+    return sc.isDisabled() || sc == juce::AudioChannelSet::mono() || sc == juce::AudioChannelSet::stereo();
 }
 
 void DN1AudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
@@ -120,6 +123,7 @@ void DN1AudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     powerSmooth.reset (sampleRate, 0.02);
     powerSmooth.setCurrentAndTargetValue (pPower->load() > 0.5f ? 1.0f : 0.0f);
     dryBuf.setSize (2, juce::jmax (samplesPerBlock, 8192));
+    keyBuf.setSize (2, juce::jmax (samplesPerBlock, 8192));
     for (auto& d : powerDelay) d.assign (8192, 0.0f);
     delayPos = 0;
 }
@@ -130,6 +134,24 @@ void DN1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     juce::ScopedNoDenormals noDenormals;
     const int n = buffer.getNumSamples();
     if (n == 0 || buffer.getNumChannels() < 2 || n > dryBuf.getNumSamples()) return;
+
+    // the external key: the sidechain bus when the host has connected it (a mono key feeds both channels); copied and cleaned before anything else
+    const float* keyL = nullptr; const float* keyR = nullptr;
+    if (auto* scBus = getBus (true, 1); scBus != nullptr && scBus->isEnabled() && n <= keyBuf.getNumSamples())
+    {
+        const auto sc = getBusBuffer (buffer, true, 1);
+        if (sc.getNumChannels() > 0)
+        {
+            for (int c = 0; c < 2; ++c)
+            {
+                const auto* s = sc.getReadPointer (juce::jmin (c, sc.getNumChannels() - 1));
+                auto* k = keyBuf.getWritePointer (c);
+                for (int i = 0; i < n; ++i) k[i] = std::abs (s[i]) < 1.0e4f ? s[i] : 0.0f;
+            }
+            keyL = keyBuf.getReadPointer (0); keyR = keyBuf.getReadPointer (1);
+        }
+    }
+    extKey.store (keyL != nullptr, std::memory_order_relaxed);
     for (int c = 0; c < 2; ++c)
     {
         auto* d = buffer.getWritePointer (c);
@@ -152,7 +174,7 @@ void DN1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     const float from = powerSmooth.getCurrentValue();
     powerSmooth.setTargetValue (pPower->load() > 0.5f ? 1.0f : 0.0f);
     const float to = powerSmooth.skip (n);
-    if (from == 0.0f && to == 0.0f) { for (int c = 0; c < 2; ++c) buffer.copyFrom (c, 0, dryBuf, c, 0, n); return; }
+    if (from == 0.0f && to == 0.0f) { for (int c = 0; c < 2; ++c) buffer.copyFrom (c, 0, dryBuf, c, 0, n); outMeter.measure (buffer, n); return; }
 
     dn1::Params p;
     p.mode = juce::jlimit (0, dn1::kNumModes - 1, (int) std::lround (pMode->load()));
@@ -164,7 +186,7 @@ void DN1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     p.compAttackMs = pCompAttackMs->load(); p.compReleaseMs = pCompRelease->load(); p.compMakeup = pCompMakeup->load(); p.compMix = pCompMix->load() * 0.01f; p.tone = pTone->load() * 0.01f;
     p.limThresh = pLimThresh->load(); p.limRelease = pLimRelease->load(); p.limCeiling = pLimCeiling->load();
     p.scHpHz = pScHp->load(); p.link = pLink->load() * 0.01f; p.mix = pMix->load() * 0.01f; p.autoLevel = pAutoLevel->load() > 0.5f;
-    engine.process (buffer.getWritePointer (0), buffer.getWritePointer (1), n, p, juce::Decibels::decibelsToGain (pLevel->load()));
+    engine.process (buffer.getWritePointer (0), buffer.getWritePointer (1), n, p, juce::Decibels::decibelsToGain (pLevel->load()), keyL, keyR);
 
     if (from != 1.0f || to != 1.0f)
         for (int c = 0; c < 2; ++c)
@@ -177,6 +199,7 @@ void DN1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
                 d[i] = s[i] + (d[i] - s[i]) * t;
             }
         }
+    outMeter.measure (buffer, n);
 }
 
 juce::AudioProcessorEditor* DN1AudioProcessor::createEditor() { return new DN1AudioProcessorEditor (*this); }

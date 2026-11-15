@@ -14,7 +14,7 @@
 class MidiMap : private juce::Timer
 {
 public:
-    static constexpr int kMaxSlots = 16;
+    static constexpr int kMaxSlots = 24;
 
     // ids: the parameters that can be bound (one slot each, at most 16)
     MidiMap (juce::AudioProcessorValueTreeState& s, std::vector<juce::String> ids) : apvts (s), paramIds (std::move (ids))
@@ -22,6 +22,7 @@ public:
         jassert ((int) paramIds.size() <= kMaxSlots);
         for (auto& c : cc) c.store (-1);
         for (auto& p : pending) p.store (-1.0f);
+        lastIn.fill (-1.0f);
         startTimerHz (60);
     }
 
@@ -150,7 +151,7 @@ private:
     std::array<std::atomic<int>, kMaxSlots> cc;
     std::array<std::atomic<float>, kMaxSlots> pending;
     std::array<std::atomic<bool>, kMaxSlots> picked {};
-    std::array<float, kMaxSlots> lastIn { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+    std::array<float, kMaxSlots> lastIn {};
     std::atomic<int> learnSlot { -1 };
     std::atomic<bool> takeover { false }, tapEnabled { false }, tapPending { false }, tapHigh { false };
     std::atomic<int> tapCC { -1 };
@@ -178,7 +179,7 @@ public:
         const float pulse = 0.5f + 0.5f * std::sin ((float) juce::Time::getMillisecondCounter() * 0.012f);
         for (const auto& k : knobs)
         {
-            if (k.comp == nullptr || k.slot < 0) continue;
+            if (k.comp == nullptr || k.slot < 0 || ! k.comp->isVisible()) continue;     // a knob hidden in the current mode shows no mark
             const auto b = k.comp->getBounds().toFloat();
             if (map.getLearning() == k.slot)
             {
@@ -188,7 +189,7 @@ public:
             else if (map.getCC (k.slot) >= 0)
             {
                 // centred under the knob at 6 o'clock, in the gap between the minimum and the maximum of the scale
-                const auto dot = juce::Rectangle<float> (14.0f, 14.0f).withCentre ({ b.getCentreX(), b.getBottom() + 10.0f });
+                const auto dot = juce::Rectangle<float> (7.0f, 7.0f).withCentre ({ b.getCentreX(), b.getBottom() + 10.0f });
                 g.setColour (accent);
                 g.fillEllipse (dot);
             }

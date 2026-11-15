@@ -7,6 +7,7 @@
 #include "MidiMap.h"
 #include "ReverseEngine.h"
 #include "ui/Presets.h"
+#include "ui/OutputMeter.h"
 
 // RV-1 Reverse Lab: reverse, scrub, stutter, glitch and repeat with freeze (see ReverseEngine.h).
 // Host parameters: power, mode, freeze, length, speed, smooth, random, repeats, mix, level.
@@ -60,6 +61,8 @@ public:
     vibr::PresetManager presets;
     std::atomic<int> currentProgram { 0 };
     std::atomic<int> pendingProgram { -1 };
+
+    vibr::ui::PeakTap outMeter;                                   // sample peak of the output, read by the editor
 
 private:
     void handleAsyncUpdate() override { const int i = pendingProgram.exchange (-1); if (i >= 0) presets.applyFactory (i); }

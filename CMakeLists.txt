@@ -226,7 +226,8 @@ endfunction()
 #   src/drumcomputer/  the TR-08 drum machine (src/drumcomputer/tr08; an instrument, not a pedal)
 add_subdirectory(src/common)
 
-set(EFFECTS dd1 dm1 ce1 re1 re2 ds1 bf3 cs3 lm2 ph2 ge7 eh2 tr2 ma1 ir2 sl2 od2 oc5 bs1 mm1 sd1 sd3 sp1 rv1 mf1 hm2 gr1 sr1 vc1 pt1 vr1 dy1 sa1 su1 ml1 dl1 dn1 dv1 rh1 rb1)
+set(EFFECTS dd1 dm1 ce1 re1 re2 ds1 bf3 cs3 lm2 ph2 ge7 eh2 tr2  sl2 od2 oc5 bs1 mm1 sd1 sd3 sp1 rv1 mf1 hm2 gr1 sr1 vc1 pt1 dy1 sa1 su1 ml1 dl1 dn1 dv1 rh1 rb1 al1)
+# AX-1 (skeuomorphic UI test, src/effects/ax1 is gitignored): add ax1 to the list above to build it
 foreach(effect IN LISTS EFFECTS)
   if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/src/effects/${effect}/CMakeLists.txt)     # a pedal whose folder was removed is skipped
     add_subdirectory(src/effects/${effect})

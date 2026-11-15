@@ -30,15 +30,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout ML1AudioProcessor::createLay
     {
         layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id, 1 }, name, NormalisableRange<float> (0.0f, 100.0f, 1.0f), def, unitAttrs ("%", 0)));
     };
-    layout.add (std::make_unique<AudioParameterBool>   (ParameterID { "power", 1 }, "Power", true));
+    layout.add (std::make_unique<AudioParameterBool>   (ParameterID { "power", 1 }, "Power", true, juce::AudioParameterBoolAttributes().withMeta (true)));
     layout.add (vibr::makeBypassParam());
-    layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "mode", 1 }, "Mode", StringArray { "Chorus", "Vibrato", "Flanger", "Phaser" }, 0));
-    layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "variant", 1 }, "Type (2-4 voices, Sine / Triangle, Positive / Negative feedback, 4-8 stages)",
+    layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "mode", 1 }, "Mode", StringArray { "Chorus", "Vibrato", "Flanger", "Phaser", "Uni-Vibe", "Rotary", "Ring Mod" }, 0));
+    layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "variant", 1 }, "Type (2-4 voices, Sine / Triangle, Positive / Negative feedback, 4-8 stages, Uni-Vibe Chorus / Vibrato, Rotary Slow / Fast, Ring Mod Sine / Triangle / Square)",
                                                         StringArray { "Type 1", "Type 2", "Type 3" }, 0));
-    layout.add (std::make_unique<AudioParameterBool>   (ParameterID { "sync", 1 }, "Sync (rate follows the host tempo)", false));
-    pct ("rate", "Rate", 40.0f);
-    pct ("depth", "Depth", 50.0f);
-    pct ("extra", "Width (Chorus, Vibrato) / Feedback (Flanger, Phaser)", 50.0f);
+    layout.add (std::make_unique<AudioParameterBool>   (ParameterID { "sync", 1 }, "Sync (rate follows the host tempo; not in Rotary and Ring Mod)", false));
+    pct ("rate", "Rate / Speed / Freq", 40.0f);
+    pct ("depth", "Depth / Intensity", 50.0f);
+    pct ("extra", "Width (Chorus, Vibrato) / Feedback (Flanger, Phaser); not used in Uni-Vibe, Rotary, Ring Mod", 50.0f);
     pct ("mix", "Mix", 100.0f);
     layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "level", 1 }, "Level", NormalisableRange<float> (-24.0f, 12.0f, 1.0f), 0.0f, unitAttrs ("dB", 0)));
     return layout;
@@ -59,6 +59,13 @@ std::vector<vibr::PresetManager::Factory> ml1FactoryPresets()
         { "Through-Zero Feel", "Negative feedback flanging", { { "mode", 2 }, { "variant", 1 }, { "rate", 25 }, { "depth", 70 }, { "extra", 60 }, { "mix", 50 } } },
         { "Four-Stage Phaser", "A classic phaser", { { "mode", 3 }, { "variant", 0 }, { "rate", 30 }, { "depth", 60 }, { "extra", 40 }, { "mix", 50 } } },
         { "Deep Phaser", "Eight stages with feedback", { { "mode", 3 }, { "variant", 2 }, { "rate", 25 }, { "depth", 75 }, { "extra", 60 }, { "mix", 55 } } },
+        { "Uni-Vibe Chorus", "The throbbing phase chorus", { { "mode", 4 }, { "variant", 0 }, { "rate", 55 }, { "depth", 70 }, { "mix", 100 } } },
+        { "Uni-Vibe Vibrato", "The phase-shifted sound alone", { { "mode", 4 }, { "variant", 1 }, { "rate", 50 }, { "depth", 65 }, { "mix", 100 } } },
+        { "Synced Vibe", "Uni-Vibe on the beat, a quarter-note cycle", { { "mode", 4 }, { "variant", 0 }, { "sync", 1 }, { "rate", 50 }, { "depth", 75 }, { "mix", 100 } } },
+        { "Rotary Slow", "The speaker at chorale speed", { { "mode", 5 }, { "variant", 0 }, { "rate", 50 }, { "depth", 70 }, { "mix", 100 } } },
+        { "Rotary Fast", "The speaker at tremolo speed", { { "mode", 5 }, { "variant", 1 }, { "rate", 40 }, { "depth", 75 }, { "mix", 100 } } },
+        { "Ring Bells", "A sine carrier, metallic bells", { { "mode", 6 }, { "variant", 0 }, { "rate", 60 }, { "depth", 100 }, { "mix", 60 } } },
+        { "Square Growl", "A low square carrier at half depth", { { "mode", 6 }, { "variant", 2 }, { "rate", 5 }, { "depth", 50 }, { "mix", 100 } } },
     };
 }
 } // namespace
@@ -106,7 +113,7 @@ void ML1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     const float from = powerSmooth.getCurrentValue();
     powerSmooth.setTargetValue (pPower->load() > 0.5f ? 1.0f : 0.0f);
     const float to = powerSmooth.skip (n);
-    if (from == 0.0f && to == 0.0f) return;                          // off: the signal passes untouched
+    if (from == 0.0f && to == 0.0f) { outMeter.measure (buffer, n); return; }     // off: the signal passes untouched
 
     for (int c = 0; c < 2; ++c) dryBuf.copyFrom (c, 0, buffer, c, 0, n);
 
@@ -135,6 +142,7 @@ void ML1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
                 d[i] = s[i] + (d[i] - s[i]) * t;
             }
         }
+    outMeter.measure (buffer, n);
 }
 
 juce::AudioProcessorEditor* ML1AudioProcessor::createEditor() { return new ML1AudioProcessorEditor (*this); }

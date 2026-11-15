@@ -757,7 +757,8 @@ public:
     void prepare (float sampleRate) { fs = sampleRate; reset(); }
     void reset() { grFast = grSlow = 0.0f; act = 0.0f; for (auto& h : hp) h = Hp(); grDb.store (0.0f); }
 
-    void process (float* l, float* r, int n, const BusParams& p)
+    // keyL / keyR: an external key (sidechain), time-aligned with l / r by the caller; the sidechain high-pass runs on it. Null = the signal itself (the same as before)
+    void process (float* l, float* r, int n, const BusParams& p, const float* keyL = nullptr, const float* keyR = nullptr)
     {
         if (! p.on && act <= 0.0f) { grFast = grSlow = 0.0f; grDb.store (0.0f, std::memory_order_relaxed); return; }          // off: untouched
         const float ratioSlope = 1.0f / busRatioValue (p.ratio) - 1.0f;                                                       // <= 0
@@ -772,7 +773,7 @@ public:
         for (int i = 0; i < n; ++i)
         {
             act = p.on ? std::min (1.0f, act + actInc) : std::max (0.0f, act - actInc);
-            float dl = l[i], dr = r[i];
+            float dl = keyL != nullptr ? keyL[i] : l[i], dr = keyR != nullptr ? keyR[i] : r[i];
             if (scHz > 0.0f) { dl = hp[0].tick (dl); dr = hp[1].tick (dr); }
             const float level = gainToDb (std::max (std::abs (dl), std::abs (dr)));
             const float over = level - p.thresholdDb;

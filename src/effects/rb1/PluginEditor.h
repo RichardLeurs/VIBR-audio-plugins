@@ -3,6 +3,7 @@
 
 #include "PluginProcessor.h"
 #include "ui/VibrUI.h"
+#include "ui/OutputMeter.h"
 
 // RB-1 window (1200 x 690), on the shared UI of src/common/ui: header (name, preset chip, A / B, undo), the CONTROLS panel with the mode tab pills on its top edge (the
 // knobs of the mode and its types: a popup of the 12 classic types, the 5 space modes, or the texture, root and scale of the strings), the OUTPUT panel (PRE-DELAY, DUCK,
@@ -20,6 +21,8 @@ public:
     void mouseDown (const juce::MouseEvent&) override;
 
 private:
+    vibr::ui::OutputMeter meter;                                                                       // output dB meters
+    bool extShown = false;                    // the EXT lamp as last painted
     void timerCallback() override;
     float scale() const { return (float) getWidth() / 1200.0f; }
     void layoutKnobs();
@@ -53,6 +56,7 @@ private:
     juce::Image grain;
     std::array<Knob, 23> knobs;
     vibr::ui::PresetBarState barState;
+    int shownKey = -1;
     juce::ParameterAttachment powerAtt;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (RB1AudioProcessorEditor)

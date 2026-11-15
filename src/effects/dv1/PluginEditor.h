@@ -4,6 +4,7 @@
 #include "PluginProcessor.h"
 #include "MidiTarget.h"
 #include "ui/VibrUI.h"
+#include "ui/OutputMeter.h"
 
 // DV-1 window (1200 x 690), on the shared UI of src/common/ui: header (name, preset chip, A / B, undo), the CONTROLS panel with the mode tab pills on its top edge
 // (the knobs of the mode, and the flat buttons: the types, or the popup of the 12 OD-2 types), the OUTPUT panel (BOOST, MIX, LEVEL, BOOST and AUTO LEVEL switches)
@@ -56,7 +57,9 @@ private:
     std::unique_ptr<MidiLearnUI> midiUI;       // right-click a knob: MIDI learn (rebuilt when the shown knobs change)
     juce::uint64 midiShown = 0;
     vibr::ui::PresetBarState barState;
+    int shownModeVariant = -1;
     juce::ParameterAttachment powerAtt;
+    vibr::ui::OutputMeter meter;                                                                       // output dB meters
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DV1AudioProcessorEditor)
 };

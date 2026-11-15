@@ -17,13 +17,15 @@ juce::Point<float> knobCentre (int panel, int k, int n)
 {
     const auto r = panelRect (panel);
     const float pitch = panel == 0 && n >= 7 ? 94.0f : 108.0f;
-    return { r.getCentreX() + pitch * ((float) k - 0.5f * (float) (n - 1)), r.getY() + 92.0f };
+    const float cx = panel == 1 ? r.getX() + 175.0f : r.getCentreX();          // the output knobs left of the dB meters, the pair centred in the panel
+    return { cx + pitch * ((float) k - 0.5f * (float) (n - 1)), r.getY() + 92.0f };
 }
-juce::Rectangle<float> curveRect() { const auto r = panelRect (2); const float s = r.getHeight() - 74.0f; return { r.getX() + 70.0f, r.getY() + 34.0f, s, s }; }
+juce::Point<float> meterOrigin() { const auto r = panelRect (1); return { r.getX() + 360.0f, r.getY() + 46.0f }; }       // 110 high: the bars end on the knob name row (y + 156), the peak values sit on the readout row (y + 182)
+juce::Rectangle<float> curveRect() { const auto r = panelRect (2); const float s = r.getHeight() - 94.0f; return { r.getX() + 70.0f, r.getY() + 32.0f, s, s }; }
 juce::Rectangle<float> waveRect() { const auto r = panelRect (2), c = curveRect(); return { c.getRight() + 60.0f, c.getY(), r.getRight() - c.getRight() - 90.0f, c.getHeight() }; }
 juce::Rectangle<float> buttonRect (int i) { const auto r = panelRect (0); return { r.getX() + 30.0f + (float) i * 130.0f, r.getY() + 204.0f, 120.0f, 30.0f }; }
 juce::Rectangle<float> odButtonRect() { return buttonRect (0).withWidth (380.0f); }
-juce::Rectangle<float> outButtonRect (int i) { const auto r = panelRect (1); return { r.getX() + 30.0f + (float) i * 205.0f, r.getY() + 204.0f, 190.0f, 30.0f }; }
+juce::Rectangle<float> outButtonRect (int i) { const auto r = panelRect (1); return { r.getX() + 25.0f + (float) i * 210.0f, r.getY() + 204.0f, 190.0f, 30.0f }; }
 const std::vector<juce::String> kModeTabs { "OVERDRIVE", "DISTORTION", "TUBE", "TAPE", "FOLD", "CRUSH" };
 }
 
@@ -83,6 +85,9 @@ void DV1AudioProcessorEditor::paintOverChildren (juce::Graphics& g)
 
 void DV1AudioProcessorEditor::timerCallback()
 {
+    meter.update (proc.outMeter);
+    if (const int shown = mode() * 4 + variant(); shown != shownModeVariant) { shownModeVariant = shown; layoutKnobs(); repaint(); }       // a preset, undo, A / B or automation changed the mode
+    repaint (panelRect (1).withTrimmedLeft (panelRect (1).getWidth() - 150.0f).expanded (2.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer());
     if (midiUI != nullptr && midiUI->needsRepaint()) { midiUI->tick(); repaint(); }
     repaint (panelRect (2).expanded (4.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer());
     if (barState.copiedAt != 0) { repaint (juce::Rectangle<float> (0.0f, 30.0f, 900.0f, 50.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer()); if (! barState.copiedRecently()) barState.copiedAt = 0; }
@@ -169,8 +174,8 @@ void DV1AudioProcessorEditor::drawShape (juce::Graphics& g)
             g.setColour (kPal.ink); g.fillEllipse (juce::Rectangle<float> (9.0f, 9.0f).withCentre (d));
         }
     }
-    drawText (g, "IN", c.getRight() - 8.0f, c.getCentreY() + 12.0f, 10.0f, kPal.ink.withAlpha (0.55f), true, 0.1f);
-    drawText (g, "OUT", c.getCentreX() + 18.0f, c.getY() + 10.0f, 10.0f, kPal.ink.withAlpha (0.55f), true, 0.1f);
+    drawText (g, "IN", c.getRight() - 12.0f, c.getCentreY() + 12.0f, 13.0f, kPal.ink.withAlpha (0.55f), true, 0.1f);
+    drawText (g, "OUT", c.getCentreX() + 20.0f, c.getY() + 10.0f, 13.0f, kPal.ink.withAlpha (0.55f), true, 0.1f);
 
     // a sine before and after
     const auto w = waveRect();
@@ -187,11 +192,11 @@ void DV1AudioProcessorEditor::drawShape (juce::Graphics& g)
     }
     g.setColour (kPal.ink.withAlpha (0.45f)); g.strokePath (in, juce::PathStrokeType (1.4f));
     g.setColour (kPal.body); g.strokePath (out, juce::PathStrokeType (2.2f));
-    drawText (g, "SINE IN (GREY) AND OUT, OUT SCALED TO THE PEAK", w.getX() + 6.0f, w.getBottom() + 12.0f, 10.0f, kPal.ink.withAlpha (0.55f), true, 0.1f, juce::Justification::centredLeft);
+    drawText (g, "SINE IN (GREY) AND OUT, OUT SCALED TO THE PEAK", w.getX() + 6.0f, w.getBottom() + 22.0f, 13.0f, kPal.ink.withAlpha (0.55f), true, 0.1f, juce::Justification::centredLeft);
 
     const auto r = panelRect (2);
     juce::String desc = p.mode == dv1::Overdrive ? juce::String (dv1::odTypeName (p.odType)) : juce::String (dv1::modeName (p.mode)) + " " + dv1::variantName (p.mode, p.variant);
-    drawText (g, desc + "     4X OVERSAMPLED     LATENCY " + juce::String (eng.latency()) + " SAMPLES", r.getX() + 12.0f, r.getBottom() - 12.0f, 11.0f, kPal.ink.withAlpha (0.6f), true, 0.1f, juce::Justification::centredLeft);
+    drawText (g, desc + "     4X OVERSAMPLED     LATENCY " + juce::String (eng.latency()) + " SAMPLES", r.getX() + 18.0f, r.getBottom() - 22.0f, 13.0f, kPal.ink.withAlpha (0.6f), true, 0.1f, juce::Justification::centredLeft);
 }
 
 //==============================================================================
@@ -200,7 +205,7 @@ void DV1AudioProcessorEditor::paint (juce::Graphics& g)
     g.addTransform (juce::AffineTransform::scale (scale()));
     ui::paintBody (g, kPal, kW, kH, grain);
     ui::paintHeader (g, kPal, "DV-1", "DRIVE LAB", "HARMONIC GRIT", isOn ("power"));
-    ui::paintPresetBar (g, kPal, proc.presets, proc.undoManager, kBarY, barState, false);
+    ui::paintPresetBar (g, kPal, proc.presets, proc.undoManager, kBarY, barState, false, 6.0f);
 
     const int m = mode();
     ui::paintPanel (g, kPal, panelRect (0), {});
@@ -209,10 +214,10 @@ void DV1AudioProcessorEditor::paint (juce::Graphics& g)
     ui::paintPanel (g, kPal, panelRect (2), "SHAPE");
     drawShape (g);
 
-    if (m == 0) ui::paintFlatButton (g, kPal, odButtonRect(), juce::String (dv1::odTypeName (choice ("odType"))) + "  v   (12 OD-2 TYPES)", true, 11.0f);
-    else for (int v = 0; v < dv1::variantCount (m); ++v) ui::paintFlatButton (g, kPal, buttonRect (v), dv1::variantName (m, v), v == variant(), 11.0f);
-    ui::paintFlatButton (g, kPal, outButtonRect (0), "BOOST", isOn ("boostOn"), 11.0f);
-    ui::paintFlatButton (g, kPal, outButtonRect (1), "AUTO LEVEL", isOn ("autoLevel"), 11.0f);
+    if (m == 0) ui::paintFlatButton (g, kPal, odButtonRect(), juce::String (dv1::odTypeName (choice ("odType"))) + "  v   (12 OD-2 TYPES)", true, 13.0f);
+    else for (int v = 0; v < dv1::variantCount (m); ++v) ui::paintFlatButton (g, kPal, buttonRect (v), dv1::variantName (m, v), v == variant(), 13.0f);
+    ui::paintFlatButton (g, kPal, outButtonRect (0), "BOOST", isOn ("boostOn"), 13.0f);
+    ui::paintFlatButton (g, kPal, outButtonRect (1), "AUTO LEVEL", isOn ("autoLevel"), 13.0f);
 
     static const char* lo[7] = { "0", "", "0", "0", "1", "500", "-24" }, *hi[7] = { "100", "", "24", "10", "16", "48k", "+12" };
     for (int i = 0; i < (int) knobs.size(); ++i)
@@ -232,7 +237,9 @@ void DV1AudioProcessorEditor::paint (juce::Graphics& g)
         }
         const auto c = knobCentre (k.panel, k.index, k.count);
         ui::paintKnob (g, kPal, c, k.name, txt, lo[k.kind], hi[k.kind], panelRect (k.panel).getY() + 154.0f, panelRect (k.panel).getY() + 182.0f);
+        ui::paintValueArc (g, c, kKnobR, (float) k.slider.valueToProportionOfLength (k.slider.getValue()), kPal.body);
     }
+    meter.paint (g, meterOrigin().x, meterOrigin().y, isOn ("power"), kPal.body, kPal.ink, 110.0f, 26.0f, 13.0f);
     ui::paintFooter (g, kPal, kRow2Y + kRow2H + 35.0f);
 }
 

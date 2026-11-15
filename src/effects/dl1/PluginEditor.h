@@ -3,6 +3,7 @@
 
 #include "PluginProcessor.h"
 #include "ui/VibrUI.h"
+#include "ui/OutputMeter.h"
 
 // DL-1 window (1200 x 690), built on the shared UI of src/common/ui: header (name, preset chip, A / B, undo), the TIME panel with the mode tab pills on its top
 // edge (seven shared knobs and the flat buttons: types, SYNC, note length, HOLD, TAP), the VOICING panel (the knobs of the mode), the ECHOES display (the repeats on
@@ -55,8 +56,10 @@ private:
     juce::Image grain;
     std::array<Knob, 27> knobs;
     vibr::ui::PresetBarState barState;
+    int shownKey = -1;
     juce::ParameterAttachment powerAtt;
     bool draggingTime = false;
+    vibr::ui::OutputMeter meter;                                                                       // output dB meters
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DL1AudioProcessorEditor)
 };

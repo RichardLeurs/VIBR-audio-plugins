@@ -182,12 +182,12 @@ inline void paintPill (juce::Graphics& g, const Palette& pal, juce::Rectangle<fl
 }
 
 // a panel: charcoal, light outline, and (when `title` is not empty) the title pill on the top edge (Pill::On / Off when the panel is a switchable stage)
-inline void paintPanel (juce::Graphics& g, const Palette& pal, juce::Rectangle<float> r, const juce::String& title, Pill style = Pill::Plain)
+inline void paintPanel (juce::Graphics& g, const Palette& pal, juce::Rectangle<float> r, const juce::String& title, Pill style = Pill::Plain, float radius = 20.0f)
 {
     g.setColour (pal.panel);
-    g.fillRoundedRectangle (r, 20.0f);
+    g.fillRoundedRectangle (r, radius);
     g.setColour (pal.ink.withAlpha (0.55f));
-    g.drawRoundedRectangle (r.reduced (0.5f), 20.0f, 1.4f);
+    g.drawRoundedRectangle (r.reduced (0.5f), radius, 1.4f);
     if (title.isEmpty()) return;
     const float w = textWidth (font (18.0f, true).withExtraKerningFactor (0.08f), title) + 38.0f;
     paintPill (g, pal, juce::Rectangle<float> (w, 22.0f).withCentre ({ r.getCentreX(), r.getY() }), title, style, 18.0f);
@@ -271,8 +271,8 @@ inline void paintKnob (juce::Graphics& g, const Palette& pal, juce::Point<float>
         g.drawLine (c.x + s * r0, c.y - co * r0, c.x + s * r1, c.y - co * r1, major ? 2.0f : 1.2f);
     }
     const float lx = (kKnobR + 18.0f) * 0.7071f, ly = lx + 13.0f;
-    drawText (g, lo, c.x - lx, c.y + ly, 12.0f, pal.ink.withAlpha (0.85f * dim), false, 0.0f);
-    drawText (g, hi, c.x + lx, c.y + ly, 12.0f, pal.ink.withAlpha (0.85f * dim), false, 0.0f);
+    drawText (g, lo, c.x - lx, c.y + ly, 13.0f, pal.ink.withAlpha (0.85f * dim), false, 0.0f);
+    drawText (g, hi, c.x + lx, c.y + ly, 13.0f, pal.ink.withAlpha (0.85f * dim), false, 0.0f);
     drawText (g, name, c.x, nameY, 15.0f, pal.ink.withAlpha (0.95f * dim), true, 0.1f);
     drawText (g, value, c.x, valueY, 14.0f, pal.body.withAlpha (dim), false, 0.04f);
 }

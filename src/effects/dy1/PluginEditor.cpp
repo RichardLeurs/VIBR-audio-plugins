@@ -301,6 +301,14 @@ void DY1AudioProcessorEditor::paint (juce::Graphics& g)
         g.setColour (kPanel);
         g.fillRoundedRectangle (pill, 11.0f);
         drawText (g, "ACTION", pill.getCentreX(), pill.getCentreY(), 18.0f, kBody, true, 0.08f);
+        // EXT lamp: lit while the host's sidechain input is the key of the gate, expander and transient detectors
+        const bool ext = proc.extKey.load (std::memory_order_relaxed);
+        const auto lamp = juce::Rectangle<float> (10.0f, 10.0f).withCentre ({ pill.getRight() + 30.0f, r.getY() + 1.0f });
+        g.setColour (kPanel);
+        g.fillRoundedRectangle (juce::Rectangle<float> (56.0f, 22.0f).withCentre ({ lamp.getCentreX() + 17.0f, lamp.getCentreY() }), 11.0f);
+        g.setColour (ext ? kBody : kBody.withAlpha (0.25f));
+        g.fillEllipse (lamp);
+        drawText (g, "EXT", lamp.getRight() + 6.0f, lamp.getCentreY(), 10.0f, kBody.withAlpha (ext ? 0.95f : 0.55f), true, 0.1f, juce::Justification::centredLeft);
     }
     drawAction (g);
 

@@ -73,15 +73,17 @@ public:
 
     const sr1::Engine& resonator() const { return res; }
 
-    void process (float* l, float* r, int n, const Params& p, float levelGain)
+    // keyL / keyR: an external key (sidechain) for the DUCK envelope follower; null = the dry input (the same as before)
+    void process (float* l, float* r, int n, const Params& p, float levelGain, const float* keyL = nullptr, const float* keyR = nullptr)
     {
-        for (int pos = 0; pos < n; pos += kChunk) processChunk (l + pos, r + pos, std::min (kChunk, n - pos), p, levelGain);
+        for (int pos = 0; pos < n; pos += kChunk)
+            processChunk (l + pos, r + pos, std::min (kChunk, n - pos), p, levelGain, keyL != nullptr ? keyL + pos : nullptr, keyR != nullptr ? keyR + pos : nullptr);
     }
 
 private:
     static constexpr int kChunk = 512;
 
-    void processChunk (float* l, float* r, int n, const Params& p, float levelGain)
+    void processChunk (float* l, float* r, int n, const Params& p, float levelGain, const float* keyL, const float* keyR)
     {
         const int mode = clampMode (p.mode);
         if (mode != lastMode)
@@ -137,7 +139,7 @@ private:
         const float duck = std::clamp (p.duck, 0.0f, 1.0f), mixV = std::clamp (p.mix, 0.0f, 1.0f);
         for (int i = 0; i < n; ++i)
         {
-            const float a = 0.5f * (std::abs (dry[0][i]) + std::abs (dry[1][i]));
+            const float a = keyL != nullptr ? 0.5f * (std::abs (keyL[i]) + std::abs (keyR[i])) : 0.5f * (std::abs (dry[0][i]) + std::abs (dry[1][i]));
             env += (a > env ? atk : rel) * (a - env);
             const float g = 1.0f - duck * std::clamp (env * 4.0f, 0.0f, 1.0f);
             fade = std::min (1.0f, fade + fadeInc);

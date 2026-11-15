@@ -1,14 +1,15 @@
 // VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
 #include "PluginEditor.h"
 #include "VibrLogo.h"
+#include "ui/OutputMeter.h"
 
 namespace
 {
 // layout units: the design is 1200 x 690 (style.md: 20 side margin, 10 gap, name centre 55, rule 104, panels 30 below the rule, 24 between the rows)
 constexpr float kW = 1200.0f, kH = 690.0f, kMargin = 20.0f, kRuleY = 104.0f;
 constexpr float kPanelY = 134.0f, kPanelH = 236.0f, kKnobR = 23.0f, kPad = 5.0f, kRow2Y = 394.0f, kRow2H = 227.0f, kKnobPitch = 110.0f;
-constexpr float kPanelX[4] = { 20.0f, 230.0f, 570.0f, 910.0f }, kPanelW[4] = { 200.0f, 330.0f, 330.0f, 270.0f };
-constexpr const char* kPanelName[4] = { "LEVEL", "PAN", "WIDTH", "CHANNELS" };
+constexpr float kPanelX[3] = { 20.0f, 410.0f, 800.0f }, kPanelW[3] = { 380.0f, 380.0f, 380.0f };       // three panels of 380 with 10 px between them (the GAIN knob lives in the OUTPUT panel below)
+constexpr const char* kPanelName[3] = { "PAN", "WIDTH", "CHANNELS" };
 
 const juce::Colour kBody (177, 139, 240), kDark (30, 16, 56), kPanel (26, 27, 30), kInk (238, 238, 232);
 
@@ -41,10 +42,13 @@ void drawText (juce::Graphics& g, const juce::String& s, float cx, float cy, flo
 }
 
 juce::Rectangle<float> panelRect (int i) { return { kPanelX[i], kPanelY, kPanelW[i], kPanelH }; }
-juce::Rectangle<float> fieldRect() { return { kMargin, kRow2Y, kW - 2.0f * kMargin, kRow2H }; }
+juce::Rectangle<float> fieldRect() { return { kMargin, kRow2Y, 870.0f, kRow2H }; }
+juce::Rectangle<float> outputRect() { return { 900.0f, kRow2Y, 280.0f, kRow2H }; }
+juce::Point<float> meterOrigin() { const auto r = outputRect(); return { r.getRight() - 96.0f, r.getY() + 44.0f }; }       // right of the GAIN knob: bars 118 high end on the knob name row, the peak values on the readout row
 juce::Rectangle<float> powerRect() { return juce::Rectangle<float> (50.0f, 50.0f).withCentre ({ kW - kMargin - 16.5f, 43.5f }); }
 juce::Point<float> knobCentre (int panel, int k, int n)
 {
+    if (panel == 3) return { outputRect().getX() + 82.0f, outputRect().getY() + 84.0f };       // GAIN: the only knob of the OUTPUT panel, left of the meters
     const auto r = panelRect (panel);
     // the knobs sit 110 apart around the middle of the panel (ticks and legends reach 41 each side)
     return { r.getCentreX() + kKnobPitch * ((float) k - 0.5f * (float) (n - 1)), r.getY() + 100.0f };
@@ -52,8 +56,8 @@ juce::Point<float> knobCentre (int panel, int k, int n)
 // the six buttons of the CHANNELS panel: INVERT L, INVERT R, SWAP L / R, MONO, MID, SIDE (two columns, three rows)
 juce::Rectangle<float> buttonRect (int i)
 {
-    const auto r = panelRect (3);
-    return { r.getX() + 18.0f + (float) (i % 2) * 118.0f, r.getY() + 44.0f + (float) (i / 2) * 56.0f, 108.0f, 40.0f };
+    const auto r = panelRect (2);
+    return { r.getX() + 77.0f + (float) (i % 2) * 118.0f, r.getY() + 44.0f + (float) (i / 2) * 56.0f, 108.0f, 40.0f };
 }
 constexpr const char* kButtonName[6] = { "INVERT L", "INVERT R", "SWAP L / R", "MONO", "MID", "SIDE" };
 } // namespace
@@ -97,9 +101,9 @@ void SU1LookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int w, i
 //==============================================================================
 SU1AudioProcessorEditor::SU1AudioProcessorEditor (SU1AudioProcessor& p)
     : AudioProcessorEditor (&p), proc (p),
-      knobs { { { "gain", 0, 0, 1, "GAIN", 0, {}, {} },
-                { "pan", 1, 0, 3, "POSITION", 1, {}, {} },     { "autoRate", 1, 1, 3, "RATE", 2, {}, {} },     { "autoDepth", 1, 2, 3, "DEPTH", 3, {}, {} },
-                { "width", 2, 0, 3, "WIDTH", 4, {}, {} },      { "spread", 2, 1, 3, "SPREAD", 3, {}, {} },     { "bassMono", 2, 2, 3, "BASS MONO", 5, {}, {} } } },
+      knobs { { { "gain", 3, 0, 1, "GAIN", 0, {}, {} },
+                { "pan", 0, 0, 3, "POSITION", 1, {}, {} },     { "autoRate", 0, 1, 3, "RATE", 2, {}, {} },     { "autoDepth", 0, 2, 3, "DEPTH", 3, {}, {} },
+                { "width", 1, 0, 3, "WIDTH", 4, {}, {} },      { "spread", 1, 1, 3, "SPREAD", 3, {}, {} },     { "bassMono", 1, 2, 3, "BASS MONO", 5, {}, {} } } },
       powerAtt (*p.apvts.getParameter ("power"), [this] (float) { repaint(); }, nullptr),
       invLAtt  (*p.apvts.getParameter ("invL"),  [this] (float) { repaint(); }, nullptr),
       invRAtt  (*p.apvts.getParameter ("invR"),  [this] (float) { repaint(); }, nullptr),
@@ -148,7 +152,9 @@ SU1AudioProcessorEditor::~SU1AudioProcessorEditor()
 
 void SU1AudioProcessorEditor::timerCallback()
 {
-    repaint (fieldRect().expanded (4.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer());     // the meters move
+    meter.update (proc.outMeter);
+    repaint (fieldRect().expanded (4.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer());     // the goniometer and the correlation move
+    repaint (outputRect().expanded (4.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer());     // the meters move
 }
 
 void SU1AudioProcessorEditor::toggle (const char* id)
@@ -177,7 +183,7 @@ void SU1AudioProcessorEditor::layoutKnobs()
 void SU1AudioProcessorEditor::resized() { layoutKnobs(); }
 
 //==============================================================================
-// FIELD display: left the peak level of the left and right output (dB), in the middle a goniometer (vertical = mid, horizontal = side: a mono
+// FIELD display: left a goniometer (vertical = mid, horizontal = side: a mono
 // signal is a vertical line, left only leans to the left, opposite channels make a horizontal line), right the phase correlation (-1 .. +1).
 void SU1AudioProcessorEditor::drawField (juce::Graphics& g)
 {
@@ -186,30 +192,9 @@ void SU1AudioProcessorEditor::drawField (juce::Graphics& g)
     const bool power = isOn ("power");
     const auto toDb = [] (float v) { return 8.68588964f * std::log (std::max (v, 1.0e-5f)); };
 
-    // level bars
-    const float barTop = r.getY() + 34.0f, barH = 150.0f;
-    for (int c = 0; c < 2; ++c)
-    {
-        const float db = power ? toDb (c == 0 ? eng.peakL.load (std::memory_order_relaxed) : eng.peakR.load (std::memory_order_relaxed)) : -90.0f;
-        const juce::Rectangle<float> bar (r.getX() + 90.0f + (float) c * 46.0f, barTop, 30.0f, barH);
-        g.setColour (juce::Colours::black.withAlpha (0.45f));
-        g.fillRoundedRectangle (bar.expanded (4.0f), 8.0f);
-        const float fill = barH * (std::clamp (db, -60.0f, 0.0f) + 60.0f) / 60.0f;
-        g.setColour (db > -3.0f ? juce::Colour (0xffe5432c) : kBody);
-        g.fillRoundedRectangle (juce::Rectangle<float> (bar.getX(), bar.getBottom() - fill, bar.getWidth(), fill), 5.0f);
-        drawText (g, c == 0 ? "L" : "R", bar.getCentreX(), bar.getBottom() + 24.0f, 13.0f, kInk.withAlpha (0.7f), true, 0.1f);
-    }
-    for (float db : { -48.0f, -36.0f, -24.0f, -12.0f, 0.0f })
-    {
-        const float y = barTop + barH * (1.0f - (db + 60.0f) / 60.0f);
-        g.setColour (kInk.withAlpha (0.15f));
-        g.drawLine (r.getX() + 86.0f, y, r.getX() + 90.0f + 46.0f + 34.0f, y, 1.0f);
-        drawText (g, juce::String ((int) db), r.getX() + 62.0f, y, 11.0f, kInk.withAlpha (0.5f), false, 0.0f);
-    }
-
     // goniometer
     const float side = 160.0f;
-    const juce::Rectangle<float> gon (r.getCentreX() - side * 0.5f - 120.0f, r.getY() + 24.0f, side, side);
+    const juce::Rectangle<float> gon (r.getX() + 215.0f - side * 0.5f, r.getY() + 24.0f, side, side);
     g.setColour (juce::Colours::black.withAlpha (0.45f));
     g.fillRoundedRectangle (gon.expanded (8.0f), 10.0f);
     g.setColour (kInk.withAlpha (0.14f));
@@ -239,7 +224,7 @@ void SU1AudioProcessorEditor::drawField (juce::Graphics& g)
 
     // correlation
     const float corr = power ? eng.corr.load (std::memory_order_relaxed) : 1.0f;
-    const juce::Rectangle<float> cm (r.getCentreX() + 90.0f, r.getY() + 70.0f, 400.0f, 22.0f);
+    const juce::Rectangle<float> cm (r.getX() + 360.0f, r.getY() + 70.0f, 400.0f, 22.0f);
     g.setColour (juce::Colours::black.withAlpha (0.45f));
     g.fillRoundedRectangle (cm.expanded (8.0f, 10.0f), 10.0f);
     g.setColour (kInk.withAlpha (0.14f));
@@ -312,9 +297,11 @@ void SU1AudioProcessorEditor::paint (juce::Graphics& g)
         g.fillRoundedRectangle (pill, 11.0f);
         drawText (g, name, pill.getCentreX(), pill.getCentreY(), 18.0f, kBody, true, 0.08f);
     };
-    for (int i = 0; i < 4; ++i) drawPanel (panelRect (i), kPanelName[i]);
+    for (int i = 0; i < 3; ++i) drawPanel (panelRect (i), kPanelName[i]);
     drawPanel (fieldRect(), "FIELD");
     drawField (g);
+    drawPanel (outputRect(), "OUTPUT");
+    meter.paint (g, meterOrigin().x, meterOrigin().y, isOn ("power"), kBody, kInk, 118.0f, 28.0f, 13.0f);
 
     // the buttons of the CHANNELS panel
     const bool btnOn[6] = { isOn ("invL"), isOn ("invR"), isOn ("swap"), isOn ("mono"), solo() == 1, solo() == 2 };
@@ -336,6 +323,7 @@ void SU1AudioProcessorEditor::paint (juce::Graphics& g)
         g.fillEllipse (ring);
         g.setColour (juce::Colours::white.withAlpha (0.1f));
         g.drawEllipse (ring, 1.0f);
+        vibr::ui::paintValueArc (g, c, kKnobR, (float) k.slider.valueToProportionOfLength (k.slider.getValue()), kBody);
         for (int t = 0; t <= 10; ++t)
         {
             const float a = juce::degreesToRadians (-135.0f + 27.0f * (float) t), s = std::sin (a), co = std::cos (a);
@@ -349,7 +337,7 @@ void SU1AudioProcessorEditor::paint (juce::Graphics& g)
         drawText (g, lo[k.kind], c.x - lx, c.y + ly, 12.0f, kInk.withAlpha (0.85f), false, 0.0f);
         drawText (g, hi[k.kind], c.x + lx, c.y + ly, 12.0f, kInk.withAlpha (0.85f), false, 0.0f);
 
-        drawText (g, k.name, c.x, kPanelY + 178.0f, 15.0f, kInk.withAlpha (0.95f), true, 0.1f);
+        drawText (g, k.name, c.x, c.y + 78.0f, 15.0f, kInk.withAlpha (0.95f), true, 0.1f);
         const double v = k.slider.getValue();
         juce::String txt;
         switch (k.kind)
@@ -360,7 +348,7 @@ void SU1AudioProcessorEditor::paint (juce::Graphics& g)
             case 5: txt = v < 20.0 ? juce::String ("OFF") : juce::String ((int) std::lround (v)) + " Hz"; break;
             default: txt = juce::String ((int) std::lround (v)) + " %"; break;
         }
-        drawText (g, txt, c.x, kPanelY + 206.0f, 14.0f, kBody, false, 0.04f);
+        drawText (g, txt, c.x, c.y + 106.0f, 14.0f, kBody, false, 0.04f);
     }
 
     drawText (g, "Made by Richard Leurs | VIBR", kW - kMargin - 20.0f, kRow2Y + kRow2H + 35.0f, 13.0f, kDark, false, 0.06f, juce::Justification::centredRight);

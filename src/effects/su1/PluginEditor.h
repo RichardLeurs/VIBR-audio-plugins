@@ -2,6 +2,7 @@
 #pragma once
 
 #include "PluginProcessor.h"
+#include "ui/OutputMeter.h"
 
 // Black knob of the VIBR look (see style.md): matt body with a knurled edge, raised cap, white pointer bar.
 // The knob is drawn 5 px inside its component so the shadow is not clipped.
@@ -12,8 +13,8 @@ public:
                            float startAngle, float endAngle, juce::Slider&) override;
 };
 
-// SU-1 window, drawn in code on a satin body: header (name, description, power), four panels in a row: LEVEL (gain), PAN (position + auto-pan),
-// WIDTH (width, spread, bass mono) and CHANNELS (six buttons), and under them the FIELD display: level bars, a goniometer and the correlation.
+// SU-1 window, drawn in code on a satin body: header (name, description, power), three panels in a row: PAN (position + auto-pan),
+// WIDTH (width, spread, bass mono) and CHANNELS (six buttons), and under them the FIELD display (a goniometer and the correlation) and the OUTPUT panel (the GAIN knob and the L / R meters).
 class SU1AudioProcessorEditor : public juce::AudioProcessorEditor,
                                 private juce::Timer
 {
@@ -49,6 +50,7 @@ private:
     SU1LookAndFeel laf;
     juce::ComponentBoundsConstrainer constrainer;
     juce::Image grain;
+    vibr::ui::OutputMeter meter;                                    // OUTPUT panel: L / R dB meters
     std::array<Knob, 7> knobs;
     juce::ParameterAttachment powerAtt, invLAtt, invRAtt, swapAtt, monoAtt, soloAtt;
 

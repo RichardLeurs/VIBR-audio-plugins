@@ -70,7 +70,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout RH1AudioProcessor::createLay
         if (centre > 0.0f) r.setSkewForCentre (centre);
         layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id, 1 }, name, r, def, unitAttrs (unitFor (id, hi), decimalsFor (step))));
     };
-    const auto flag = [&layout] (const char* id, const char* name, bool def) { layout.add (std::make_unique<AudioParameterBool> (ParameterID { id, 1 }, name, def)); };
+    const auto flag = [&layout] (const char* id, const char* name, bool def) { layout.add (std::make_unique<AudioParameterBool> (ParameterID { id, 1 }, name, def, AudioParameterBoolAttributes().withMeta (juce::String (id) == "power" || juce::String (id) == "bypass"))); };
     flag ("power", "Power", true);
     flag ("bypass", "Bypass", false);
     layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "mode", 1 }, "Destination", StringArray { "Filter", "Tremolo", "Slicer" }, 0));
@@ -149,7 +149,7 @@ void RH1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     const float from = powerSmooth.getCurrentValue();
     powerSmooth.setTargetValue (pPower->load() > 0.5f ? 1.0f : 0.0f);
     const float to = powerSmooth.skip (n);
-    if (from == 0.0f && to == 0.0f) return;
+    if (from == 0.0f && to == 0.0f) { outMeter.measure (buffer, n); return; }
     for (int c = 0; c < 2; ++c) dryBuf.copyFrom (c, 0, buffer, c, 0, n);
 
     rh1::Params p;
@@ -184,6 +184,7 @@ void RH1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
                 d[i] = s[i] + (d[i] - s[i]) * t;
             }
         }
+    outMeter.measure (buffer, n);
 }
 
 juce::AudioProcessorEditor* RH1AudioProcessor::createEditor() { return new RH1AudioProcessorEditor (*this); }

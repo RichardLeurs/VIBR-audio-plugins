@@ -104,7 +104,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout DM1AudioProcessor::createLay
         juce::AudioParameterIntAttributes().withStringFromValueFunction (
             [] (int v, int) { return divisionNames()[juce::jlimit (1, 5, v) - 1]; })));
 
-    l.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "power", 1 }, "Power", true));
+    l.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "power", 1 }, "Power", true, juce::AudioParameterBoolAttributes().withMeta (true)));
 
     // Host tempo sync (new): off = the Delay Time knob / TAP work as before; on = delay time = division at the host tempo
     l.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "sync", 1 }, "Sync (delay time follows the host tempo)", false));

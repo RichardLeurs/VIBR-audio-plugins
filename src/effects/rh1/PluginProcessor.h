@@ -1,6 +1,7 @@
 // VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
 #pragma once
 
+#include "ui/OutputMeter.h"
 #include "BypassLink.h"
 #include "MidiMap.h"
 
@@ -59,6 +60,7 @@ public:
     vibr::BypassLink bypassLink { apvts };                // host bypass <-> OFF / ON switch
     MidiMap midiMap { apvts, { "rate", "sens", "shape", "decay", "glide", "depth", "swing", "tempo", "cutoff", "res", "tremStereo", "slAttack", "slDuty", "slBalance", "mix", "level" } };   // CC -> knob, MIDI learn
     vibr::PresetManager presets;
+    vibr::ui::PeakTap outMeter;                                         // sample peak of the output, read by the editor
     std::atomic<int> currentProgram { 0 };
     std::atomic<int> pendingProgram { -1 };
     const rh1::Engine& getEngine() const { return engine; }

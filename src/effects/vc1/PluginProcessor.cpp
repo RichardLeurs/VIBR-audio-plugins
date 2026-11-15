@@ -10,7 +10,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout VC1AudioProcessor::createLay
     {
         layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id, 1 }, name, NormalisableRange<float> (0.0f, 100.0f, 1.0f), def, AudioParameterFloatAttributes().withLabel ("%")));
     };
-    layout.add (std::make_unique<AudioParameterBool>   (ParameterID { "power", 1 }, "Power", true));
+    layout.add (std::make_unique<AudioParameterBool>   (ParameterID { "power", 1 }, "Power", true, juce::AudioParameterBoolAttributes().withMeta (true)));
     layout.add (vibr::makeBypassParam());
     layout.add (std::make_unique<AudioParameterBool>   (ParameterID { "sync", 1 }, "Sync (rates follow the host tempo)", false));
     layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "type", 1 }, "Filter", StringArray { "Low pass", "Band pass", "High pass" }, 0));

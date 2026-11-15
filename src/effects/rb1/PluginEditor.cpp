@@ -7,25 +7,28 @@ namespace
 using vibr::ui::drawText;
 namespace ui = vibr::ui;
 
-constexpr float kW = 1200.0f, kH = 690.0f, kRow1Y = 134.0f, kRow1H = 247.0f, kRow2Y = 405.0f, kRow2H = 216.0f, kKnobR = 24.0f, kPad = 5.0f, kBarY = 39.0f;
+constexpr float kW = 1200.0f, kH = 690.0f, kRow1Y = 134.0f, kRow1H = 252.0f, kRow2Y = 410.0f, kRow2H = 211.0f, kKnobR = 24.0f, kPad = 5.0f, kBarY = 39.0f;
 const ui::Palette kPal { juce::Colour (186, 105, 232), juce::Colour (37, 21, 46) };            // the Reverb & Space colour #BA69E8 and its print
 
 // panels: 0 CONTROLS (mode tabs), 1 OUTPUT, 2 TAIL (display)
-constexpr float kPanelX[3] = { 20.0f, 730.0f, 20.0f }, kPanelW[3] = { 700.0f, 450.0f, 1160.0f };
+constexpr float kPanelX[3] = { 20.0f, 697.0f, 20.0f }, kPanelW[3] = { 667.0f, 483.0f, 1160.0f };
+constexpr float kOutPad = 20.0f, kCtlW = 622.0f, kBtnW = 118.0f, kBtnStep = 126.0f;          // OUTPUT: group (4 knobs 90 apart + 20 + meters) 443 wide, 20 padding each side; CONTROLS: button rows 622 wide, centred
 juce::Rectangle<float> panelRect (int i) { return { kPanelX[i], i < 2 ? kRow1Y : kRow2Y, kPanelW[i], i < 2 ? kRow1H : kRow2H }; }
 juce::Point<float> knobCentre (int panel, int k, int n)
 {
     const auto r = panelRect (panel);
-    const float pitch = panel == 1 ? 100.0f : n >= 7 ? 94.0f : 108.0f;
-    return { r.getCentreX() + pitch * ((float) k - 0.5f * (float) (n - 1)), r.getY() + 92.0f };
+    const float pitch = panel == 1 ? 90.0f : n >= 7 ? 90.0f : 108.0f;
+    const float cx = panel == 1 ? r.getX() + kOutPad + 42.0f + 135.0f : r.getCentreX();          // the output knobs left of the dB meters, the pair centred in the panel
+    return { cx + pitch * ((float) k - 0.5f * (float) (n - 1)), r.getY() + 92.0f };
 }
-juce::Rectangle<float> buttonRect (int i, float w = 124.0f, float step = 132.0f) { const auto r = panelRect (0); return { r.getX() + 30.0f + (float) i * step, r.getY() + 204.0f, w, 30.0f }; }
-juce::Rectangle<float> typeChipRect() { return buttonRect (0, 380.0f); }
-juce::Rectangle<float> textureRect (int i) { return buttonRect (i, 100.0f, 108.0f); }
-juce::Rectangle<float> rootRect() { const auto r = panelRect (0); return { r.getX() + 30.0f + 3.0f * 108.0f + 10.0f, r.getY() + 204.0f, 100.0f, 30.0f }; }
-juce::Rectangle<float> scaleRect() { const auto r = panelRect (0); return { r.getX() + 30.0f + 3.0f * 108.0f + 120.0f, r.getY() + 204.0f, 150.0f, 30.0f }; }
-juce::Rectangle<float> freezeRect() { const auto r = panelRect (1); return { r.getCentreX() - 95.0f, r.getY() + 204.0f, 190.0f, 30.0f }; }
-juce::Rectangle<float> plotRect() { const auto r = panelRect (2); return { r.getX() + 40.0f, r.getY() + 34.0f, r.getWidth() - 80.0f, r.getHeight() - 74.0f }; }
+juce::Point<float> meterOrigin() { const auto r = panelRect (1); return { r.getX() + kOutPad + 374.0f, r.getY() + 46.0f }; }       // 110 high: the bars end on the knob name row (y + 156), the peak values sit on the readout row (y + 182)
+juce::Rectangle<float> buttonRect (int i, float w = kBtnW, float step = kBtnStep) { const auto r = panelRect (0); return { r.getX() + 0.5f * (r.getWidth() - kCtlW) + (float) i * step, r.getY() + 204.0f, w, 30.0f }; }
+juce::Rectangle<float> typeChipRect() { return buttonRect (0, kCtlW); }
+juce::Rectangle<float> textureRect (int i) { return buttonRect (i); }
+juce::Rectangle<float> rootRect() { return buttonRect (3); }
+juce::Rectangle<float> scaleRect() { return buttonRect (4); }
+juce::Rectangle<float> freezeRect() { const auto r = panelRect (1); return { r.getX() + kOutPad, r.getY() + 204.0f, r.getWidth() - 2.0f * kOutPad, 30.0f }; }
+juce::Rectangle<float> plotRect() { const auto r = panelRect (2); return { r.getX() + 56.0f, r.getY() + 38.0f, r.getWidth() - 112.0f, r.getHeight() - 78.0f }; }
 const std::vector<juce::String> kModeTabs { "CLASSIC", "SPACE", "RESONATE" };
 }
 
@@ -75,7 +78,11 @@ RB1AudioProcessorEditor::~RB1AudioProcessorEditor()
 
 void RB1AudioProcessorEditor::timerCallback()
 {
+    meter.update (proc.outMeter);
+    if (const int shown = mode() * 8 + variant(); shown != shownKey) { shownKey = shown; layoutKnobs(); repaint(); }       // a preset, undo, A / B or automation changed the tab
+    repaint (panelRect (1).withTrimmedLeft (panelRect (1).getWidth() - 150.0f).expanded (2.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer());
     if (midiUI.needsRepaint()) { midiUI.tick(); repaint(); }
+    if (proc.extKey.load (std::memory_order_relaxed) != extShown) { extShown = proc.extKey.load(); repaint (panelRect (1).expanded (4.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer()); }
     repaint (panelRect (2).expanded (4.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer());
     if (barState.copiedAt != 0) { repaint (juce::Rectangle<float> (0.0f, 30.0f, 900.0f, 50.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer()); if (! barState.copiedRecently()) barState.copiedAt = 0; }
 }
@@ -137,7 +144,7 @@ void RB1AudioProcessorEditor::drawTail (juce::Graphics& g)
                 g.setColour (kPal.body.withAlpha (0.35f + 0.65f * e));
                 g.fillRoundedRectangle (juce::Rectangle<float> (7.0f, std::max (4.0f, h)).withCentre ({ cx, 0.0f }).withBottomY (r.getBottom() - 26.0f), 3.0f);
             }
-            drawText (g, active ? juce::String (sr1::noteName (sr1::stringNote (i, root, scale))) : juce::String ("-"), cx, r.getBottom() - 10.0f, 11.0f, kPal.ink.withAlpha (active ? 0.75f : 0.25f), true, 0.1f);
+            drawText (g, active ? juce::String (sr1::noteName (sr1::stringNote (i, root, scale))) : juce::String ("-"), cx, r.getBottom() - 10.0f, 13.0f, kPal.ink.withAlpha (active ? 0.75f : 0.25f), true, 0.1f);
         }
         return;
     }
@@ -145,7 +152,7 @@ void RB1AudioProcessorEditor::drawTail (juce::Graphics& g)
     for (float db = -12.0f; db >= -60.0f; db -= 12.0f)
     {
         g.setColour (kPal.ink.withAlpha (0.1f)); g.drawLine (r.getX(), yOf (db), r.getRight(), yOf (db), 1.0f);
-        drawText (g, juce::String ((int) db), r.getX() - 16.0f, yOf (db), 10.0f, kPal.ink.withAlpha (0.5f), false, 0.0f);
+        drawText (g, juce::String ((int) db), r.getX() - 20.0f, yOf (db), 13.0f, kPal.ink.withAlpha (0.5f), false, 0.0f);
     }
     juce::Path area;
     const int pos = eng.histPos.load (std::memory_order_acquire), N = rb1::kHistory;
@@ -158,12 +165,12 @@ void RB1AudioProcessorEditor::drawTail (juce::Graphics& g)
     area.lineTo (r.getRight(), r.getBottom()); area.closeSubPath();
     g.setColour (kPal.body.withAlpha (isOn ("freeze") ? 0.5f : 0.28f)); g.fillPath (area);
     g.setColour (kPal.body); g.strokePath (area, juce::PathStrokeType (1.6f));
-    drawText (g, "WET LEVEL, LAST 5 SECONDS", r.getX() + 8.0f, r.getY() + 10.0f, 10.0f, kPal.ink.withAlpha (0.5f), true, 0.1f, juce::Justification::centredLeft);
-    if (isOn ("freeze")) drawText (g, "FROZEN", r.getRight() - 10.0f, r.getY() + 10.0f, 12.0f, kPal.body, true, 0.2f, juce::Justification::centredRight);
+    drawText (g, "WET LEVEL, LAST 5 SECONDS", r.getX() + 8.0f, r.getY() + 12.0f, 13.0f, kPal.ink.withAlpha (0.5f), true, 0.1f, juce::Justification::centredLeft);
+    if (isOn ("freeze")) drawText (g, "FROZEN", r.getRight() - 10.0f, r.getY() + 12.0f, 13.0f, kPal.body, true, 0.2f, juce::Justification::centredRight);
     else if (mode() == 0)
-        drawText (g, "RT60 ABOUT " + juce::String (bigsky::decaySeconds (variant(), value ("decay") * 0.01f) * 0.85f, 1) + " S", r.getRight() - 10.0f, r.getY() + 10.0f, 11.0f, kPal.ink.withAlpha (0.6f), true, 0.12f, juce::Justification::centredRight);
+        drawText (g, "RT60 ABOUT " + juce::String (bigsky::decaySeconds (variant(), value ("decay") * 0.01f) * 0.85f, 1) + " S", r.getRight() - 10.0f, r.getY() + 12.0f, 13.0f, kPal.ink.withAlpha (0.6f), true, 0.12f, juce::Justification::centredRight);
     if (eng.duckNow.load (std::memory_order_relaxed) < 0.95f && power)
-        drawText (g, "DUCKING", r.getRight() - 10.0f, r.getY() + 28.0f, 10.0f, kPal.ink.withAlpha (0.6f), true, 0.12f, juce::Justification::centredRight);
+        drawText (g, "DUCKING", r.getRight() - 10.0f, r.getY() + 30.0f, 13.0f, kPal.ink.withAlpha (0.6f), true, 0.12f, juce::Justification::centredRight);
 }
 
 //==============================================================================
@@ -177,24 +184,32 @@ void RB1AudioProcessorEditor::paint (juce::Graphics& g)
     g.addTransform (juce::AffineTransform::scale (scale()));
     ui::paintBody (g, kPal, kW, kH, grain);
     ui::paintHeader (g, kPal, "RB-1", "REVERB LAB", "INFINITE SPACES", isOn ("power"));
-    ui::paintPresetBar (g, kPal, proc.presets, proc.undoManager, kBarY, barState, false);
+    ui::paintPresetBar (g, kPal, proc.presets, proc.undoManager, kBarY, barState, false, 6.0f);
 
     const int m = mode();
     ui::paintPanel (g, kPal, panelRect (0), {});
     ui::paintTabs (g, kPal, panelRect (0), kModeTabs, m);
     ui::paintPanel (g, kPal, panelRect (1), "OUTPUT");
+    {   // EXT lamp: lit while the host's sidechain input is the key of DUCK
+        const auto r1 = panelRect (1);
+        const bool ext = proc.extKey.load (std::memory_order_relaxed);
+        const auto lamp = juce::Rectangle<float> (10.0f, 10.0f).withCentre ({ r1.getX() + kOutPad + 5.0f, r1.getY() + 22.0f });
+        g.setColour (ext ? kPal.body : kPal.body.withAlpha (0.25f));
+        g.fillEllipse (lamp);
+        ui::drawText (g, "EXT", lamp.getRight() + 6.0f, lamp.getCentreY(), 13.0f, kPal.ink.withAlpha (ext ? 0.9f : 0.5f), true, 0.1f, juce::Justification::centredLeft);
+    }
     ui::paintPanel (g, kPal, panelRect (2), "TAIL");
     drawTail (g);
 
-    if (m == 0) ui::paintFlatButton (g, kPal, typeChipRect(), juce::String (rb1::classicLongName (variant())) + "  v   (12 TYPES)", true, 11.0f);
-    else if (m == 1) for (int v = 0; v < sp1::kNumModes; ++v) ui::paintFlatButton (g, kPal, buttonRect (v), sp1::modeName (v), v == variant(), 10.0f);
+    if (m == 0) ui::paintFlatButton (g, kPal, typeChipRect(), juce::String (rb1::classicLongName (variant())) + "  v   (12 TYPES)", true, 13.0f);
+    else if (m == 1) for (int v = 0; v < sp1::kNumModes; ++v) ui::paintFlatButton (g, kPal, buttonRect (v), sp1::modeName (v), v == variant(), 13.0f);
     else
     {
-        for (int v = 0; v < sr1::kNumTextures; ++v) ui::paintFlatButton (g, kPal, textureRect (v), sr1::textureName (v), v == variant(), 11.0f);
-        ui::paintFlatButton (g, kPal, rootRect(), "ROOT " + juce::String (sr1::noteName (choice ("root"))) + " v", false, 11.0f);
-        ui::paintFlatButton (g, kPal, scaleRect(), juce::String (sr1::scaleName (choice ("scale"))) + " v", false, 11.0f);
+        for (int v = 0; v < sr1::kNumTextures; ++v) ui::paintFlatButton (g, kPal, textureRect (v), sr1::textureName (v), v == variant(), 13.0f);
+        ui::paintFlatButton (g, kPal, rootRect(), "ROOT " + juce::String (sr1::noteName (choice ("root"))) + " v", false, 13.0f);
+        ui::paintFlatButton (g, kPal, scaleRect(), juce::String (sr1::scaleName (choice ("scale"))) + " v", false, 13.0f);
     }
-    ui::paintFlatButton (g, kPal, freezeRect(), "FREEZE", isOn ("freeze"), 11.0f);
+    ui::paintFlatButton (g, kPal, freezeRect(), "FREEZE", isOn ("freeze"), 13.0f);
 
     static const char* lo[5] = { "0", "0", "-24", "-50", "1" }, *hi[5] = { "100", "250", "+12", "+50", "12" };
     for (int i = 0; i < (int) knobs.size(); ++i)
@@ -212,7 +227,9 @@ void RB1AudioProcessorEditor::paint (juce::Graphics& g)
             default: txt = juce::String ((int) std::lround (v)) + " %"; break;
         }
         ui::paintKnob (g, kPal, knobCentre (k.panel, k.index, k.count), (k.onlyMode == 1 && juce::String (k.id) == "texture") ? sp1::textureName (variant()) : k.name, txt, lo[k.kind], hi[k.kind], panelRect (k.panel).getY() + 154.0f, panelRect (k.panel).getY() + 182.0f);
+        ui::paintValueArc (g, knobCentre (k.panel, k.index, k.count), kKnobR, (float) k.slider.valueToProportionOfLength (k.slider.getValue()), kPal.body);
     }
+    meter.paint (g, meterOrigin().x, meterOrigin().y, isOn ("power"), kPal.body, kPal.ink, 110.0f, 26.0f, 13.0f);
     ui::paintFooter (g, kPal, kRow2Y + kRow2H + 35.0f);
 }
 

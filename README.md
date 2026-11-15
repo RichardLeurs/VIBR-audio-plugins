@@ -2,6 +2,7 @@
 [![macOS build](https://github.com/RichardLeurs/VIBR-audio-plugins/actions/workflows/macos.yml/badge.svg)](https://github.com/RichardLeurs/VIBR-audio-plugins/actions/workflows/macos.yml)
 
 Are you interested in audio plugins and want to help improving and expanding the plugins then send me a message.
+You can find the web page for the project on this [`website`](https://vibr.richardleurs.nl).
 
 # VIBR Audio Plugins
 
@@ -31,8 +32,7 @@ VIBR is open source by design. Every plugin, its code and artwork are free to ex
 | PH-2 Phaser | phaser: rate, depth, res, 2 modes (4 or 8 stages) |
 | TR-2 Tremolo | tremolo: rate, depth, wave (sine to square) |
 | VC-1 Voltage Controller | modulation matrix: envelope follower, two LFOs, random and MIDI (mod wheel / expression) sources routed to filter, amp, vibrato and pan with cross-modulation; the rates can sync to the host tempo |
-| VR-1 Vibe and Rotary | three swirling modulation effects: uni-vibe (chorus / vibrato type, tempo sync), a rotary speaker (slow / fast horn and drum) and ring mod (sine / triangle / square carrier), with a live picture of the effect |
-| ML-1 Modulation Lab | chorus, vibrato, flanger and phaser in one plugin, driven by one LFO with tempo sync, with a live picture of the effect (the delay of every voice, the pitch bend, the comb of the flanger, the notches of the phaser); on the shared Lab UI with presets, A / B and undo |
+| ML-1 Modulation Lab | seven modes in one plugin: chorus, vibrato, flanger and phaser driven by one LFO with tempo sync, plus **everything the VR-1 does** (so ML-1 replaces it): UNI-VIBE (four all-pass stages, chorus / vibrato type, tempo sync), ROTARY (speaker with horn and drum, slow / fast, speeds that ramp) and RING MOD (sine / triangle / square carrier). A live picture per mode (the delay of every voice, the pitch bend, the comb of the flanger, the notches of the phaser, the stages sliding along a frequency axis, the turning drum and horn, the input / carrier / result waves); on the shared Lab UI with presets, A / B and undo |
 | DL-1 Delay Lab | the first Lab: the SD-1 digital delay, the MM-1 analog delay, a new tape delay (1 to 3 heads, wow and flutter, saturation, age) a dual delay (A and B, parallel or series) and the 12 DM-1 modulation voicings as modes of one plugin, tempo sync, low cut and hi cut in the loop, ping-pong spread, hold, tap tempo, a display of the repeats where the first one is dragged to set the time, presets, A / B and undo; built on the shared UI of `src/common/ui` |
 | DN-1 Dynamics Lab | the second Lab, as modes of one plugin: the DY-1 shaper (gate, expander, transient shaper), a compressor (SUSTAIN = the CS-3, a clean VCA, a program-dependent OPTO) and a limiter (PEAK = the LM-2, TRUE PEAK with lookahead from the MS-1); side-chain high-pass, stereo link, parallel mix, auto level, a constant latency in every mode, and a display of the input level and the gain over five seconds |
 | DV-1 Drive Lab | the third Lab, as modes of one plugin: the OD-2 overdrive (12 types, 3-band tone, gate), the DS-1 distortion (classic and modern), tube (single and push-pull), tape (new and aged), fold (transistor and foldback) and crush (hard and smooth); boost, auto level, mix, 4x oversampling with a constant latency, and a display of the transfer curve and the waveform |
@@ -68,8 +68,7 @@ VIBR is open source by design. Every plugin, its code and artwork are free to ex
 
 | Plugin | What it is |
 |---|---|
-| IR-2 Amp & Cabinet | amp and cabinet: 11 amp types, gain, level, bass / middle / treble, ambience |
-| MA-1 Metal Amp and Cabinet | modern-metal rig: noise gate, tight boost, 4 amp voicings (8x oversampled), two impulse-response cabinets (load your own WAVs), EQ and limiter |
+| AL-1 Amp Lab: Raw Power | the amp lab (replaces the former MA-1 and IR-2): 14 amp types (the 11 of IR-2 and MODERN, BRUTAL, ULTRA), input trim, noise gate, tight boost, gain / tone stack / presence / resonance / sag / master, bright and deep, 4x oversampling with a constant latency, two impulse-response cabinets (load your own WAVs, saved in the session) or a filter model with a mic position, low / high cut, EQ, ambience room, output and limiter, factory and user presets, undo, MIDI learn; displays of the amp curve, the cabinet response and the meters |
 
 ### Pitch
 
@@ -94,34 +93,11 @@ VIBR is open source by design. Every plugin, its code and artwork are free to ex
 |---|---|
 | SL-2 Slicer | rhythmic slicer: 11 patterns, 5 modes, tempo from the knob or the host |
 
-### Multi effect
-
-| Plugin | What it is |
-|---|---|
-| ME-1 Multi Effect | build your own chain from 39 basic effect modules with 2-3 knobs each: any number in a chain, drag to reorder, bypass, replace, tempo sync on the time and rate knobs; self-contained (it does not use the pedals above) |
-
 ### Mastering
 
 | Plugin | What it is |
 |---|---|
 | MS-1 Mastering Suite | version 0.8 of the mastering suite (`src/mastering`): an 8-band minimum-phase corrective EQ (low shelf, six bells, high shelf; each band Stereo / Left / Right / Mid / Side, optional dynamic gain, minimum or linear phase; draggable nodes over the spectrum; match EQ fits it to a reference), a 4-band multiband compressor (Linkwitz-Riley crossovers, per band threshold / ratio / attack / release or auto / make-up / solo), a 3-band stereo imager (width per band, mono-below, mid / side balance, auto safe width, goniometer and correlation meter), a colour stage (tape / tube / transformer saturation in 4x oversampling, tone, mid / side, mix), a VCA-style stereo-linked bus compressor (ratio 1.5 - 10:1, attack 0.1 - 30 ms, release 0.1 - 1.2 s or auto, make-up, parallel mix, sidechain high-pass, gain reduction history), a true-peak-safe lookahead limiter with a loudness target (auto gain to a LUFS value), input trim (gain, polarity, rumble high-pass, mono check), dither with noise shaping, and honest meters: momentary / short-term / integrated loudness and loudness range (ITU-R BS.1770-4, checked against the EBU Tech 3341 / 3342 signals), sample peak, RMS, crest, PLR, PSR and a DR value, short-term and integrated phase correlation, a goniometer, 8x true peak and a before / after spectrum; target presets for streaming, CD, broadcast and more. The multiband compressor, stereo imager, saturation follow; a reference track (WAV / AIFF / FLAC / MP3, level matched, A / B switch, spectrum overlay, own transport that can follow the host) is built in, with factory and user presets, A / B slots and 100-step undo / redo (see `.claude/mastering_specs.md`) |
-
-**ME-1 modules** 
-
-| Group | Modules |
-|---|---|
-| Delay & Echo | delay, echo, mod delay, ping-pong, reverse |
-| Modulation | chorus, vibrato, uni-vibe, rotary, flanger, phaser, ring mod, tremolo, slicer |
-| Drive | overdrive, distortion, fuzz, tape, tube, bit crusher, boost |
-| Dynamics | compressor, sustainer, limiter, noise gate, expander, transient shaper, volume |
-| Filter & EQ | filter, EQ, enhancer, auto wah |
-| Pitch | octave, pitch shifter |
-| Space | reverb, spring, shimmer, pan, stereo spreader |
-
-The window has a strip of tiles at the top (one per module, coloured by group, with a bypass lamp and a remove cross; `+` adds a module, drag a tile to reorder, the wheel scrolls a long chain) and the selected module's knobs below. Delay and LFO modules have a SYNC button that makes the time or rate knob follow the host tempo (120 bpm when the host gives none). Input, output and power are host parameters; the module settings are saved in the session. No presets yet.
-
-
-You can find the web page for the project on this [`website`](https://vibr.richardleurs.nl).
 
 ## If macOS blocks the plugins
 
@@ -147,6 +123,47 @@ For the plugins, run it on the unzipped bundles, for example on the VST3 and AU 
 ```
 xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3 ~/Library/Audio/Plug-Ins/Components
 ```
+
+## MIDI
+
+31 effects read MIDI, plus VC-1 and TR-08 (the effects never write or change it, the MIDI passes through unchanged). Every knob listed in a plugin can be bound to any CC: right-click the knob, choose **MIDI learn**, move a controller. A pulsing ring shows the knob waiting for a CC and a small dot under the knob shows a bound CC. **Clear MIDI** removes the binding; **Soft takeover** ignores a CC until it passes the knob, so it does not jump. The bindings are saved with the session (not with presets). A CC bound to the rate or time knob moves the note division while SYNC is on. In a host, the plugin needs its MIDI input enabled (on a Logic or Ableton track, choose the controller as the MIDI source of the effect).
+
+Default CCs (all channels; everything else through MIDI learn):
+
+| Plugin | CC1 (mod wheel) | CC11 (expression) | CC64 (sustain) |
+|---|---|---|---|
+| RE-2 | intensity | repeat rate | |
+| MM-1 | depth | delay | |
+| SD-1 | mod intensity | delay time | |
+| DM-1 | mod depth | delay time | |
+| DD-1 | delay A repeats | delay A time | |
+| DL-1 | mod depth | time | hold |
+| TR-2, PH-2, BF-3, ML-1, RH-1 | depth | rate | |
+
+ML-1: CC1 and CC11 move DEPTH (INTENSITY in UNI-VIBE) and RATE (SPEED in ROTARY, FREQ in RING MOD) in every mode; the same `rate`, `depth`, `extra`, `mix`, `level` parameters, no new CC targets (the third knob WIDTH / FEEDBACK exists in the four original modes only). The mode, type and sync switches are not CC targets.
+
+| CE-1 | vibrato depth | vibrato rate | |
+| MF-1 | depth | cutoff | |
+| RB-1 | motion | decay | freeze |
+| SP-1 | motion | decay | freeze |
+| RV-1 | repeats | length | freeze |
+| GR-1 | mix | size | freeze |
+| PT-1 | mix | spread | |
+| SR-1 | mix | decay | |
+| OC-5 | +1 oct level | -1 oct level | |
+| DV-1, OD-2, DS-1 | | drive (DS-1: dist) | |
+| AL-1 | presence | gain | |
+| SA-1 | | tube drive | |
+| DN-1, DY-1 | | gate threshold | |
+| CS-3 | | sustain | |
+| LM-2 | | threshold | |
+| VC-1 | mod wheel source | expression source | |
+
+VC-1 also reads channel pressure, as a modulation source; TR-08 plays its drums from MIDI notes. These two keep their own fixed maps. MS-1, ME-1 and the plugins not listed above do not take MIDI.
+
+**Tap tempo.** DM-1, DL-1, DD-1, RE-2, MM-1 and SD-1 tap the tempo from any MIDI note-on or from CC85 (a rising edge, value 64 or higher), with the same averaging as the TAP button; RE-2, MM-1 and SD-1 have no TAP button, only MIDI. A tap turns SYNC off (DM-1 ignores taps while SYNC is on).
+
+The shared code is `src/common/MidiMap.h` (CC map, learn, soft takeover, tap flag), `MidiTarget.h` (learn target over code-drawn switches) and `TapTempo.h`. Its unit test: `cmake --build ~/Developer/VIBR --target MidiMapTest`, then run `~/Developer/VIBR/tools/midi-test/MidiMapTest_artefacts/Release/MidiMapTest` (exit code 0 = all checks passed).
 
 ## Build
 
@@ -193,11 +210,11 @@ cmake -S . -B ~/Developer/VIBR -DRL_ARCH=arm64 -DRELEASES_DIR=~/Developer/VIBR/r
 cmake --build ~/Developer/VIBR --config Release -j8
 ```
 
-One plugin: `--target DD-1_All` (or `DM-1_All`, `CE-1_All`, `RE-2_All`, `DS-1_All`, `BF-3_All`, `CS-3_All`, `LM-2_All`, `PH-2_All`, `TR-2_All`, `GE-7_All`, `EH-2_All`, `IR-2_All`, `MA-1_All`, `ME-1_All`, `TR-8_All`, `SL-2_All`, `OD-2_All`, `OC-5_All`, `BS-1_All`, `MM-1_All`, `SD-1_All`, `SP-1_All`, `RV-1_All`, `MF-1_All`, `HM-2_All`, `GR-1_All`, `SR-1_All`, `VC-1_All`, `PT-1_All`, `VR-1_All`, `DY-1_All`, `SA-1_All`, `SU-1_All`, `ML-1_All`, `DL-1_All`, `DN-1_All`, `DV-1_All`, `RH-1_All`, `RB-1_All`, `MS-1_All`, ...).
+One plugin: `--target DD-1_All` (or `DM-1_All`, `CE-1_All`, `RE-2_All`, `DS-1_All`, `BF-3_All`, `CS-3_All`, `LM-2_All`, `PH-2_All`, `TR-2_All`, `GE-7_All`, `EH-2_All`, `ME-1_All`, `TR-8_All`, `SL-2_All`, `OD-2_All`, `OC-5_All`, `BS-1_All`, `MM-1_All`, `SD-1_All`, `SP-1_All`, `RV-1_All`, `MF-1_All`, `HM-2_All`, `GR-1_All`, `SR-1_All`, `VC-1_All`, `PT-1_All`, `DY-1_All`, `SA-1_All`, `SU-1_All`, `ML-1_All`, `DL-1_All`, `DN-1_All`, `DV-1_All`, `AL-1_All`, `RH-1_All`, `RB-1_All`, `MS-1_All`, ...).
 
 ### Screenshots for the website
 
-`tools/screenshot` has a small app per plugin (`Shot-DY-1`, `Shot-SU-1`, `Shot-SA-1`, `Shot-MS-1`, `Shot-ML-1`, `Shot-VR-1`; add a plugin to the list in `tools/screenshot/CMakeLists.txt`). It loads the plugin, sets parameters, plays a test signal into it (so the meters and displays show something) and writes the editor to a PNG at its own size, the same size as the images in `website/img`:
+`tools/screenshot` has a small app per plugin (`Shot-DY-1`, `Shot-SU-1`, `Shot-SA-1`, `Shot-MS-1`, `Shot-ML-1`; add a plugin to the list in `tools/screenshot/CMakeLists.txt`). It loads the plugin, sets parameters, plays a test signal into it (so the meters and displays show something) and writes the editor to a PNG at its own size, the same size as the images in `website/img`:
 
 ```bash
 cmake --build ~/Developer/VIBR --target Shot-DY-1
@@ -207,10 +224,14 @@ cmake --build ~/Developer/VIBR --target Shot-DY-1
 
 Signals: `silence`, `tone`, `stepTone`, `lissajous`, `noise` (see `ScreenshotTool.cpp`); arguments after the seconds are `parameterID=value` in the plain (host) range.
 
-## License
+## Copyright and license
 
 Copyright © 2026 Richard Leurs
 
-This program is free software: you can redistribute it and/or modify it under the terms of the **GNU General Public License, version 3**, as published by the Free Software Foundation. It is distributed in the hope that it will be useful, but **without any warranty**; without even the implied warranty of merchantability or fitness for a particular purpose. See the [`LICENSE`](LICENSE) file for the full text.
+VIBR audio plugins are free software: you can redistribute them and / or modify them under the terms of the **GNU General Public License, version 3**, as published by the Free Software Foundation. They are distributed in the hope that they will be useful, but **without any warranty**; without even the implied warranty of merchantability or fitness for a particular purpose.
 
-The plugins are built with [JUCE 8](https://juce.com), used under its open-source licence (AGPLv3). The designs are inspired by classic hardware but are independent and carry no third-party branding; product names mentioned belong to their respective owners. The TR-08 sample kits are not part of this repository.
+The full license text is in [`LICENSE`](LICENSE). 
+
+VIBR is built with the [JUCE](https://juce.com) framework (version 8), Copyright © Raw Material Software Limited. JUCE is dual-licensed under the [AGPLv3](https://www.gnu.org/licenses/agpl-3.0.en.html) and the commercial JUCE licence; VIBR uses it under the open-source terms. JUCE is a trademark of Raw Material Software Limited. See [github.com/juce-framework/JUCE](https://github.com/juce-framework/JUCE) for its license text.
+
+VST is a registered trademark of Steinberg Media Technologies GmbH; Audio Units is a trademark of Apple Inc. All other names are used for identification only.

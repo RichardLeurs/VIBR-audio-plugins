@@ -7,6 +7,7 @@
 #include "MidiMap.h"
 #include "DynamicsEngine.h"
 #include "ui/Presets.h"
+#include "ui/OutputMeter.h"
 
 // DN-1 Dynamics Lab: SHAPER (DY-1), COMPRESSOR (SUSTAIN = CS-3, VCA, OPTO) and LIMITER (PEAK = LM-2, TRUE PEAK) in one plugin (see DynamicsEngine.h and .claude/lab_specs.md).
 // Host parameters: power, mode, variant, gateOn, gateThresh, gateRelease, expOn, expThresh, expRatio, expRelease, transOn, attack, sustain (SHAPER),
@@ -62,6 +63,8 @@ public:
     vibr::PresetManager presets;
     std::atomic<int> currentProgram { 0 };
     std::atomic<int> pendingProgram { -1 };
+    std::atomic<bool> extKey { false };                 // true while the host's sidechain is the key (the EXT lamp)
+    vibr::ui::PeakTap outMeter;                         // sample peak of the output, read by the editor
     const dn1::Engine& getEngine() const { return engine; }
 
 private:
@@ -73,7 +76,7 @@ private:
                        *pCompSustain {}, *pCompAttack {}, *pCompThresh {}, *pCompRatio {}, *pCompAttackMs {}, *pCompRelease {}, *pCompMakeup {}, *pCompMix {}, *pTone {},
                        *pLimThresh {}, *pLimRelease {}, *pLimCeiling {}, *pScHp {}, *pLink {}, *pMix {}, *pLevel {}, *pAutoLevel {};
     juce::SmoothedValue<float> powerSmooth;
-    juce::AudioBuffer<float> dryBuf;
+    juce::AudioBuffer<float> dryBuf, keyBuf;
     int delayPos = 0;
     std::vector<float> powerDelay[2];                                              // the untouched signal, delayed by the latency, for the power switch
 

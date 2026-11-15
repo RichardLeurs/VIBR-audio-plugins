@@ -45,6 +45,8 @@ public:
     vibr::BypassLink bypassLink { apvts };                // host bypass <-> OFF / ON switch
     const dy1::Engine& getEngine() const { return engine; }       // for the ACTION display of the editor
 
+    std::atomic<bool> extKey { false };                 // true while the host's sidechain is the key (the EXT lamp)
+
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
 
@@ -52,7 +54,7 @@ private:
     std::atomic<float> *pPower {}, *pGateOn {}, *pGateThresh {}, *pGateRelease {}, *pExpOn {}, *pExpThresh {}, *pExpRatio {}, *pExpRelease {},
                        *pTransOn {}, *pAttack {}, *pSustain {}, *pMix {}, *pLevel {};
     juce::SmoothedValue<float> powerSmooth;
-    juce::AudioBuffer<float> dryBuf;
+    juce::AudioBuffer<float> dryBuf, keyBuf;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DY1AudioProcessor)
 };

@@ -1,0 +1,907 @@
+// VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
+// Offline check of MS-1 AUTO stages 1 and 2 (.claude/mastering_specs.md, "AUTO", tests 1, 2, 3, 6, 7, 8 and the stage 1 part of 9):
+//   1  determinism: the same signal twice gives bit-identical snapshots and proposals
+//   2  input rules: a 0 dBFS peak gives -3 dB of trim, a clipped signal warns, a 15 Hz rumble (or a DC offset) turns the 20 Hz high-pass on, a clean -10 dBFS signal changes nothing
+//   3  EQ: tilted spectra give corrective shelves / bells of the right sign within +-4 dB and none under 1 dB, a flat one "no change needed", a 3 kHz tone in
+//      noise one narrow cut, a loaded reference gives MATCH EQ's result, the values are inside the parameter ranges and steps, the real processor applies it
+//   6  bus and limiter: a dense signal (PSR below 9 dB) leaves the bus off, a dynamic one turns it on; the limiter character follows the needed gain; the warning above 9 dB
+//   7  limits: every proposed value is inside the range of its parameter; less than 10 s of programme or silence gives no proposal
+//   8  audio thread: nothing is allocated while learning (a counting operator new), snapshots are consistent under concurrent reads, the output of the real
+//      processor is bit-exact with and without learning
+//   9  applying a proposal is one undo step and APPLY TO B fills slot B (the real processor, parameters)
+#include <atomic>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <functional>
+#include <new>
+#include <random>
+#include <thread>
+#include "PluginProcessor.h"
+
+static std::atomic<long> gAllocs { 0 };
+static std::atomic<bool> gCount { false };
+void* operator new (std::size_t n)
+{
+    if (gCount.load (std::memory_order_relaxed)) gAllocs.fetch_add (1, std::memory_order_relaxed);
+    if (void* p = std::malloc (n)) return p;
+    throw std::bad_alloc();
+}
+void operator delete (void* p) noexcept { std::free (p); }
+void operator delete (void* p, std::size_t) noexcept { std::free (p); }
+
+namespace
+{
+int problems = 0;
+void check (bool ok, const std::string& what) { std::printf ("  %-100s %s\n", what.c_str(), ok ? "ok" : "FAILED"); if (! ok) ++problems; }
+
+using namespace ms1::autom;
+constexpr float kFs = 48000.0f;
+struct Stereo { std::vector<float> l, r; };
+
+// pink noise (Paul Kellet's filter), reproducible
+struct Pink
+{
+    std::mt19937 rng; std::uniform_real_distribution<float> u { -1.0f, 1.0f };
+    float b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+    explicit Pink (unsigned seed) : rng (seed) {}
+    float next()
+    {
+        const float w = u (rng);
+        b0 = 0.99886f * b0 + w * 0.0555179f; b1 = 0.99332f * b1 + w * 0.0750759f; b2 = 0.96900f * b2 + w * 0.1538520f;
+        b3 = 0.86650f * b3 + w * 0.3104856f; b4 = 0.55000f * b4 + w * 0.5329522f; b5 = -0.7616f * b5 - w * 0.0168980f;
+        const float out = b0 + b1 + b2 + b3 + b4 + b5 + b6 + w * 0.5362f;
+        b6 = w * 0.115926f;
+        return out * 0.11f;
+    }
+};
+float dbToLin (float db) { return std::pow (10.0f, db / 20.0f); }
+float peakOf (const Stereo& s) { float p = 0; for (size_t i = 0; i < s.l.size(); ++i) p = std::max ({ p, std::abs (s.l[i]), std::abs (s.r[i]) }); return p; }
+void scaleTo (Stereo& s, float peak) { const float g = peak / std::max (1.0e-9f, peakOf (s)); for (auto& v : s.l) v *= g; for (auto& v : s.r) v *= g; }
+
+// stereo pink noise (right is 70 % the left, 30 % independent) with a slow level modulation of `modDb` peak to peak and 50 ms bursts
+Stereo programme (float seconds, float modDb, unsigned seed, float hpHz = 0.0f)
+{
+    const int n = (int) (seconds * kFs);
+    Stereo s { std::vector<float> ((size_t) n), std::vector<float> ((size_t) n) };
+    Pink a (seed), b (seed + 99);
+    ms1::Butter2 hp[2]; if (hpHz > 0.0f) for (auto& f : hp) f.set (hpHz, kFs, true);
+    std::mt19937 rng (seed + 5); std::uniform_real_distribution<float> u (-1.0f, 1.0f);
+    float env = 0.0f, target = 0.0f;
+    for (int i = 0; i < n; ++i)
+    {
+        if (i % 12000 == 0) target = 0.5f * modDb * u (rng);                      // a new level every 250 ms
+        env += (target - env) * 0.0004f;
+        const float g = dbToLin (env);
+        const float x = a.next(), y = 0.7f * x + 0.3f * b.next();
+        s.l[(size_t) i] = g * x; s.r[(size_t) i] = g * y;
+        if (hpHz > 0.0f) { s.l[(size_t) i] = hp[0].tick (s.l[(size_t) i]); s.r[(size_t) i] = hp[1].tick (s.r[(size_t) i]); }
+    }
+    return s;
+}
+
+// stereo pink noise (right 70 % the left, 30 % independent) in which ONE multiband band (0 .. 3, the default crossovers) has its level changed every `holdMs`
+// to a new random value of +-`halfDb` (smoothed over 20 ms); halfDb 0 = steady
+Stereo bandModulated (float seconds, int band, float halfDb, float holdMs, unsigned seed)
+{
+    const int n = (int) (seconds * kFs);
+    Stereo s { std::vector<float> ((size_t) n), std::vector<float> ((size_t) n) };
+    Pink a (seed), b (seed + 99);
+    ms1::Crossover<3> xo; const float fr[3] = { 120.0f, 1200.0f, 6000.0f }; xo.set (fr, kFs);
+    std::mt19937 rng (seed + 5); std::uniform_real_distribution<float> u (-1.0f, 1.0f);
+    const int hold = (int) (holdMs * 0.001f * kFs);
+    float env = 0.0f, target = 0.0f;
+    for (int i = 0; i < n; ++i)
+    {
+        if (i % hold == 0) target = halfDb * u (rng);
+        env += (target - env) * 0.001f;
+        const float x = a.next(), y = 0.7f * x + 0.3f * b.next();
+        float bl[4], br[4];
+        xo.split (0, x, bl); xo.split (1, y, br);
+        bl[band] *= dbToLin (env); br[band] *= dbToLin (env);
+        s.l[(size_t) i] = bl[0] + bl[1] + bl[2] + bl[3]; s.r[(size_t) i] = br[0] + br[1] + br[2] + br[3];
+    }
+    return s;
+}
+
+// the mean gain reduction (dB, >= 0) of one band of the REAL multiband compressor with the proposal's settings for that band (the others off), after 2 s, in blocks of 16
+double realMbReduction (const Stereo& in, const Proposal& p, int band)
+{
+    ms1::MultibandComp mc; mc.prepare (kFs);
+    ms1::MbParams mp; mp.on = true; mp.mix = 1.0f; mp.kneeDb = 6.0f;
+    for (int k = 0; k < 4; ++k) mp.band[k].on = (k == band);
+    auto& b = mp.band[band];
+    b.thresholdDb = p.mb[(size_t) band].threshDb; b.ratio = p.mb[(size_t) band].ratio; b.attackMs = p.mb[(size_t) band].attackMs; b.autoRelease = true; b.makeupDb = 0.0f;
+    auto l = in.l, r = in.r;
+    double sum = 0.0; long blocks = 0;
+    for (size_t pos = 0; pos + 16 <= l.size(); pos += 16)
+    {
+        mc.process (l.data() + pos, r.data() + pos, 16, mp);
+        if (pos > (size_t) (kFs * 2.0f)) { sum += -mc.gr[(size_t) band].load(); ++blocks; }
+    }
+    return sum / std::max<long> (1, blocks);
+}
+
+// the whole proposed multiband (all four bands, release auto, make-up 0) run on the signal
+Stereo applyRealMb (const Stereo& in, const Proposal& p)
+{
+    ms1::MultibandComp mc; mc.prepare (kFs);
+    ms1::MbParams mp; mp.on = p.mbSet; mp.mix = 1.0f; mp.kneeDb = 6.0f;
+    for (int k = 0; k < 4; ++k)
+    {
+        const auto& b = p.mb[(size_t) k];
+        mp.band[k].on = b.on; mp.band[k].thresholdDb = b.threshDb; mp.band[k].ratio = b.ratio; mp.band[k].attackMs = b.attackMs; mp.band[k].autoRelease = true; mp.band[k].makeupDb = 0.0f;
+    }
+    Stereo out = in;
+    for (size_t pos = 0; pos + 64 <= out.l.size(); pos += 64) mc.process (out.l.data() + pos, out.r.data() + pos, 64, mp);
+    return out;
+}
+
+struct Result { AnalysisSnapshot snap; };
+
+// feeds the analyser in blocks of `block` samples and returns its last published snapshot
+AnalysisSnapshot analyse (const Stereo& in, int block = 512, bool learn = true, const float* xover = nullptr)
+{
+    static const float defX[3] = { 120.0f, 1200.0f, 6000.0f }, defIx[2] = { 200.0f, 4000.0f };
+    auto an = std::make_unique<ms1::AutoAnalyzer>();
+    an->prepare (kFs);
+    an->learning.store (learn);
+    for (size_t pos = 0; pos < in.l.size(); pos += (size_t) block)
+    {
+        const int n = (int) std::min<size_t> ((size_t) block, in.l.size() - pos);
+        an->process (in.l.data() + pos, in.r.data() + pos, n, true, xover != nullptr ? xover : defX, defIx);
+    }
+    AnalysisSnapshot s;
+    an->read (s);
+    return s;
+}
+
+bool sameProposal (const Proposal& a, const Proposal& b)
+{
+    const auto row = [] (const Row& x, const Row& y) { return x.available == y.available && x.needed == y.needed && x.summary == y.summary && x.reason == y.reason; };
+    return a.valid == b.valid && a.message == b.message && row (a.input, b.input) && row (a.eq, b.eq) && row (a.multiband, b.multiband) && row (a.imager, b.imager) && row (a.bus, b.bus) && row (a.limiter, b.limiter)
+        && a.inGainDb == b.inGainDb && a.hpfHz == b.hpfHz && a.busOn == b.busOn && a.busThreshDb == b.busThreshDb && a.busReductionDb == b.busReductionDb && a.limChar == b.limChar && a.neededGainDb == b.neededGainDb;
+}
+
+void setParam (MS1AudioProcessor& p, const char* id, float plain)
+{
+    if (auto* par = p.apvts.getParameter (id)) par->setValueNotifyingHost (par->convertTo0to1 (plain));
+}
+float getParam (MS1AudioProcessor& p, const char* id) { return p.apvts.getRawParameterValue (id)->load(); }
+void pump (int ms) { juce::MessageManager::getInstance()->runDispatchLoopUntil (ms); }
+
+void runProcessor (MS1AudioProcessor& p, Stereo& io, int block)
+{
+    juce::AudioBuffer<float> buf (2, block);
+    juce::MidiBuffer midi;
+    for (size_t pos = 0; pos < io.l.size(); pos += (size_t) block)
+    {
+        const int n = (int) std::min<size_t> ((size_t) block, io.l.size() - pos);
+        buf.setSize (2, n, false, false, true);
+        std::memcpy (buf.getWritePointer (0), io.l.data() + pos, (size_t) n * sizeof (float));
+        std::memcpy (buf.getWritePointer (1), io.r.data() + pos, (size_t) n * sizeof (float));
+        p.processBlock (buf, midi);
+        std::memcpy (io.l.data() + pos, buf.getReadPointer (0), (size_t) n * sizeof (float));
+        std::memcpy (io.r.data() + pos, buf.getReadPointer (1), (size_t) n * sizeof (float));
+    }
+}
+void prepare (MS1AudioProcessor& p, double fs, int block) { p.setPlayConfigDetails (2, 2, fs, block); p.prepareToPlay (fs, block); }
+} // namespace
+
+int main()
+{
+    juce::ScopedJuceInitialiser_GUI init;
+    AutoContext ctx;                                                    // target -14 LUFS, everything at its default
+
+    if (std::getenv ("MS1_CALIB") != nullptr)
+    {   // the detector offsets: for every band (with the rule's attack) and ratio, the offset at which the real compressor's mean reduction is 1.5 dB (interpolated)
+        const float atk[4] = { 30.0f, 15.0f, 8.0f, 4.0f };
+        for (int band = 0; band < 4; ++band)
+            for (float ratio : { 1.5f, 2.0f, 3.0f })
+                for (float half : { 5.5f, 8.0f, 11.0f })
+                {
+                    auto sig = bandModulated (40.0f, band, half, 1000.0f, 21 + (unsigned) band);
+                    scaleTo (sig, dbToLin (-3.0f));
+                    const auto sn = analyse (sig);
+                    double prevOff = 0.0, prevReal = 0.0, found = -99.0;
+                    for (float off = 3.0f; off <= 15.1f; off += 1.0f)
+                    {
+                        Proposal p; p.mb[(size_t) band].threshDb = findBusThreshold (sn.bandHist[band], off, ratio, 1.5f, -60.0f); p.mb[(size_t) band].ratio = ratio; p.mb[(size_t) band].attackMs = atk[band];
+                        const double real = realMbReduction (sig, p, band);
+                        if (found < -90.0 && off > 3.0f && real <= 1.5) found = prevOff + (prevReal - 1.5) / (prevReal - real) * (off - prevOff);
+                        prevOff = off; prevReal = real;
+                    }
+                    std::printf ("band %d attack %2.0f ratio %.1f half %4.1f: spread %4.1f dB -> offset %.2f dB gives 1.5 dB\n", band, (double) atk[band], (double) ratio, (double) half, (double) (histPercentile (sn.bandHist[band], 0.95f) - histPercentile (sn.bandHist[band], 0.10f)), found);
+                }
+        for (float mod : { 8.0f, 14.0f, 20.0f })
+            for (unsigned seed : { 9u, 12u })
+            {
+                auto sig = programme (40.0f, mod, seed);
+                scaleTo (sig, dbToLin (-3.0f));
+                const auto sn = analyse (sig);
+                std::printf ("bus mod %.0f seed %u: PSR %.1f\n", (double) mod, seed, (double) sn.psrDb);
+                for (float off = 0.0f; off <= 14.1f; off += 2.0f)
+                {
+                    const float thr = findBusThreshold (sn.shortTermHist, off, 2.0f, 1.5f);
+                    ms1::BusCompressor bus; bus.prepare (kFs);
+                    ms1::BusParams bp; bp.on = true; bp.thresholdDb = thr; bp.ratio = 1; bp.attack = 4; bp.release = 4;
+                    auto l = sig.l, r = sig.r;
+                    double sum = 0.0; int blocks = 0;
+                    for (size_t pos = 0; pos + 16 <= l.size(); pos += 16) { bus.process (l.data() + pos, r.data() + pos, 16, bp); if (pos > (size_t) (kFs * 2)) { sum += -bus.grDb.load(); ++blocks; } }
+                    std::printf ("   off %+5.1f thr %6.1f pred %.2f real %.2f\n", (double) off, (double) thr, meanReduction (sn.shortTermHist, off, thr, 2.0f), sum / std::max (1, blocks));
+                }
+            }
+        return 0;
+    }
+
+    // ------------------------------------------------------------------ 1 determinism
+    std::printf ("1  determinism\n");
+    {
+        auto sig = programme (30.0f, 6.0f, 1);
+        scaleTo (sig, dbToLin (-3.0f));
+        const auto a = analyse (sig), b = analyse (sig);
+        check (std::memcmp (&a, &b, sizeof (a)) == 0, "the same signal twice gives bit-identical snapshots");
+        check (sameProposal (propose (a, ctx), propose (b, ctx)), "... and identical proposals");
+        const auto c = analyse (sig, 480);
+        std::printf ("     (another block size: integrated %.2f against %.2f LUFS, programme %.2f against %.2f s)\n", (double) c.integratedLufs, (double) a.integratedLufs, (double) c.programmeSeconds, (double) a.programmeSeconds);
+        check (std::abs (c.integratedLufs - a.integratedLufs) < 0.1f && std::abs (c.programmeSeconds - a.programmeSeconds) < 0.5f, "a different host block size gives (nearly) the same measurements");
+    }
+
+    // ------------------------------------------------------------------ 2 input
+    std::printf ("2  input rules\n");
+    {
+        auto loud = programme (20.0f, 6.0f, 2);
+        scaleTo (loud, 1.0f);                                                // a sample peak of exactly 0 dBFS
+        const auto s = analyse (loud);
+        const auto p = propose (s, ctx);
+        std::printf ("     sample peak %.2f dBFS, true peak %.2f dBTP -> trim %.1f dB, clipped %u samples (%.5f %%)\n", (double) s.samplePeakDb, (double) s.truePeakDb, (double) p.inGainDb, s.clippedSamples, (double) s.clippedFraction * 100.0);
+        check (p.valid && std::abs (p.inGainDb - (-3.0f)) <= 0.31f && std::abs (p.inGainDb + (s.truePeakDb + 3.0f)) <= 0.051f, "a signal peaking at 0 dBFS gives a trim of -(true peak + 3 dB), about -3 dB");
+        check (! p.clipWarning, "... and no clipping warning (a single full-scale sample)");
+
+        auto clipped = programme (20.0f, 6.0f, 3);
+        scaleTo (clipped, 3.0f);
+        for (auto& v : clipped.l) v = std::clamp (v, -1.0f, 1.0f);
+        for (auto& v : clipped.r) v = std::clamp (v, -1.0f, 1.0f);
+        const auto sc = analyse (clipped);
+        const auto pc = propose (sc, ctx);
+        check (pc.clipWarning && pc.input.reason.find ("clipped") != std::string::npos && pc.input.reason.find ("limiter cannot repair") != std::string::npos, "a clipped signal warns that the limiter cannot repair it");
+
+        auto rumble = programme (20.0f, 4.0f, 4, 60.0f);                    // music without bass below 60 Hz ...
+        scaleTo (rumble, dbToLin (-12.0f));
+        for (size_t i = 0; i < rumble.l.size(); ++i) { const float v = 0.12f * std::sin (6.2831853f * 15.0f * (float) i / kFs); rumble.l[i] += v; rumble.r[i] += v; }       // ... plus a 15 Hz rumble
+        const auto sr = analyse (rumble);
+        const auto pr = propose (sr, ctx);
+        std::printf ("     rumble: below 25 Hz %.1f dBFS, 40 .. 60 Hz %.1f dBFS -> high-pass %.0f Hz\n", (double) sr.lowEnergyDb, (double) sr.midBassDb, (double) pr.hpfHz);
+        check (pr.hpfHz == 20.0f && pr.input.needed, "a 15 Hz rumble turns the 20 Hz high-pass on");
+
+        auto dc = programme (20.0f, 4.0f, 5, 60.0f);
+        scaleTo (dc, dbToLin (-12.0f));
+        for (auto& v : dc.l) v += 0.01f;
+        for (auto& v : dc.r) v += 0.01f;
+        const auto sd = analyse (dc);
+        check (propose (sd, ctx).hpfHz == 20.0f, "a DC offset above -60 dBFS turns the 20 Hz high-pass on (dc " + std::to_string (sd.dcDb) + " dBFS)");
+
+        auto bass = programme (20.0f, 4.0f, 6, 30.0f);
+        scaleTo (bass, dbToLin (-14.0f));
+        for (size_t i = 0; i < bass.l.size(); ++i) { const float v = 0.1f * std::sin (6.2831853f * 45.0f * (float) i / kFs); bass.l[i] += v; bass.r[i] += v; }
+        const auto sb = analyse (bass);
+        check (propose (sb, ctx).hpfHz == 0.0f, "strong 45 Hz bass alone does not turn the high-pass on (below 25 Hz " + std::to_string (sb.lowEnergyDb) + ", 40 .. 60 Hz " + std::to_string (sb.midBassDb) + " dBFS)");
+
+        auto clean = programme (20.0f, 4.0f, 7, 50.0f);
+        scaleTo (clean, dbToLin (-10.0f));
+        const auto sn = analyse (clean);
+        const auto pn = propose (sn, ctx);
+        check (pn.valid && pn.inGainDb == 0.0f && pn.hpfHz == 0.0f && ! pn.input.needed && pn.input.summary.find ("no change needed") != std::string::npos, "a clean signal at -10 dBFS: no trim, no high-pass, 'no change needed'");
+        check (pn.eq.available && pn.multiband.available && pn.imager.available && pn.multiband.summary.find ("not in this version") == std::string::npos && pn.imager.summary.find ("not in this version") == std::string::npos, "MULTIBAND and IMAGER rows are real proposal rows (stages 2 and 3)");
+    }
+
+    // ------------------------------------------------------------------ 3 EQ (stage 2)
+    std::printf ("3  EQ: style curves, narrow cuts, the reference\n");
+    {
+        constexpr int N = kSpecBands;
+        const auto bandHz = [] (int b) { return 20.0f * std::pow (1000.0f, ((float) b + 0.5f) / (float) N); };
+        // a snapshot with 60 s of programme and a given long-term spectrum (raw dB per band, as the analyser stores it)
+        const auto makeSnap = [&] (const std::function<float (float)>& spec)
+        {
+            AnalysisSnapshot sn;
+            sn.sampleRate = kFs; sn.programmeSeconds = 60.0f; sn.integratedLufs = -16.0f; sn.truePeakDb = -6.0f; sn.samplePeakDb = -6.0f; sn.rmsDb = -20.0f; sn.psrDb = 7.0f;
+            sn.spectrumFrames = 600; sn.narrowBlocks = 20;
+            for (int b = 0; b < N; ++b) sn.spectrumDb[b] = spec (bandHz (b));
+            return sn;
+        };
+        const auto neutral = [] (int style, float hz) { return -40.0f + styleCurveDb (style, hz); };
+        const auto tilted = [&] (float dbPerOct) { return [=] (float hz) { return neutral (0, hz) + dbPerOct * std::log2 (hz / 1000.0f); }; };
+        const auto gainsOk = [] (const Proposal& p, bool& noneUnder1, float& maxAbs)
+        {
+            noneUnder1 = true; maxAbs = 0.0f;
+            for (const auto& e : p.eqBands) if (e.on && e.gainDb != 0.0f) { maxAbs = std::max (maxAbs, std::abs (e.gainDb)); if (std::abs (e.gainDb) < 1.0f) noneUnder1 = false; }
+        };
+        // the response of the proposed bands (dB) at a frequency
+        const auto response = [&] (const Proposal& p, float hz)
+        {
+            float t = 0.0f;
+            for (int i = 0; i < ms1::kEqBands; ++i) { ms1::EqBand b; b.freq = p.eqBands[(size_t) i].freq; b.gainDb = p.eqBands[(size_t) i].on ? p.eqBands[(size_t) i].gainDb : 0.0f; b.q = p.eqBands[(size_t) i].q; t += ms1::eqResponseDb (i, b, hz, kFs); }
+            return t;
+        };
+        // the deviation (dB, mean removed) of a spectrum + the EQ from the style curve between 100 Hz and 8 kHz: the rms and the largest
+        const auto deviation = [&] (const AnalysisSnapshot& sn, const Proposal* p, int style, float& maxDev)
+        {
+            double sum = 0.0, sq = 0.0; int n = 0; maxDev = 0.0f;
+            std::vector<float> d;
+            for (int b = 0; b < N; ++b)
+            {
+                const float hz = bandHz (b); if (hz < 100.0f || hz > 8000.0f) continue;
+                d.push_back (sn.spectrumDb[b] + (p != nullptr ? response (*p, hz) : 0.0f) - neutral (style, hz)); sum += d.back(); ++n;
+            }
+            const double mean = sum / n;
+            for (float v : d) { sq += (v - mean) * (v - mean); maxDev = std::max (maxDev, (float) std::abs (v - mean)); }
+            return (float) std::sqrt (sq / n);
+        };
+
+        // a spectrum on the style curve: nothing to do, for every style
+        {
+            bool allFlat = true;
+            for (int st = 0; st < kStyles; ++st)
+            {
+                AutoContext c; c.style = st;
+                const auto sn = makeSnap ([&] (float hz) { return neutral (st, hz); });
+                const auto p = propose (sn, c);
+                allFlat = allFlat && p.valid && p.eq.available && ! p.eqSet && ! p.eq.needed && p.eq.summary.find ("no change needed") != std::string::npos && paramWrites (p, false, true, false, false, false, false).empty();
+            }
+            check (allFlat, "a spectrum on the style curve (all four styles): 'no change needed', nothing is written");
+        }
+        // a style that is not the spectrum's: Warm / Bright / Club curves against a Neutral spectrum propose the difference with the right sign
+        {
+            AutoContext cw; cw.style = 1; AutoContext cb; cb.style = 2; AutoContext cc; cc.style = 3;
+            const auto sn = makeSnap ([&] (float hz) { return neutral (0, hz); });
+            const auto pw = propose (sn, cw), pb = propose (sn, cb), pc = propose (sn, cc), pn = propose (sn, AutoContext {});
+            std::printf ("     Neutral material, style Warm: %s\n                              Bright: %s\n                              Club: %s\n", pw.eq.summary.c_str(), pb.eq.summary.c_str(), pc.eq.summary.c_str());
+            check (! pn.eqSet, "Neutral material, Neutral style: no change");
+            check (pb.eqSet && pb.eqBands[7].gainDb > 0.0f, "Bright style on neutral material: the high shelf boosts");
+            check (pc.eqSet && pc.eqBands[0].gainDb > 0.0f, "Club style on neutral material: the low shelf boosts");
+            check (pw.eqSet || pw.eq.summary.find ("no change") != std::string::npos, "Warm style: a proposal or an honest 'no change needed' (the +-1 dB are under the 1 dB floor)");
+        }
+        // tilts
+        {
+            AutoContext c;
+            const auto sBright = makeSnap (tilted (+3.0f)), sDark = makeSnap (tilted (-3.0f)), sMild = makeSnap (tilted (+0.6f));
+            const auto pBright = propose (sBright, c), pDark = propose (sDark, c), pMild = propose (sMild, c);
+            bool under1, under2, under3; float mx1, mx2, mx3;
+            gainsOk (pBright, under1, mx1); gainsOk (pDark, under2, mx2); gainsOk (pMild, under3, mx3);
+            std::printf ("     +3 dB/oct tilt: %s\n     -3 dB/oct tilt: %s\n     +0.6 dB/oct tilt: %s\n", pBright.eq.summary.c_str(), pDark.eq.summary.c_str(), pMild.eq.summary.c_str());
+            check (pBright.eqSet && pBright.eq.needed && pBright.eqBands[0].gainDb > 0.0f && pBright.eqBands[7].gainDb < 0.0f, "a spectrum tilted up (+3 dB/oct): low shelf boosts, high shelf cuts");
+            check (pDark.eqSet && pDark.eqBands[0].gainDb < 0.0f && pDark.eqBands[7].gainDb > 0.0f, "a spectrum tilted down (-3 dB/oct): low shelf cuts, high shelf boosts");
+            check (mx1 <= 4.0f + 1.0e-4f && mx2 <= 4.0f + 1.0e-4f && mx3 <= 4.0f + 1.0e-4f, "no band exceeds +-4 dB (" + std::to_string (std::max ({ mx1, mx2, mx3 })) + ")");
+            check (under1 && under2 && under3, "no band under 1 dB is written (the other bands are off, gain 0)");
+            float dev0, dev1; const float rms0 = deviation (sMild, nullptr, 0, dev0), rms1 = deviation (sMild, &pMild, 0, dev1);
+            std::printf ("     +0.6 dB/oct tilt: deviation from the style curve (100 Hz .. 8 kHz) rms %.2f -> %.2f dB, largest %.2f -> %.2f dB\n", (double) rms0, (double) rms1, (double) dev0, (double) dev1);
+            check (rms1 < 0.6f * rms0 && dev1 <= 1.5f, "a mild tilt is corrected to within 1.5 dB of the style curve (rms down by 40 % or more)");
+            float d0, d1; const float r0 = deviation (sBright, nullptr, 0, d0), r1 = deviation (sBright, &pBright, 0, d1);
+            check (r1 < r0, "a strong tilt is brought closer to the curve (rms " + std::to_string (r0) + " -> " + std::to_string (r1) + " dB, limited by the +-4 dB)");
+            const auto again = propose (sBright, c);
+            bool same = true; for (int i = 0; i < ms1::kEqBands; ++i) same = same && again.eqBands[(size_t) i].freq == pBright.eqBands[(size_t) i].freq && again.eqBands[(size_t) i].gainDb == pBright.eqBands[(size_t) i].gainDb && again.eqBands[(size_t) i].q == pBright.eqBands[(size_t) i].q && again.eqBands[(size_t) i].on == pBright.eqBands[(size_t) i].on;
+            check (same && again.eq.summary == pBright.eq.summary && again.eq.reason == pBright.eq.reason, "the same spectrum twice gives the same bands, summary and reason");
+            // 'no change needed' when the EQ already is the proposal
+            AutoContext cur = c; cur.curEqOn = true;
+            for (int i = 0; i < ms1::kEqBands; ++i) { const auto& e = pBright.eqBands[(size_t) i]; cur.curEq[(size_t) i] = { e.on, e.freq, e.on ? e.gainDb : 0.0f, e.q, 0, false }; }
+            const auto pCur = propose (sBright, cur);
+            check (pCur.eqSet && ! pCur.eq.needed && pCur.eq.summary.find ("no change needed") == 0, "when the EQ already has the proposal: 'no change needed'");
+        }
+        // a reference is the target: the result is exactly the MATCH EQ fit, and the style does not matter
+        {
+            std::array<float, N> ref {};
+            for (int b = 0; b < N; ++b) ref[(size_t) b] = -43.0f - 4.5f * std::log2 (bandHz (b) / 1000.0f) + (bandHz (b) > 2000.0f ? 3.0f : 0.0f) - (bandHz (b) < 120.0f ? 2.5f : 0.0f);
+            const auto sn = makeSnap ([&] (float hz) { return neutral (0, hz) + 0.4f * std::log2 (hz / 1000.0f); });
+            bool allSame = true, anyMove = false, noNarrow = true;
+            for (int st = 0; st < kStyles; ++st)
+            {
+                AutoContext c; c.style = st; c.hasRef = true; c.refDb = ref;
+                const auto p = propose (sn, c);
+                const auto fit = ms1::matchEqFit (ref.data(), sn.spectrumDb);
+                for (int i = 0; i < ms1::kEqBands; ++i)
+                {
+                    const auto& e = p.eqBands[(size_t) i];
+                    allSame = allSame && e.freq == fit[(size_t) i].freq && e.gainDb == fit[(size_t) i].gainDb && e.q == fit[(size_t) i].q && e.on;
+                    anyMove = anyMove || e.gainDb != 0.0f;
+                    noNarrow = noNarrow && ! e.narrow;
+                }
+                allSame = allSame && p.eqFromRef;
+            }
+            check (allSame && anyMove && noNarrow, "a reference loaded: the EQ step equals matchEqFit (MATCH EQ's code) band by band, for every style");
+            // through the real processor: the same bands MATCH EQ writes
+            AutoContext c; c.hasRef = true; c.refDb = ref;
+            const auto p = propose (sn, c);
+            check (p.eq.summary.find ("MATCH EQ") == 0 && p.eq.reason.find ("same fit as the MATCH EQ button") != std::string::npos, "the row says it is the MATCH EQ fit");
+            // a reference with a level difference only: nothing to do
+            AutoContext c2; c2.hasRef = true; for (int b = 0; b < N; ++b) c2.refDb[(size_t) b] = sn.spectrumDb[b] + 9.0f;
+            check (! propose (sn, c2).eqSet, "a reference that differs by level only: no change needed");
+        }
+        // narrow cuts from the real analyser: a 3 kHz tone in noise
+        {
+            auto noise = programme (36.0f, 2.0f, 21);
+            scaleTo (noise, dbToLin (-12.0f));
+            const auto snNoise = analyse (noise);
+            auto tone = noise;
+            for (size_t i = 0; i < tone.l.size(); ++i) { const float v = 0.02f * std::sin (6.2831853f * 3000.0f * (float) i / kFs); tone.l[i] += v; tone.r[i] += v; }
+            const auto snTone = analyse (tone);
+            AutoContext c;
+            const auto pN = propose (snNoise, c), pT = propose (snTone, c);
+            std::printf ("     noise alone: %u narrow blocks, %d narrow cuts; with the 3 kHz tone: %d cuts\n", snNoise.narrowBlocks, pN.eqNarrow, pT.eqNarrow);
+            int found = -1; for (int i = 0; i < ms1::kEqBands; ++i) if (pT.eqBands[(size_t) i].narrow) found = i;
+            check (snTone.narrowBlocks >= 10 && snTone.narrowBlocks <= 12, "the analyser counted the 3 s blocks of 36 s of programme (" + std::to_string (snTone.narrowBlocks) + ")");
+            check (pN.eqNarrow == 0, "noise alone: no narrow cut");
+            check (pT.eqNarrow == 1 && found > 0 && found < ms1::kEqBands - 1, "noise with a 3 kHz tone: one narrow cut, in a bell band");
+            if (found >= 0)
+            {
+                const auto& e = pT.eqBands[(size_t) found];
+                std::printf ("     the cut: %.0f Hz, %.1f dB, Q %.1f   (%s)\n", (double) e.freq, (double) e.gainDb, (double) e.q, pT.eq.summary.c_str());
+                check (std::abs (std::log2 (e.freq / 3000.0f)) < 0.1f && e.gainDb <= -1.0f && e.gainDb >= -4.0f && e.q >= 3.0f && e.q <= 5.0f, "... at 3 kHz (within a tenth of an octave), -1 .. -4 dB, Q 3 .. 5");
+            }
+            // determinism through the analyser
+            const auto snTone2 = analyse (tone);
+            bool same = snTone2.narrowBlocks == snTone.narrowBlocks; for (int i = 0; i < ms1::kEqBands; ++i) same = same && propose (snTone2, c).eqBands[(size_t) i].freq == pT.eqBands[(size_t) i].freq;
+            check (same && std::memcmp (snTone.narrowHits, snTone2.narrowHits, sizeof (snTone.narrowHits)) == 0, "the same audio gives the same narrow-peak statistics (twice)");
+            // writes: all 8 bands + eqOn, in range and step, never eqPhase
+            MS1AudioProcessor proc;
+            bool inRange = true, noPhase = true; int count = 0;
+            for (const auto& w : paramWrites (pT, false, true, false, false, false, false))
+            {
+                ++count;
+                auto* par = dynamic_cast<juce::RangedAudioParameter*> (proc.apvts.getParameter (w.id));
+                if (par == nullptr) { inRange = false; continue; }
+                const auto r = par->getNormalisableRange().getRange();
+                const float back = par->convertFrom0to1 (par->convertTo0to1 (w.value));
+                if (w.value < r.getStart() - 1.0e-4f || w.value > r.getEnd() + 1.0e-4f || std::abs (back - w.value) > 0.051f) inRange = false;
+                if (std::strcmp (w.id, "eqPhase") == 0) noPhase = false;
+            }
+            check (count == 1 + 6 * ms1::kEqBands && inRange && noPhase, "the EQ row writes eqOn and 6 values per band (" + std::to_string (count) + "), inside the range and step of each parameter, never eqPhase");
+        }
+        // the real processor: learn programme, propose, apply in one undo step
+        {
+            MS1AudioProcessor p;
+            const int block = 480;
+            prepare (p, 48000.0, block);
+            p.autoStart();
+            auto sig = programme (25.0f, 4.0f, 31);
+            scaleTo (sig, dbToLin (-10.0f));
+            runProcessor (p, sig, block);
+            AnalysisSnapshot sn; p.autoAn.read (sn);
+            p.autoStyle.store (2);
+            const auto prop = propose (sn, p.autoContext());
+            std::printf ("     real processor, pink-ish programme, style Bright: %s\n", prop.eq.summary.c_str());
+            check (prop.valid && prop.eq.available && prop.eqSet && prop.eq.needed, "the real analyser's spectrum gives an EQ proposal (the programme is not on the Bright curve)");
+            const float phaseBefore = getParam (p, "eqPhase"), eq3Before = getParam (p, "eq3Gain"), eqOnBefore = getParam (p, "eqOn");
+            pump (50);
+            p.undoManager.clearUndoHistory();
+            const int written = p.autoApply (prop, false, true, false, false, false, false);
+            pump (150);
+            bool match = true; for (int i = 0; i < ms1::kEqBands; ++i) { const auto id = "eq" + std::to_string (i + 1); match = match && std::abs (getParam (p, (id + "Gain").c_str()) - (prop.eqBands[(size_t) i].on ? prop.eqBands[(size_t) i].gainDb : 0.0f)) < 0.051f && std::abs (getParam (p, (id + "Freq").c_str()) - prop.eqBands[(size_t) i].freq) < 1.01f; }
+            check (written > 0 && match && getParam (p, "eqOn") > 0.5f && getParam (p, "eqPhase") == phaseBefore, "applying writes the bands and leaves eqPhase alone (" + std::to_string (written) + " parameters)");
+            check (p.undoManager.canUndo() && p.undoManager.getNumActionsInCurrentTransaction() >= written, "... in one undo transaction");
+            p.undoManager.undo();
+            pump (150);
+            check (std::abs (getParam (p, "eq3Gain") - eq3Before) < 1.0e-4f && getParam (p, "eqOn") == eqOnBefore, "one undo reverts the EQ");
+            const auto again = propose (sn, p.autoContext());
+            check (! again.eq.needed || again.eqSet, "after the undo the proposal is offered again");
+            // after applying, the context knows the EQ is the proposal
+            p.autoApply (prop, false, true, false, false, false, false);
+            pump (150);
+            check (! propose (sn, p.autoContext()).eq.needed, "after APPLY the EQ row says 'no change needed'");
+        }
+    }
+
+    // ------------------------------------------------------------------ 4 multiband (stage 3)
+    std::printf ("4  multiband\n");
+    {
+        auto steady = bandModulated (40.0f, 0, 0.0f, 1000.0f, 3);
+        scaleTo (steady, dbToLin (-3.0f));
+        const auto ss = analyse (steady);
+        const auto ps = propose (ss, ctx);
+        std::printf ("     steady noise: band spreads %.1f / %.1f / %.1f / %.1f dB\n", (double) ps.mb[0].spreadDb, (double) ps.mb[1].spreadDb, (double) ps.mb[2].spreadDb, (double) ps.mb[3].spreadDb);
+        check (ps.valid && ps.multiband.available && ! ps.mb[0].on && ! ps.mb[1].on && ! ps.mb[2].on && ! ps.mb[3].on && ! ps.mbSet && ! ps.multiband.needed && ps.multiband.summary.find ("no change needed") != std::string::npos, "steady noise leaves every band off ('no change needed')");
+        check (paramWrites (ps, false, false, true, false, false, false).empty() && ps.mbLoudnessRedDb == 0.0f, "... and writes nothing");
+
+        struct Case { int band; float half, hold; unsigned seed; float ratio, attack; };
+        // (the levels of one band step to a new random value every `hold` ms, uniform in +-half dB; the spread P95 - P10 of the 400 ms levels is about 0.85 x 2 x half minus the blur)
+        for (const Case& cs : { Case { 2, 11.0f, 1000.0f, 51, 3.0f, 8.0f }, Case { 0, 11.0f, 1000.0f, 52, 3.0f, 30.0f }, Case { 3, 11.0f, 1000.0f, 53, 3.0f, 4.0f }, Case { 1, 8.0f, 1000.0f, 54, 2.0f, 15.0f }, Case { 2, 5.5f, 1000.0f, 55, 1.5f, 8.0f } })
+        {
+            auto sig = bandModulated (40.0f, cs.band, cs.half, cs.hold, cs.seed);
+            scaleTo (sig, dbToLin (-3.0f));
+            const auto sn = analyse (sig);
+            const auto p = propose (sn, ctx);
+            int onCount = 0; for (const auto& b : p.mb) onCount += b.on ? 1 : 0;
+            const auto& b = p.mb[(size_t) cs.band];
+            const double real = b.on ? realMbReduction (sig, p, cs.band) : 0.0;
+            const std::string tag = std::string (mbBandName (cs.band)) + " modulated +-" + std::to_string ((int) cs.half) + " dB: ";
+            std::printf ("     %sspread %.1f dB -> %s %.1f:1, threshold %.1f dB, attack %.0f ms, predicted %.2f dB, real compressor %.2f dB\n", tag.c_str(), (double) b.spreadDb, b.on ? "on" : "off", (double) b.ratio, (double) b.threshDb, (double) b.attackMs, (double) b.reductionDb, real);
+            check (onCount == 1 && b.on && std::abs (b.ratio - cs.ratio) < 0.01f && std::abs (b.attackMs - cs.attack) < 0.01f, tag + "only that band is on, ratio " + std::to_string (cs.ratio).substr (0, 3) + ":1, attack " + std::to_string ((int) cs.attack) + " ms");
+            check (std::abs (b.reductionDb - 1.5f) < 0.1f && std::abs (real - 1.5) < 0.3, tag + "predicted mean reduction 1.5 dB, the real compressor's mean within 0.3 dB of it");
+            const auto w = paramWrites (p, false, false, true, false, false, false);
+            bool phase = false, xo = false, other = false; int autoRel = 0;
+            for (const auto& pw : w)
+            {
+                if (std::strcmp (pw.id, "mbPhase") == 0) phase = true;
+                if (std::strncmp (pw.id, "xover", 5) == 0) xo = true;
+                if (std::strcmp (pw.id, "mbKnee") == 0 || std::strcmp (pw.id, "mbRms") == 0 || std::strcmp (pw.id, "mbScHz") == 0 || std::strncmp (pw.id, "mb", 2) != 0) other = true;
+                if (std::strlen (pw.id) == 7 && std::strcmp (pw.id + 3, "Auto") == 0 && pw.value > 0.5f) ++autoRel;
+            }
+            check (! phase && ! xo && ! other && autoRel == 1 && ! w.empty(), tag + "the writes never touch mbPhase, the crossovers, knee, detector or sidechain; release is auto");
+        }
+        {   // the bus rule counts the multiband's reduction
+            auto sig = programme (40.0f, 14.0f, 61);
+            scaleTo (sig, dbToLin (-3.0f));
+            const auto sn = analyse (sig);
+            const auto pm = propose (sn, ctx);
+            auto sn2 = sn;                                                  // the same audio with the band histograms flattened: no band qualifies
+            for (auto& band : sn2.bandHist) { for (auto& h : band) h = 0; band[50] = 100; }
+            const auto p0 = propose (sn2, ctx);
+            std::printf ("     programme with 14 dB steps: multiband loses %.2f dB of loudness (%s); bus threshold %.1f dB (%.1f dB without the multiband); limiter needs %+.2f dB (%+.2f dB without)\n", (double) pm.mbLoudnessRedDb, pm.mbSet ? "bands on" : "no band", (double) pm.busThreshDb, (double) p0.busThreshDb, (double) pm.neededGainDb, (double) p0.neededGainDb);
+            check (pm.mbSet && pm.mbLoudnessRedDb > 0.3f && p0.mbLoudnessRedDb == 0.0f, "the multiband's predicted loudness loss is computed from the band energies");
+            check (pm.busOn && p0.busOn && pm.busThreshDb < p0.busThreshDb - 0.05f, "the bus threshold sits lower when the multiband already reduces (its prediction is counted)");
+            check (std::abs (pm.neededGainDb - (ctx.targetLufs - (sn.integratedLufs + pm.inGainDb - pm.mbLoudnessRedDb - pm.busReductionDb))) < 1.0e-3f, "the limiter's needed gain counts the trim, the multiband and the bus reduction");
+        }
+        {   // the same signal twice, and an unchanged proposal that is already applied
+            auto sig = bandModulated (40.0f, 2, 11.0f, 1000.0f, 51);
+            scaleTo (sig, dbToLin (-3.0f));
+            const auto sn = analyse (sig);
+            const auto a = propose (sn, ctx), b = propose (sn, ctx);
+            check (sameProposal (a, b) && a.mb[2].threshDb == b.mb[2].threshDb, "the multiband proposal is deterministic");
+            auto c2 = ctx; c2.curMbOn = true; c2.curMbMix = 100.0f;
+            for (int k = 0; k < 4; ++k) { c2.curMb[(size_t) k].on = a.mb[(size_t) k].on; c2.curMb[(size_t) k].thresh = a.mb[(size_t) k].threshDb; c2.curMb[(size_t) k].ratio = a.mb[(size_t) k].ratio; c2.curMb[(size_t) k].attack = a.mb[(size_t) k].attackMs; c2.curMb[(size_t) k].autoRel = true; c2.curMb[(size_t) k].make = 0.0f; }
+            const auto pc = propose (sn, c2);
+            check (a.multiband.needed && ! pc.multiband.needed && pc.multiband.summary.find ("no change needed") != std::string::npos, "when the multiband already has the proposal: 'no change needed'");
+        }
+    }
+
+    // ------------------------------------------------------------------ 5 imager (stage 3)
+    std::printf ("5  imager\n");
+    {
+        const int n = (int) (30.0f * kFs);
+        Stereo mono { std::vector<float> ((size_t) n), std::vector<float> ((size_t) n) }, wide = mono, lowOut = mono, mid = mono, near = mono;
+        Pink m (71), a (72), b (73), c (74);
+        ms1::Butter2 lpA, lpB; lpA.set (150.0f, kFs, false); lpB.set (150.0f, kFs, false);
+        for (int i = 0; i < n; ++i)
+        {
+            const float x = m.next();
+            mono.l[(size_t) i] = mono.r[(size_t) i] = x;
+            wide.l[(size_t) i] = a.next(); wide.r[(size_t) i] = b.next();                           // independent: correlation about 0
+            const float y = c.next();                                                                // the lows (below 150 Hz) of the right channel are inverted
+            const float low = lpA.tick (y);
+            lowOut.l[(size_t) i] = y; lowOut.r[(size_t) i] = y - 2.0f * low;
+            mid.l[(size_t) i] = x; mid.r[(size_t) i] = 0.7f * x + 0.3f * y;                          // correlation about 0.92, side 12 dB under the mid
+            near.l[(size_t) i] = x; near.r[(size_t) i] = 0.9f * x + 0.1f * y;                        // correlation about 0.99, side 22 dB under the mid
+        }
+        for (auto* s : { &mono, &wide, &lowOut, &mid, &near }) scaleTo (*s, dbToLin (-6.0f));
+        const auto sm = analyse (mono), sw = analyse (wide), sl = analyse (lowOut), sd = analyse (mid), sx = analyse (near);
+        const auto pm = propose (sm, ctx), pw = propose (sw, ctx), pl = propose (sl, ctx), pd = propose (sd, ctx), px = propose (sx, ctx);
+        std::printf ("     mono: r %.2f / %.2f / %.2f, side / mid %.0f / %.0f / %.0f dB -> widths %.0f / %.0f / %.0f %%, mono below %.0f Hz, safe %d\n", (double) sm.imgCorr[0], (double) sm.imgCorr[1], (double) sm.imgCorr[2], (double) sm.imgSideMidDb[0], (double) sm.imgSideMidDb[1], (double) sm.imgSideMidDb[2], (double) pm.widthPct[0], (double) pm.widthPct[1], (double) pm.widthPct[2], (double) pm.monoBelowHz, (int) pm.imgSafeOn);
+        std::printf ("     wide: r %.2f / %.2f / %.2f, side / mid %.1f / %.1f / %.1f dB -> widths %.0f / %.0f / %.0f %%, mono below %.0f Hz, safe %d\n", (double) sw.imgCorr[0], (double) sw.imgCorr[1], (double) sw.imgCorr[2], (double) sw.imgSideMidDb[0], (double) sw.imgSideMidDb[1], (double) sw.imgSideMidDb[2], (double) pw.widthPct[0], (double) pw.widthPct[1], (double) pw.widthPct[2], (double) pw.monoBelowHz, (int) pw.imgSafeOn);
+        std::printf ("     out-of-phase lows: r %.2f / %.2f / %.2f, side / mid %.1f / %.1f / %.1f dB -> widths %.0f / %.0f / %.0f %%, mono below %.0f Hz, safe %d\n", (double) sl.imgCorr[0], (double) sl.imgCorr[1], (double) sl.imgCorr[2], (double) sl.imgSideMidDb[0], (double) sl.imgSideMidDb[1], (double) sl.imgSideMidDb[2], (double) pl.widthPct[0], (double) pl.widthPct[1], (double) pl.widthPct[2], (double) pl.monoBelowHz, (int) pl.imgSafeOn);
+        std::printf ("     r 0.92: side / mid %.1f dB -> widths %.0f / %.0f / %.0f %%, mono below %.0f Hz;  r 0.99: side / mid %.1f dB -> mono below %.0f Hz\n", (double) sd.imgSideMidDb[0], (double) pd.widthPct[0], (double) pd.widthPct[1], (double) pd.widthPct[2], (double) pd.monoBelowHz, (double) sx.imgSideMidDb[0], (double) px.monoBelowHz);
+        check (pm.valid && pm.imager.available && pm.widthPct[0] == 115.0f && pm.widthPct[1] == 115.0f && pm.widthPct[2] == 115.0f && pm.monoBelowHz == 0.0f && ! pm.imgSafeOn && pm.imager.needed, "mono material: width 115 % in every band, mono below off, safe width not switched on");
+        check (pw.widthPct[0] == 90.0f && pw.widthPct[1] == 90.0f && pw.widthPct[2] == 90.0f && pw.imgSafeOn && pw.imager.needed, "wide, uncorrelated material: width 90 % in every band and auto safe width on");
+        check (pw.monoBelowHz == 120.0f, "... its low band has a side level above -20 dB against the mid, so mono below 120 Hz (the rule applies to any wide bass)");
+        check (pl.monoBelowHz == 120.0f && pl.widthPct[0] == 90.0f && pl.imgSafeOn && pl.widthPct[1] == 115.0f && pl.widthPct[2] == 115.0f, "an out-of-phase low band gives mono below 120 Hz (and 90 % there, safe width on), the other bands stay at 115 %");
+        check (pd.widthPct[0] == 115.0f && pd.widthPct[1] == 115.0f && pd.widthPct[2] == 115.0f && pd.monoBelowHz == 120.0f && sd.imgSideMidDb[0] > -20.0f, "r 0.92 is above 0.8 (115 %), but its side is only 12 dB under the mid (above -20 dB): mono below 120 Hz");
+        check (px.widthPct[0] == 115.0f && px.monoBelowHz == 0.0f && sx.imgSideMidDb[0] < -20.0f, "r 0.99: side 22 dB under the mid (below -20 dB): mono below stays off");
+        // in between: 0.3 .. 0.8 leaves the width alone
+        auto sn = sm; sn.imgCorr[0] = 0.5f; sn.imgCorr[1] = 0.3f; sn.imgCorr[2] = 0.8f;
+        const auto pi = propose (sn, ctx);
+        check (pi.widthPct[0] == 100.0f && pi.widthPct[1] == 100.0f && pi.widthPct[2] == 100.0f && ! pi.imgSafeOn, "a correlation between 0.3 and 0.8 (limits included) leaves the width at 100 %");
+        auto sq = sm; for (auto& r : sq.imgCorr) r = 2.0f;
+        const auto pq = propose (sq, ctx);
+        check (! pq.imager.needed && pq.imager.summary.find ("no signal") != std::string::npos && paramWrites (pq, false, false, false, true, false, false).empty(), "no signal in the bands: 'no change needed', nothing is written");
+        // writes
+        const auto wr = paramWrites (pl, false, false, false, true, false, false);
+        bool bad = false, hasW = false, hasMono = false, hasSafe = false, hasOn = false;
+        for (const auto& w : wr)
+        {
+            if (std::strcmp (w.id, "imgBalance") == 0 || std::strncmp (w.id, "imgX", 4) == 0 || std::strcmp (w.id, "imgSafeThr") == 0) bad = true;
+            if (std::strncmp (w.id, "width", 5) == 0) hasW = true;
+            if (std::strcmp (w.id, "monoBelow") == 0) hasMono = true;
+            if (std::strcmp (w.id, "imgSafe") == 0) hasSafe = true;
+            if (std::strcmp (w.id, "imgOn") == 0) hasOn = true;
+        }
+        check (! bad && hasW && hasMono && hasSafe && hasOn, "the writes: imgOn, width1..3, monoBelow, imgSafe; never the mid balance, the crossovers or the safe-width threshold");
+        // the stage never touches the mid, whatever the widths (the stage's own guarantee, checked on the real imager with the proposed widths)
+        {
+            ms1::Imager im; im.prepare (kFs);
+            ms1::ImagerParams ip; ip.on = true; for (int k = 0; k < 3; ++k) ip.width[k] = pl.widthPct[k] * 0.01f; ip.monoBelowHz = pl.monoBelowHz; ip.safe = true;
+            auto x = lowOut; for (int rep = 0; rep < 1; ++rep) { for (size_t pos = 0; pos + 480 <= x.l.size(); pos += 480) im.process (x.l.data() + pos, x.r.data() + pos, 480, ip); }
+            double mi = 0.0, mo = 0.0;
+            for (size_t i = 24000; i < x.l.size(); ++i) { const double u = 0.5 * (lowOut.l[i] + lowOut.r[i]), v = 0.5 * (x.l[i] + x.r[i]); mi += u * u; mo += v * v; }
+            const double dMid = 10.0 * std::log10 (std::max (1.0e-30, mo / std::max (1.0e-30, mi)));
+            std::printf ("     the real imager with the proposal: the mid level changes by %+.2f dB\n", dMid);
+            check (std::abs (dMid) < 0.3, "the proposed widths and mono below leave the mid level untouched (the real imager; the crossovers only shift its phase)");
+        }
+        // already applied: no change needed
+        auto c2 = ctx; c2.curImgOn = true; c2.curImgSafe = pl.imgSafeOn; c2.curMonoBelow = pl.monoBelowHz; for (int k = 0; k < 3; ++k) c2.curWidth[k] = pl.widthPct[k];
+        const auto pc = propose (sl, c2);
+        check (! pc.imager.needed && pc.imager.summary.find ("no change needed") != std::string::npos, "when the imager already has the proposal: 'no change needed'");
+    }
+
+    // ------------------------------------------------------------------ 6 bus and limiter
+    std::printf ("6  bus and limiter\n");
+    {
+        auto dense = programme (30.0f, 2.0f, 8);
+        scaleTo (dense, 4.0f);
+        for (auto& v : dense.l) v = std::tanh (v);                          // squashed hard: a crest factor of a few dB
+        for (auto& v : dense.r) v = std::tanh (v);
+        scaleTo (dense, dbToLin (-1.5f));
+        const auto sd = analyse (dense);
+        const auto pd = propose (sd, ctx);
+        auto dyn = programme (30.0f, 14.0f, 9);
+        scaleTo (dyn, dbToLin (-3.0f));
+        const auto sy = analyse (dyn);
+        const auto py = propose (sy, ctx);
+        std::printf ("     dense: PSR %.1f dB, crest %.1f dB; dynamic: PSR %.1f dB, crest %.1f dB, LRA %.1f LU\n", (double) sd.psrDb, (double) sd.crestDb, (double) sy.psrDb, (double) sy.crestDb, (double) sy.loudnessRange);
+        check (sd.psrDb < 9.0f && ! pd.busOn && ! pd.bus.needed && pd.bus.summary.find ("no change needed") != std::string::npos, "a dense signal (PSR below 9 dB) leaves the bus compressor off");
+        check (sy.psrDb > 9.0f && py.busOn && py.bus.needed && py.busRatio == 1 && py.busAttack == 4 && py.busRelease == 4, "a dynamic signal turns it on: 2:1, attack 10 ms, release auto");
+        std::printf ("     bus threshold %.1f dB, predicted mean reduction %.2f dB\n", (double) py.busThreshDb, (double) py.busReductionDb);
+        check (py.busReductionDb > 1.2f && py.busReductionDb < 1.8f && py.busThreshDb >= -30.0f && py.busThreshDb <= 0.0f, "the predicted mean reduction is about 1.5 dB");
+        {   // what the real bus compressor does with the proposal on signals that were NOT used to calibrate the detector offset (the calibration used mod 8 / 14 / 20, seeds 9 and 12)
+            for (const auto& cfg : { std::pair<float, unsigned> { 11.0f, 41u }, std::pair<float, unsigned> { 17.0f, 77u } })
+            {
+                auto sig = programme (40.0f, cfg.first, cfg.second);
+                scaleTo (sig, dbToLin (-3.0f));
+                const auto sn = analyse (sig);
+                auto sn1 = sn; for (auto& band : sn1.bandHist) { for (auto& h : band) h = 0; band[50] = 100; }          // no multiband in this check (bus alone)
+                const auto pr = propose (sn1, ctx);
+                ms1::BusCompressor bus; bus.prepare (kFs);
+                ms1::BusParams bp; bp.on = true; bp.thresholdDb = pr.busThreshDb; bp.ratio = pr.busRatio; bp.attack = pr.busAttack; bp.release = pr.busRelease;
+                auto l = sig.l, r = sig.r;
+                double sum = 0.0; int blocks = 0;
+                for (size_t pos = 0; pos + 16 <= l.size(); pos += 16) { bus.process (l.data() + pos, r.data() + pos, 16, bp); if (pos > (size_t) (kFs * 2)) { sum += -bus.grDb.load(); ++blocks; } }
+                const double real = sum / std::max (1, blocks);
+                std::printf ("     modulation %.0f dB: threshold %.1f dB, predicted %.2f dB, the real bus compressor averages %.2f dB (detector offset %.1f dB)\n", (double) cfg.first, (double) pr.busThreshDb, (double) pr.busReductionDb, real, (double) kBusDetectorOffsetDb);
+                check (pr.busOn && std::abs (real - 1.5) < 0.5, "... the real bus compressor reduces by 1.5 dB +-0.5 dB on average with the proposed settings");
+                {   // the whole proposal: the real multiband (all four bands as proposed) in front of the real bus compressor, which sees the multiband's output
+                    const auto pf = propose (sn, ctx);
+                    auto chain = applyRealMb (sig, pf);
+                    ms1::BusCompressor bus2; bus2.prepare (kFs);
+                    ms1::BusParams bq; bq.on = true; bq.thresholdDb = pf.busThreshDb; bq.ratio = pf.busRatio; bq.attack = pf.busAttack; bq.release = pf.busRelease;
+                    double sum2 = 0.0; int blocks2 = 0;
+                    for (size_t pos = 0; pos + 16 <= chain.l.size(); pos += 16) { bus2.process (chain.l.data() + pos, chain.r.data() + pos, 16, bq); if (pos > (size_t) (kFs * 2)) { sum2 += -bus2.grDb.load(); ++blocks2; } }
+                    std::printf ("     ... after the real multiband (%s, predicted loss %.2f dB): bus threshold %.1f dB, real mean %.2f dB\n", pf.mbSet ? "bands on" : "no band", (double) pf.mbLoudnessRedDb, (double) pf.busThreshDb, sum2 / std::max (1, blocks2));
+                    check (pf.busOn && std::abs (sum2 / std::max (1, blocks2) - 1.5) < 0.6, "... and behind the real multiband the real bus compressor still averages 1.5 dB +-0.6 dB");
+                }
+            }
+        }
+        // limiter character from the gain the target needs
+        const auto withNeeded = [&] (float need)
+        {
+            auto c = ctx;
+            c.targetLufs = sy.integratedLufs + py.inGainDb - py.mbLoudnessRedDb - py.busReductionDb + need;
+            return propose (sy, c);
+        };
+        const auto p3 = withNeeded (3.0f), p6 = withNeeded (6.0f), p10 = withNeeded (10.0f);
+        std::printf ("     needed gain 3 / 6 / 10 dB -> %s / %s / %s\n", limCharText (p3.limChar), limCharText (p6.limChar), limCharText (p10.limChar));
+        check (p3.limChar == 0 && p6.limChar == 1 && p10.limChar == 2, "the limiter character follows the needed gain: up to 4 dB Transparent, up to 8 Punchy, above Loud");
+        check (p3.limAuto && p3.limRelAuto && p10.limAuto && p10.limRelAuto, "limiter auto gain and auto release are on");
+        check (! p3.heavyWarning && ! p6.heavyWarning && p10.heavyWarning && p10.limiter.reason.find ("heavy limiting, check the dynamics") != std::string::npos && p10.limiter.summary.find ("heavy limiting") != std::string::npos, "the warning appears above 9 dB (and not below)");
+        check (std::abs (p6.neededGainDb - 6.0f) < 0.01f, "the needed gain is target minus the input loudness after trim and bus reduction");
+        const auto w = paramWrites (py, true, true, true, true, true, true);
+        bool noForbidden = true;
+        for (const auto& pw : w)
+            for (const char* bad : { "colourOn", "colourChar", "colourDrive", "colourTilt", "colourMix", "colourOut", "colourMode", "ditherBits", "ditherShape", "outGain", "power", "bypass", "refAB", "refMatch", "refPlay", "refFollow", "eqPhase", "mbPhase", "target", "limTarget", "limCeiling", "delta" })
+                if (std::strcmp (pw.id, bad) == 0) noForbidden = false;
+        check (noForbidden && ! w.empty(), "the never-touches list: Colour, Dither, Output gain, Power, reference, phase modes, the target preset are not in the writes");
+        check (paramWrites (py, false, false, false, false, false, false).empty() && paramWrites (py, true, false, false, false, false, false).size() == 2, "unchecked rows write nothing");
+    }
+
+    // ------------------------------------------------------------------ 7 limits
+    std::printf ("7  limits\n");
+    {
+        MS1AudioProcessor proc;
+        const auto inRange = [&] (const std::vector<ParamWrite>& writes)
+        {
+            for (const auto& w : writes)
+            {
+                auto* par = dynamic_cast<juce::RangedAudioParameter*> (proc.apvts.getParameter (w.id));
+                if (par == nullptr) return false;
+                const auto r = par->getNormalisableRange().getRange();
+                if (! std::isfinite (w.value) || w.value < r.getStart() - 1.0e-4f || w.value > r.getEnd() + 1.0e-4f) return false;
+                const float back = par->convertFrom0to1 (par->convertTo0to1 (w.value));
+                if (std::abs (back - w.value) > 0.051f) return false;           // it survives the parameter's own step
+            }
+            return true;
+        };
+        std::mt19937 rng (123);
+        std::uniform_real_distribution<float> u01 (0.0f, 1.0f);
+        const auto rnd = [&] (float lo, float hi) { return lo + (hi - lo) * u01 (rng); };
+        bool allIn = true, finite = true; int validCount = 0;
+        for (int t = 0; t < 4000; ++t)
+        {
+            AnalysisSnapshot s;
+            s.programmeSeconds = rnd (0.0f, 125.0f); s.integratedLufs = t % 7 == 0 ? -120.0f : rnd (-60.0f, 0.0f);
+            s.truePeakDb = rnd (-40.0f, 12.0f); s.samplePeakDb = s.truePeakDb - rnd (0.0f, 1.0f); s.clippedFraction = rnd (0.0f, 0.01f);
+            s.psrDb = rnd (0.0f, 25.0f); s.lowEnergyDb = rnd (-120.0f, 0.0f); s.midBassDb = rnd (-120.0f, 0.0f); s.dcDb = rnd (-120.0f, -10.0f);
+            for (auto& h : s.shortTermHist) h = (u01 (rng) < 0.5f) ? (uint32_t) (u01 (rng) * 200.0f) : 0u;
+            for (auto& band : s.bandHist) for (auto& h : band) h = (u01 (rng) < 0.4f) ? (uint32_t) (u01 (rng) * 100.0f) : 0u;
+            for (int k = 0; k < 3; ++k) { s.imgCorr[k] = t % 5 == 0 ? 2.0f : rnd (-1.0f, 1.0f); s.imgSideMidDb[k] = rnd (-120.0f, 40.0f); }
+            AutoContext c; c.targetLufs = rnd (-24.0f, -6.0f); c.ceilingDb = rnd (-3.0f, 0.0f);
+            const auto p = propose (s, c);
+            validCount += p.valid ? 1 : 0;
+            allIn = allIn && inRange (paramWrites (p, true, true, true, true, true, true));
+            finite = finite && std::isfinite (p.mbLoudnessRedDb) && std::isfinite (p.mb[0].threshDb) && std::isfinite (p.mb[3].reductionDb) && std::isfinite (p.widthPct[1]) &&
+                     std::isfinite (p.inGainDb) && std::isfinite (p.busThreshDb) && std::isfinite (p.neededGainDb) && std::isfinite (p.busReductionDb);
+            if (s.programmeSeconds < 10.0f && p.valid) allIn = false;
+        }
+        std::printf ("     %d of 4000 random measurements gave a proposal\n", validCount);
+        check (allIn && finite, "every proposed value is inside the range (and the step) of its parameter, 4000 random measurements incl. extremes");
+        {   // fewer than 10 s, silence
+            auto brief = programme (8.0f, 4.0f, 11);
+            scaleTo (brief, dbToLin (-6.0f));
+            const auto sb = analyse (brief);
+            const auto pb = propose (sb, ctx);
+            check (! pb.valid && paramWrites (pb, true, true, true, true, true, true).empty() && ! pb.message.empty(), "fewer than 10 s of programme gives no proposal (heard " + std::to_string (sb.programmeSeconds) + " s)");
+            Stereo silent { std::vector<float> ((size_t) (30.0f * kFs), 0.0f), std::vector<float> ((size_t) (30.0f * kFs), 0.0f) };
+            const auto ss = analyse (silent);
+            check (! propose (ss, ctx).valid && ss.programmeSeconds == 0.0f, "silence gives no proposal and counts no programme");
+            auto quiet = programme (30.0f, 4.0f, 12);
+            scaleTo (quiet, dbToLin (-70.0f));                               // programme below -60 LUFS is not counted
+            const auto sq = analyse (quiet);
+            check (! propose (sq, ctx).valid && sq.programmeSeconds < 1.0f, "material below -60 LUFS is not counted (" + std::to_string (sq.programmeSeconds) + " s)");
+            auto mixed = programme (14.0f, 4.0f, 13);
+            scaleTo (mixed, dbToLin (-8.0f));
+            Stereo withGap { {}, {} };
+            for (auto* ch : { &withGap.l, &withGap.r }) { const auto& src = ch == &withGap.l ? mixed.l : mixed.r; ch->insert (ch->end(), src.begin(), src.begin() + (long) (5.0f * kFs)); ch->insert (ch->end(), (size_t) (20.0f * kFs), 0.0f); ch->insert (ch->end(), src.begin() + (long) (5.0f * kFs), src.end()); }
+            const auto sg = analyse (withGap);
+            check (sg.programmeSeconds > 12.0f && sg.programmeSeconds < 15.5f, "a long silence in the middle is not counted (programme " + std::to_string (sg.programmeSeconds) + " s of 34 s)");
+            const auto off = analyse (mixed, 512, false);
+            check (off.programmeSeconds == 0.0f, "not learning: nothing is counted");
+            const auto lim = programme (140.0f, 3.0f, 14);
+            const auto sl = analyse (lim);
+            check (sl.programmeSeconds >= 119.9f && sl.programmeSeconds < 121.0f, "learning stops at 120 s of programme (" + std::to_string (sl.programmeSeconds) + " s)");
+        }
+    }
+
+    // ------------------------------------------------------------------ 8 audio thread
+    std::printf ("8  audio thread\n");
+    {
+        auto sig = programme (6.0f, 8.0f, 20);
+        scaleTo (sig, dbToLin (-4.0f));
+        {   // no allocation in the analyser while learning
+            auto an = std::make_unique<ms1::AutoAnalyzer>();
+            an->prepare (kFs); an->learning.store (true);
+            const float xo[3] = { 120.0f, 1200.0f, 6000.0f }, ixo[2] = { 200.0f, 4000.0f };
+            for (size_t pos = 0; pos < 48000; pos += 512) an->process (sig.l.data() + pos, sig.r.data() + pos, 512, true, xo, ixo);          // warm-up (first use of static tables)
+            gAllocs.store (0); gCount.store (true);
+            for (size_t pos = 48000; pos + 512 <= sig.l.size(); pos += 512) an->process (sig.l.data() + pos, sig.r.data() + pos, 512, true, xo, ixo);
+            an->clearRequest.store (true);
+            an->process (sig.l.data(), sig.r.data(), 512, true, xo, ixo);
+            AnalysisSnapshot s; an->read (s);
+            gCount.store (false);
+            check (gAllocs.load() == 0, "no allocation in the analyser while learning, clearing and publishing (" + std::to_string (gAllocs.load()) + " allocations)");
+        }
+        {   // consistent snapshots under concurrent reads
+            auto an = std::make_unique<ms1::AutoAnalyzer>();
+            an->prepare (kFs); an->learning.store (true);
+            std::atomic<bool> done { false };
+            std::atomic<long> reads { 0 }, bad { 0 }, backwards { 0 };
+            std::thread reader ([&]
+            {
+                float last = 0.0f;
+                while (! done.load())
+                {
+                    AnalysisSnapshot s;
+                    if (an->read (s))
+                    {
+                        reads.fetch_add (1);
+                        if (s.check != snapshotCheck (s)) bad.fetch_add (1);
+                        if (s.programmeSeconds + 1.0e-4f < last && s.programmeSeconds > 0.0f) backwards.fetch_add (1);
+                        last = s.programmeSeconds;
+                    }
+                }
+            });
+            const float xo[3] = { 120.0f, 1200.0f, 6000.0f }, ixo[2] = { 200.0f, 4000.0f };
+            auto longSig = programme (20.0f, 8.0f, 21);
+            scaleTo (longSig, dbToLin (-4.0f));
+            for (int rep = 0; rep < 3; ++rep)
+                for (size_t pos = 0; pos + 64 <= longSig.l.size(); pos += 64) an->process (longSig.l.data() + pos, longSig.r.data() + pos, 64, true, xo, ixo);
+            done.store (true); reader.join();
+            std::printf ("     %ld snapshots read while the audio thread wrote\n", reads.load());
+            check (reads.load() > 100 && bad.load() == 0, "every snapshot read during concurrent writes is consistent (hash matches)");
+            check (backwards.load() == 0, "the programme time never goes backwards between reads");
+        }
+        {   // the real processor: bit-exact output with and without learning, no extra allocations
+            const int block = 480;
+            auto in = programme (15.0f, 8.0f, 22);
+            scaleTo (in, dbToLin (-1.0f));
+            const auto setup = [&] (MS1AudioProcessor& p)
+            {
+                prepare (p, 48000.0, block);
+                setParam (p, "busOn", 1.0f); setParam (p, "mbOn", 1.0f); setParam (p, "imgOn", 1.0f); setParam (p, "colourOn", 1.0f); setParam (p, "colourDrive", 30.0f);
+                setParam (p, "eqOn", 1.0f); setParam (p, "eq3Gain", 3.0f); setParam (p, "limAuto", 1.0f); setParam (p, "limGain", 4.0f);
+                setParam (p, "mb1Thresh", -30.0f); setParam (p, "inGain", -2.0f);
+            };
+            Stereo outA = in, outB = in;
+            MS1AudioProcessor a, b;
+            setup (a); setup (b);
+            b.autoStart();
+            runProcessor (a, outA, block);
+            runProcessor (b, outB, block);
+            check (std::memcmp (outA.l.data(), outB.l.data(), outA.l.size() * sizeof (float)) == 0 && std::memcmp (outA.r.data(), outB.r.data(), outA.r.size() * sizeof (float)) == 0, "the processor output is bit-exact with and without learning (15 s, chain active, block 480)");
+            ms1::autom::AnalysisSnapshot s; b.autoAn.read (s);
+            check (s.programmeSeconds > 14.0f && b.autoAn.learning.load(), "... while the learning really ran (" + std::to_string (s.programmeSeconds) + " s counted)");
+            MS1AudioProcessor c; setup (c); Stereo outC = in;
+            c.autoStart(); c.autoStop();                                      // idle again
+            runProcessor (c, outC, block);
+            check (std::memcmp (outA.l.data(), outC.l.data(), outA.l.size() * sizeof (float)) == 0, "idle (started and stopped before playing) is bit-exact too");
+
+            // allocations of processBlock with and without learning
+            const auto countAllocs = [&] (MS1AudioProcessor& p, bool learn)
+            {
+                prepare (p, 48000.0, block);
+                if (learn) p.autoStart();
+                Stereo w = in; Stereo head { std::vector<float> (w.l.begin(), w.l.begin() + 48000), std::vector<float> (w.r.begin(), w.r.begin() + 48000) };
+                runProcessor (p, head, block);                                 // warm-up
+                Stereo tail { std::vector<float> (w.l.begin() + 48000, w.l.begin() + 48000 + 96000), std::vector<float> (w.r.begin() + 48000, w.r.begin() + 48000 + 96000) };
+                gAllocs.store (0); gCount.store (true);
+                runProcessor (p, tail, block);
+                gCount.store (false);
+                return gAllocs.load();
+            };
+            MS1AudioProcessor p1, p2;
+            const long without = countAllocs (p1, false), with = countAllocs (p2, true);
+            check (with == without, "processBlock allocates no more with learning than without (" + std::to_string (with) + " against " + std::to_string (without) + " in 2 s)");
+        }
+    }
+
+    // ------------------------------------------------------------------ 9 (stage 1) apply through the parameters
+    std::printf ("9  apply (the real processor)\n");
+    {
+        MS1AudioProcessor p;
+        const int block = 480;
+        prepare (p, 48000.0, block);
+        p.autoStart();
+        auto sig = programme (20.0f, 14.0f, 30);
+        scaleTo (sig, 1.0f);
+        runProcessor (p, sig, block);
+        AnalysisSnapshot s; p.autoAn.read (s);
+        const auto prop = propose (s, p.autoContext());
+        check (prop.valid && prop.input.needed && prop.bus.needed && prop.limiter.needed, "a loud dynamic track gives a proposal for the input, the bus and the limiter");
+        const float inBefore = getParam (p, "inGain"), thrBefore = getParam (p, "busThresh"), busOnBefore = getParam (p, "busOn"), limAutoBefore = getParam (p, "limAuto");
+        const float mbBefore[4] = { getParam (p, "mbOn"), getParam (p, "mbPhase"), getParam (p, "xover2"), getParam (p, "mb1Thresh") }, imgBefore[3] = { getParam (p, "imgOn"), getParam (p, "width1"), getParam (p, "imgX1") };
+        const float targetBefore = getParam (p, "limTarget"), outBefore = getParam (p, "outGain"), colourBefore = getParam (p, "colourOn");
+        pump (50);
+        p.undoManager.clearUndoHistory();
+        const int written = p.autoApply (prop, true, true, true, true, true, true);
+        pump (150);
+        std::printf ("     %d parameters written; inGain %.1f, busThresh %.1f, busOn %.0f, limAuto %.0f, limChar %.0f, trimHpf %.0f\n", written, (double) getParam (p, "inGain"), (double) getParam (p, "busThresh"), (double) getParam (p, "busOn"), (double) getParam (p, "limAuto"), (double) getParam (p, "limChar"), (double) getParam (p, "trimHpf"));
+        check (written > 0 && std::abs (getParam (p, "inGain") - prop.inGainDb) < 0.051f && getParam (p, "busOn") > 0.5f && getParam (p, "limAuto") > 0.5f && getParam (p, "limRelAuto") > 0.5f, "the proposal is in the parameters");
+        std::printf ("     multiband: %s (%s); imager: %s (%s)\n", prop.multiband.summary.c_str(), prop.multiband.needed ? "needed" : "not needed", prop.imager.summary.c_str(), prop.imager.needed ? "needed" : "not needed");
+        check (prop.multiband.needed == (getParam (p, "mbOn") > 0.5f) && prop.imager.needed == (getParam (p, "imgOn") > 0.5f) && prop.imager.needed && prop.mbSet, "the multiband and imager rows are written (mbOn, imgOn) when they are checked");
+        check (getParam (p, "mbPhase") == mbBefore[1] && getParam (p, "xover2") == mbBefore[2] && getParam (p, "imgX1") == imgBefore[2] && std::abs (getParam (p, "imgBalance")) < 1.0e-3f, "mbPhase, the crossovers and the mid / side balance are not written");
+        check (getParam (p, "limTarget") == targetBefore && getParam (p, "outGain") == outBefore && getParam (p, "colourOn") == colourBefore, "target, output gain and colour are untouched");
+        check (p.undoManager.getNumActionsInCurrentTransaction() >= written && p.undoManager.canUndo(), "all the writes are in one undo transaction (" + std::to_string (p.undoManager.getNumActionsInCurrentTransaction()) + " actions)");
+        p.undoManager.undo();
+        pump (150);
+        check (std::abs (getParam (p, "inGain") - inBefore) < 1.0e-4f && std::abs (getParam (p, "busThresh") - thrBefore) < 1.0e-4f && getParam (p, "busOn") == busOnBefore && getParam (p, "limAuto") == limAutoBefore && getParam (p, "trimHpf") == 0.0f, "one undo reverts all of it");
+        check (getParam (p, "mbOn") == mbBefore[0] && getParam (p, "imgOn") == imgBefore[0] && getParam (p, "width1") == imgBefore[1] && getParam (p, "mb1Thresh") == mbBefore[3], "... including the multiband and the imager");
+        {   // after APPLY the rows say 'no change needed'
+            p.autoApply (prop, true, true, true, true, true, true);
+            pump (150);
+            const auto again = propose (s, p.autoContext());
+            check (! again.multiband.needed && ! again.imager.needed && again.multiband.summary.find ("no change needed") != std::string::npos && again.imager.summary.find ("no change needed") != std::string::npos, "after APPLY the multiband and imager rows say 'no change needed'");
+            p.undoManager.undo();
+            pump (150);
+        }
+
+        MS1AudioProcessor q;
+        prepare (q, 48000.0, block);
+        setParam (q, "inGain", -1.0f);
+        const int nb = q.autoApplyToB (prop, true, true, true, true, true, true);
+        pump (150);
+        check (nb > 0 && q.presets.abSlot() == 1 && std::abs (getParam (q, "inGain") - prop.inGainDb) < 0.051f, "APPLY TO B: the plugin is on slot B with the proposal");
+        q.presets.switchAB (0);
+        pump (150);
+        check (std::abs (getParam (q, "inGain") - (-1.0f)) < 1.0e-4f && getParam (q, "busOn") == 0.0f, "... and slot A holds the state from before");
+        q.presets.switchAB (1);
+        pump (150);
+        check (std::abs (getParam (q, "inGain") - prop.inGainDb) < 0.051f && getParam (q, "busOn") > 0.5f, "... switching back to B gives the proposal again");
+    }
+
+    std::printf ("%d problems\n", problems);
+    return problems == 0 ? 0 : 1;
+}

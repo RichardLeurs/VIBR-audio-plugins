@@ -14,7 +14,7 @@ namespace vibr
 {
 inline std::unique_ptr<juce::AudioParameterBool> makeBypassParam()
 {
-    return std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "bypass", 1 }, "Bypass", false);
+    return std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "bypass", 1 }, "Bypass", false, juce::AudioParameterBoolAttributes().withMeta (true));
 }
 
 class BypassLink : private juce::AudioProcessorValueTreeState::Listener

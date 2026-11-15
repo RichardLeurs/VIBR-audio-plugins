@@ -60,7 +60,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout RB1AudioProcessor::createLay
         if (centre > 0.0f) r.setSkewForCentre (centre);
         layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id, 1 }, name, r, def, unitAttrs (unitFor (id, hi), decimalsFor (step))));
     };
-    const auto flag = [&layout] (const char* id, const char* name, bool def) { layout.add (std::make_unique<AudioParameterBool> (ParameterID { id, 1 }, name, def)); };
+    const auto flag = [&layout] (const char* id, const char* name, bool def) { layout.add (std::make_unique<AudioParameterBool> (ParameterID { id, 1 }, name, def, AudioParameterBoolAttributes().withMeta (juce::String (id) == "power" || juce::String (id) == "bypass"))); };
     flag ("power", "Power", true);
     flag ("bypass", "Bypass", false);
     layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "mode", 1 }, "Mode", StringArray { "Classic", "Space", "Resonate" }, 0));
@@ -100,7 +100,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout RB1AudioProcessor::createLay
 RB1AudioProcessor::RB1AudioProcessor()
     : AudioProcessor (BusesProperties()
                           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
-                          .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
+                          .withOutput ("Output", juce::AudioChannelSet::stereo(), true)
+                          .withInput  ("Sidechain", juce::AudioChannelSet::stereo(), false)),
       apvts (*this, &undoManager, "RB1", createLayout()),
       presets (*this, apvts, undoManager, "RB-1 Presets", rb1FactoryPresets(), { "power", "bypass" })
 {
@@ -116,7 +117,9 @@ RB1AudioProcessor::RB1AudioProcessor()
 
 bool RB1AudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
-    return layouts.getMainOutputChannelSet() == juce::AudioChannelSet::stereo() && layouts.getMainInputChannelSet() == juce::AudioChannelSet::stereo();
+    if (layouts.getMainOutputChannelSet() != juce::AudioChannelSet::stereo() || layouts.getMainInputChannelSet() != juce::AudioChannelSet::stereo()) return false;
+    const auto sc = layouts.getChannelSet (true, 1);                       // the sidechain: off, mono or stereo
+    return sc.isDisabled() || sc == juce::AudioChannelSet::mono() || sc == juce::AudioChannelSet::stereo();
 }
 
 void RB1AudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
@@ -125,6 +128,7 @@ void RB1AudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     powerSmooth.reset (sampleRate, 0.02);
     powerSmooth.setCurrentAndTargetValue (pPower->load() > 0.5f ? 1.0f : 0.0f);
     dryBuf.setSize (2, juce::jmax (samplesPerBlock, 8192));
+    keyBuf.setSize (2, juce::jmax (samplesPerBlock, 8192));
 }
 
 void RB1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
@@ -133,6 +137,24 @@ void RB1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     juce::ScopedNoDenormals noDenormals;
     const int n = buffer.getNumSamples();
     if (n == 0 || buffer.getNumChannels() < 2 || n > dryBuf.getNumSamples()) return;
+
+    // the external key: the sidechain bus when the host has connected it (a mono key feeds both channels); it drives the DUCK envelope
+    const float* keyL = nullptr; const float* keyR = nullptr;
+    if (auto* scBus = getBus (true, 1); scBus != nullptr && scBus->isEnabled() && n <= keyBuf.getNumSamples())
+    {
+        const auto sc = getBusBuffer (buffer, true, 1);
+        if (sc.getNumChannels() > 0)
+        {
+            for (int c = 0; c < 2; ++c)
+            {
+                const auto* src = sc.getReadPointer (juce::jmin (c, sc.getNumChannels() - 1));
+                auto* k = keyBuf.getWritePointer (c);
+                for (int i = 0; i < n; ++i) k[i] = std::abs (src[i]) < 1.0e4f ? src[i] : 0.0f;
+            }
+            keyL = keyBuf.getReadPointer (0); keyR = keyBuf.getReadPointer (1);
+        }
+    }
+    extKey.store (keyL != nullptr, std::memory_order_relaxed);
     for (int c = 0; c < 2; ++c)
     {
         auto* d = buffer.getWritePointer (c);
@@ -141,7 +163,7 @@ void RB1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     const float from = powerSmooth.getCurrentValue();
     powerSmooth.setTargetValue (pPower->load() > 0.5f ? 1.0f : 0.0f);
     const float to = powerSmooth.skip (n);
-    if (from == 0.0f && to == 0.0f) return;
+    if (from == 0.0f && to == 0.0f) { outMeter.measure (buffer, n); return; }
     for (int c = 0; c < 2; ++c) dryBuf.copyFrom (c, 0, buffer, c, 0, n);
 
     rb1::Params p;
@@ -153,7 +175,7 @@ void RB1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     p.param2 = pParam2->load() * 0.01f; p.value = pValue->load() * 0.01f; p.diffusion = pDiffusion->load() * 0.01f; p.texture = pTexture->load() * 0.01f;
     p.root = (int) std::lround (pRoot->load()); p.scale = (int) std::lround (pScale->load());
     p.damping = pDamping->load() * 0.01f; p.tension = pTension->load() * 0.01f; p.fine = pFine->load() * 0.01f; p.blend = pBlend->load() * 0.01f;
-    engine.process (buffer.getWritePointer (0), buffer.getWritePointer (1), n, p, juce::Decibels::decibelsToGain (pLevel->load()));
+    engine.process (buffer.getWritePointer (0), buffer.getWritePointer (1), n, p, juce::Decibels::decibelsToGain (pLevel->load()), keyL, keyR);
 
     if (from != 1.0f || to != 1.0f)
         for (int c = 0; c < 2; ++c)
@@ -166,6 +188,7 @@ void RB1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
                 d[i] = s[i] + (d[i] - s[i]) * t;
             }
         }
+    outMeter.measure (buffer, n);
 }
 
 juce::AudioProcessorEditor* RB1AudioProcessor::createEditor() { return new RB1AudioProcessorEditor (*this); }

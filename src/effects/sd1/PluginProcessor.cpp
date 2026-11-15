@@ -28,8 +28,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout SDD1000AudioProcessor::creat
     knob ("modFrequency",  "Modulation Frequency", 3.0f);
     knob ("direct",        "Direct",               7.0f);
     knob ("effect",        "Effect",               5.0f);
-    l.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "bypass", 1 }, "Bypass", false));
-    l.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "power", 1 },  "Power",  true));
+    l.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "bypass", 1 }, "Bypass", false, juce::AudioParameterBoolAttributes().withMeta (true)));
+    l.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "power", 1 },  "Power",  true, juce::AudioParameterBoolAttributes().withMeta (true)));
     // tempo sync (added later, appended so existing ids / order stay put): off = the TIME / FACTOR knobs work as before;
     // on = delay time = one `division` at the host tempo (vibr::sync::ms), clamped to the 3 .. 2048 ms range of the unit
     l.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "sync", 1 }, "Sync", false));

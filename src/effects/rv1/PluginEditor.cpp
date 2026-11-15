@@ -17,11 +17,13 @@ juce::Rectangle<float> panelRect (int i) { return { kPanelX[i], i < 2 ? kRow1Y :
 juce::Point<float> knobCentre (int panel, int k, int n)
 {
     const auto r = panelRect (panel);
-    return { r.getCentreX() + (panel == 0 ? 112.0f : 108.0f) * ((float) k - 0.5f * (float) (n - 1)), r.getY() + 92.0f };
+    const float cx = panel == 1 ? r.getX() + 165.0f : r.getCentreX();          // the output knobs sit left (centres x + 105 / x + 225), the dB meters on the right
+    return { cx + (panel == 0 ? 112.0f : 120.0f) * ((float) k - 0.5f * (float) (n - 1)), r.getY() + 92.0f };
 }
+juce::Point<float> meterOrigin() { const auto r = panelRect (1); return { r.getX() + 317.0f, r.getY() + 46.0f }; }       // bars x + 317 .. x + 359, the scale labels to about x + 386: 63 px padding left of the first knob's ticks and 64 right of the labels; 110 high: the bars end on the MIX / LEVEL names (y + 156), the peak values sit on the readout row (y + 182)
 juce::Rectangle<float> syncRect() { const auto r = panelRect (0); return { r.getX() + 30.0f, r.getY() + 204.0f, 120.0f, 30.0f }; }
 juce::Rectangle<float> freezeRect() { const auto r = panelRect (0); return { r.getX() + 160.0f, r.getY() + 204.0f, 160.0f, 30.0f }; }
-juce::Rectangle<float> plotRect() { const auto r = panelRect (2); return { r.getX() + 24.0f, r.getY() + 34.0f, r.getWidth() - 48.0f, r.getHeight() - 56.0f }; }
+juce::Rectangle<float> plotRect() { const auto r = panelRect (2); return { r.getX() + 30.0f, r.getY() + 52.0f, r.getWidth() - 60.0f, 120.0f }; }       // the box (8 px bigger) runs y + 44 .. y + 180: the legend sits above it, the time scale below it
 const std::vector<juce::String> kModeTabs { "REVERSE", "SCRUB", "STUTTER", "GLITCH", "REPEAT" };
 }
 
@@ -64,6 +66,8 @@ RV1AudioProcessorEditor::~RV1AudioProcessorEditor()
 
 void RV1AudioProcessorEditor::timerCallback()
 {
+    meter.update (proc.outMeter);
+    repaint (panelRect (1).withTrimmedLeft (panelRect (1).getWidth() - 150.0f).expanded (2.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer());
     if (midiUI.needsRepaint()) { midiUI.tick(); repaint(); }
     scroll += 0.05f;
     repaint (panelRect (2).expanded (4.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer());
@@ -104,7 +108,7 @@ void RV1AudioProcessorEditor::drawSlices (juce::Graphics& g)
     const float spanMs = 3000.0f, x0 = r.getX() + 4.0f, w = r.getWidth() - 8.0f;
     const auto xOf = [&] (float ms) { return x0 + w * ms / spanMs; };
     g.setColour (kPal.ink.withAlpha (0.1f));
-    for (float s = 0.0f; s <= 3.0f; s += 0.5f) { g.drawLine (xOf (s * 1000.0f), r.getY() + 4.0f, xOf (s * 1000.0f), r.getBottom() - 4.0f, 1.0f); drawText (g, juce::String (s, 1) + " s", xOf (s * 1000.0f), r.getBottom() + 12.0f, 10.0f, kPal.ink.withAlpha (0.5f), false, 0.0f); }
+    for (float s = 0.0f; s <= 3.0f; s += 0.5f) { g.drawLine (xOf (s * 1000.0f), r.getY() + 4.0f, xOf (s * 1000.0f), r.getBottom() - 4.0f, 1.0f); drawText (g, juce::String (s, 1) + " s", xOf (s * 1000.0f), r.getBottom() + 20.0f, 13.0f, kPal.ink.withAlpha (0.7f), false, 0.0f); }
     juce::Random rng (7 + (int) scroll);                                                                       // the random places change slowly
     const float top = r.getY() + 10.0f, bottom = r.getBottom() - 10.0f, h = bottom - top;
     float start = 0.0f; int held = 0;
@@ -128,8 +132,8 @@ void RV1AudioProcessorEditor::drawSlices (juce::Graphics& g)
         g.drawLine (xb, r.getY() + 4.0f, xb, r.getBottom() - 4.0f, 1.0f);
     }
     drawText (g, juce::String (rv1::modeName (mode)) + "     SLICE " + (sliceMs >= 1000.0f ? juce::String (sliceMs * 0.001f, 2) + " S" : juce::String ((int) std::lround (sliceMs)) + " MS") + "     SPEED " + juce::String (speed, 2) + "X",
-              r.getX() + 8.0f, r.getY() + 14.0f, 10.0f, kPal.ink.withAlpha (0.6f), true, 0.12f, juce::Justification::centredLeft);
-    if (freeze) drawText (g, "FROZEN: THE SLICES KEEP PLAYING WHAT WAS CAPTURED", r.getRight() - 8.0f, r.getY() + 14.0f, 10.0f, kIce, true, 0.12f, juce::Justification::centredRight);
+              r.getX() - 8.0f, r.getY() - 26.0f, 13.0f, kPal.ink.withAlpha (0.85f), true, 0.12f, juce::Justification::centredLeft);
+    if (freeze) drawText (g, "FROZEN: THE SLICES KEEP PLAYING WHAT WAS CAPTURED", r.getRight() + 8.0f, r.getY() - 26.0f, 13.0f, kIce, true, 0.12f, juce::Justification::centredRight);
     (void) power;
 }
 
@@ -144,7 +148,7 @@ void RV1AudioProcessorEditor::paint (juce::Graphics& g)
     g.addTransform (juce::AffineTransform::scale (scale()));
     ui::paintBody (g, kPal, kW, kH, grain);
     ui::paintHeader (g, kPal, "RV-1", "REVERSE LAB", "TIME MANIPULATION", isOn ("power"));
-    ui::paintPresetBar (g, kPal, proc.presets, proc.undoManager, kBarY, barState, false);
+    ui::paintPresetBar (g, kPal, proc.presets, proc.undoManager, kBarY, barState, false, 6.0f);
 
     const int mode = currentMode();
     ui::paintPanel (g, kPal, panelRect (0), {});
@@ -153,12 +157,12 @@ void RV1AudioProcessorEditor::paint (juce::Graphics& g)
     ui::paintPanel (g, kPal, panelRect (2), "SLICES");
     drawSlices (g);
 
-    ui::paintFlatButton (g, kPal, syncRect(), "SYNC", isOn ("sync"), 11.0f);
+    ui::paintFlatButton (g, kPal, syncRect(), "SYNC", isOn ("sync"), 13.0f);
     {   // FREEZE has its own ice colour
         const auto b = freezeRect(); const bool on = isOn ("freeze");
         if (on) { g.setColour (kIce); g.fillRoundedRectangle (b, 9.0f); }
         g.setColour (on ? kIce : kPal.ink.withAlpha (0.4f)); g.drawRoundedRectangle (b.reduced (0.5f), 9.0f, 1.3f);
-        drawText (g, "FREEZE", b.getCentreX(), b.getCentreY(), 11.0f, on ? kPal.dark : kPal.ink.withAlpha (0.9f), true, 0.1f);
+        drawText (g, "FREEZE", b.getCentreX(), b.getCentreY(), 13.0f, on ? kPal.dark : kPal.ink.withAlpha (0.9f), true, 0.1f);
     }
 
     for (auto& k : knobs)
@@ -174,8 +178,11 @@ void RV1AudioProcessorEditor::paint (juce::Graphics& g)
             lo = "20 ms"; hi = "2 s";
         }
         else txt = juce::String ((int) std::lround (v)) + " %";
-        ui::paintKnob (g, kPal, knobCentre (k.panel, k.index, k.count), k.name != nullptr ? k.name : rv1::chaosName (mode, k.index == 3 ? 0 : 1), txt, lo, hi, panelRect (k.panel).getY() + 154.0f, panelRect (k.panel).getY() + 182.0f);
+        const auto c = knobCentre (k.panel, k.index, k.count);
+        ui::paintKnob (g, kPal, c, k.name != nullptr ? k.name : rv1::chaosName (mode, k.index == 3 ? 0 : 1), txt, lo, hi, panelRect (k.panel).getY() + 154.0f, panelRect (k.panel).getY() + 182.0f);
+        ui::paintValueArc (g, c, kKnobR, (float) k.slider.valueToProportionOfLength (k.slider.getValue()), kPal.body);
     }
+    meter.paint (g, meterOrigin().x, meterOrigin().y, isOn ("power"), kPal.body, kPal.ink, 110.0f, 26.0f, 13.0f);
     ui::paintFooter (g, kPal, kRow2Y + kRow2H + 35.0f);
 }
 

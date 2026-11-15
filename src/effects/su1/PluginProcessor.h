@@ -5,6 +5,7 @@
 
 #include <JuceHeader.h>
 #include "UtilityEngine.h"
+#include "ui/OutputMeter.h"
 
 // SU-1 Stereo Utility: channels (invert, swap, mono, mid / side solo), width, pan and level (see UtilityEngine.h).
 // Host parameters: power, gain, pan, autoRate, autoDepth, width, spread, bassMono, invL, invR, swap, mono, solo.
@@ -41,6 +42,7 @@ public:
     juce::AudioProcessorValueTreeState apvts;
 
     vibr::BypassLink bypassLink { apvts };                // host bypass <-> OFF / ON switch
+    vibr::ui::PeakTap outMeter;                                    // sample peak of the output, read by the OUTPUT meters of the editor
     const su1::Engine& getEngine() const { return engine; }       // for the FIELD display of the editor
 
 private:

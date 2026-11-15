@@ -13,7 +13,7 @@
 #   ./build.sh --arch x86_64      build everything for Intel (build tree ~/Developer/VIBR-x86_64)
 #   ./build.sh --arch all         arm64 and x86_64 one after the other
 #   ./build.sh --arch win64       (on Windows) build everything for 64-bit Windows: VST3 and Standalone in ~/Developer/VIBR/releases/win64 (build tree ~/Developer/VIBR-win64)
-#   ./build.sh DD-1 SD-3          build only these plugins (DD-1 DM-1 CE-1 RE-1 RE-2 DS-1 BF-3 CS-3 LM-2 PH-2 GE-7 EH-2 TR-2 IR-2 ME-1 SL-2 OD-2 OC-5 BS-1 MM-1 SD-1 SD-3 SP-1 RV-1 MF-1 HM-2 GR-1 SR-1 VC-1 PT-1 VR-1 DY-1 SA-1 SU-1 ML-1 DL-1 DN-1 DV-1 RH-1 RB-1 MS-1 TR-8)
+#   ./build.sh DD-1 SD-3          build only these plugins (DD-1 DM-1 CE-1 RE-1 RE-2 DS-1 BF-3 CS-3 LM-2 PH-2 GE-7 EH-2 TR-2 ME-1 SL-2 OD-2 OC-5 BS-1 MM-1 SD-1 SD-3 SP-1 RV-1 MF-1 HM-2 GR-1 SR-1 VC-1 PT-1 DY-1 SA-1 SU-1 ML-1 DL-1 DN-1 DV-1 AL-1 RH-1 RB-1 MS-1 TR-8)
 #   ./build.sh --clean [names]    rebuild from scratch (needed to re-run the collect / copy steps when nothing changed)
 #   ./build.sh --configure        only (re)configure
 #   ./build.sh --no-zip           skip the zip step
@@ -70,6 +70,7 @@ build_arch() {
       for f in VST3 AU Standalone; do                # (win64 has no AU folder: it is skipped)
         d="$OUT/releases/$a/$g/$f"; z="$OUT/zip/VIBR-$g-$f-$a.zip"
         [ -d "$d" ] || continue
+        cp "$SRC/INSTALL.md" "$d/INSTALL.md"; cp "$SRC/LICENSE" "$d/LICENSE.md"; cp "$SRC/LICENSE" "$d/LICENSE"      # every zip holds the install notes and the license (INSTALL.md links to LICENSE)
         rm -f "$z"
         if [ "$IS_WIN" = 1 ]; then (cd "$OUT/releases/$a/$g" && cmake -E tar cf "$z" --format=zip "$f")      # the zip holds the folder VST3 / Standalone, as on the Mac
         else ditto -c -k --keepParent "$d" "$z"; fi          # ditto keeps the code signature and symlinks of the bundles intact

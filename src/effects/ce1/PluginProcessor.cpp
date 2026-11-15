@@ -25,7 +25,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout CE1AudioProcessor::createLay
     knob ("vibratoRate",     "Vibrato Rate",     5.0f);   // 0..10 -> 0.4 .. 10 Hz, exponential (ce1::vibratoRateHz); ignored while sync is on
     l.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "vibrato", 1 },   "Effect (off = Chorus, on = Vibrato)", false));
     l.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "inputHigh", 1 }, "Input (off = Low, on = High)", true));
-    l.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "power", 1 },     "Power", true));
+    l.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "power", 1 },     "Power", true, juce::AudioParameterBoolAttributes().withMeta (true)));
     l.add (vibr::makeBypassParam());
     // tempo sync of the vibrato rate (the chorus rate is fixed): on = one LFO cycle per division of the host tempo, clamped to 0.4 .. 10 Hz
     l.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "sync", 1 }, "Sync", false));

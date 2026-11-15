@@ -34,7 +34,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout RE2AudioProcessor::createLay
     knob ("wowFlutter", "Wow & Flutter", 3.0f);
     l.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "tapeAged", 1 }, "Tape Aged (off = New)", false));
     l.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "inputLine", 1 }, "Input Line (off = Guitar)", false));
-    l.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "power", 1 }, "Power", true));
+    l.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "power", 1 }, "Power", true, juce::AudioParameterBoolAttributes().withMeta (true)));
     l.add (vibr::makeBypassParam());
 
     // SYNC (added after the original parameters; their ids, ranges and defaults are unchanged). Off = Repeat Rate sets the

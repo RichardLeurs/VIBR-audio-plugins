@@ -7,6 +7,7 @@
 #include "MidiMap.h"
 #include "DriveEngine.h"
 #include "ui/Presets.h"
+#include "ui/OutputMeter.h"
 
 // DV-1 Drive Lab: OVERDRIVE (OD-2, 12 types), DISTORTION (DS-1), TUBE, TAPE, FOLD and CRUSH in one plugin (see DriveEngine.h and .claude/lab_specs.md).
 // Host parameters: power, mode, variant, odType, drive, tone, boostOn, boost, autoLevel, mix, level, odParam, odLow, odMid, odHigh, gateThresh, gateDecay (OVERDRIVE),
@@ -59,6 +60,7 @@ public:
     MidiMap midiMap { apvts, { "drive", "tone", "level", "mix", "boost", "boostOn", "odParam", "odLow", "odMid", "odHigh", "gateThresh", "tight", "tubeBias", "warmth", "fold", "bits" } };   // CC -> knob, MIDI learn
     vibr::BypassLink bypassLink { apvts };                // host bypass <-> OFF / ON switch
     vibr::PresetManager presets;
+    vibr::ui::PeakTap outMeter;                                   // sample peak of the output, read by the editor
     std::atomic<int> currentProgram { 0 };
     std::atomic<int> pendingProgram { -1 };
     const dv1::Engine& getEngine() const { return engine; }

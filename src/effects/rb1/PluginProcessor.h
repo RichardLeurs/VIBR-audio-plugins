@@ -7,6 +7,7 @@
 #include "MidiMap.h"
 #include "ReverbLabEngine.h"
 #include "ui/Presets.h"
+#include "ui/OutputMeter.h"
 
 // RB-1 Reverb Lab: CLASSIC (BS-1, 12 types), SPACE (SP-1, 5 modes) and RESONATE (SR-1, strings) in one plugin (see ReverbLabEngine.h and .claude/lab_specs.md).
 // Host parameters: power, mode, variant, decay, size, tone, motion, preDelay, duck, mix, level, freeze, param2, value (CLASSIC), diffusion, texture (SPACE),
@@ -61,6 +62,8 @@ public:
     vibr::PresetManager presets;
     std::atomic<int> currentProgram { 0 };
     std::atomic<int> pendingProgram { -1 };
+    std::atomic<bool> extKey { false };                 // true while the host's sidechain is the DUCK key (the EXT lamp)
+    vibr::ui::PeakTap outMeter;                                         // sample peak of the output, read by the editor
     const rb1::Engine& getEngine() const { return engine; }
 
 private:
@@ -71,7 +74,7 @@ private:
     std::atomic<float> *pPower {}, *pMode {}, *pVariant {}, *pDecay {}, *pSize {}, *pTone {}, *pMotion {}, *pPreDelay {}, *pDuck {}, *pMix {}, *pLevel {}, *pFreeze {}, *pParam2 {}, *pValue {},
                        *pDiffusion {}, *pTexture {}, *pRoot {}, *pScale {}, *pDamping {}, *pTension {}, *pFine {}, *pBlend {};
     juce::SmoothedValue<float> powerSmooth;
-    juce::AudioBuffer<float> dryBuf;
+    juce::AudioBuffer<float> dryBuf, keyBuf;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (RB1AudioProcessor)
 };

@@ -101,10 +101,12 @@ public:
     }
 
     // the output gain `levelGain` is linear
-    void process (float* l, float* r, int n, const Params& p, float levelGain)
+    // keyL / keyR: an external key (sidechain). It drives the detectors of the SHAPER and COMPRESSOR modes; the limiters (PEAK and TRUE PEAK)
+    // always read the signal they protect. Null = the input itself, bit exact as before.
+    void process (float* l, float* r, int n, const Params& p, float levelGain, const float* keyL = nullptr, const float* keyR = nullptr)
     {
         for (int pos = 0; pos < n; pos += kChunk)
-            processChunk (l + pos, r + pos, std::min (kChunk, n - pos), p, levelGain);
+            processChunk (l + pos, r + pos, std::min (kChunk, n - pos), p, levelGain, keyL != nullptr ? keyL + pos : nullptr, keyR != nullptr ? keyR + pos : nullptr);
     }
 
 private:
@@ -153,7 +155,7 @@ private:
         for (int i = 0; i < n; ++i) { b[(size_t) ((wpos + i) & 8191)] = x[i]; x[i] = b[(size_t) ((wpos + i - d) & 8191)]; }
     }
 
-    void processChunk (float* l, float* r, int n, const Params& p, float levelGain)
+    void processChunk (float* l, float* r, int n, const Params& p, float levelGain, const float* keyL, const float* keyR)
     {
         const int mode = clampMode (p.mode);
         if (mode != lastMode) { if (lastMode >= 0) { fade = 0.0f; shaper.reset(); limiter.reset(); for (auto& c : ch) c.reset(); } lastMode = mode; }
@@ -173,7 +175,7 @@ private:
         if (mode == Shaper)
         {
             dy1::Params q = p.shaper; q.mix = 1.0f;
-            shaper.process (l, r, n, q, 1.0f);
+            shaper.process (l, r, n, q, 1.0f, keyL, keyR);
         }
         else if (mode == Compressor)
         {
@@ -191,7 +193,7 @@ private:
             float minGr = 0.0f;
             for (int i = 0; i < n; ++i)
             {
-                float det[2] = { l[i], r[i] };
+                float det[2] = { keyL != nullptr ? keyL[i] : l[i], keyR != nullptr ? keyR[i] : r[i] };
                 if (hpNow > 0.0f) { det[0] = ch[0].hp.tick (det[0]); det[1] = ch[1].hp.tick (det[1]); }
                 det[0] = std::abs (det[0]); det[1] = std::abs (det[1]);
                 const float dMax = std::max (det[0], det[1]);

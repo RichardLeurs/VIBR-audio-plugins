@@ -1,6 +1,7 @@
 // VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
 #pragma once
 
+#include "ui/OutputMeter.h"
 #include "PluginProcessor.h"
 #include "ui/VibrUI.h"
 
@@ -58,8 +59,10 @@ private:
     std::array<Knob, 17> knobs;
     MidiLearnUI midiUI { proc.midiMap };       // right-click a knob: MIDI learn
     vibr::ui::PresetBarState barState;
+    int shownKey = -1;
     juce::ParameterAttachment powerAtt;
     bool painting = false;
+    vibr::ui::OutputMeter meter;                                                                       // output dB meters
     float paintValue = 1.0f;
     int lastPainted = -1;
 

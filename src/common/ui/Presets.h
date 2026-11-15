@@ -132,14 +132,14 @@ inline juce::Rectangle<float> undoRect (bool redo, float y, bool showAB = true) 
 // state the bar needs between paints: when the copy button was pressed (it shows COPIED for a moment, the editor's timer repaints)
 struct PresetBarState { juce::uint32 copiedAt = 0; bool copiedRecently() const { return juce::Time::getMillisecondCounter() - copiedAt < 1200u && copiedAt != 0; } };
 
-inline void paintPresetBar (juce::Graphics& g, const Palette& pal, const vibr::PresetManager& mgr, const juce::UndoManager& undo, float y, const PresetBarState& state = {}, bool showAB = true)
+inline void paintPresetBar (juce::Graphics& g, const Palette& pal, const vibr::PresetManager& mgr, const juce::UndoManager& undo, float y, const PresetBarState& state = {}, bool showAB = true, float pill = 0.0f)
 {
     const auto chip = presetChipRect (y);
     g.setColour (pal.panel);
-    g.fillRoundedRectangle (chip, 12.0f);
+    g.fillRoundedRectangle (chip, pill > 0.0f ? pill : 12.0f);
     g.setColour (pal.dark);
-    g.drawRoundedRectangle (chip.reduced (0.9f), 12.0f, 1.8f);
-    drawText (g, "PRESET", chip.getX() + 14.0f, chip.getCentreY(), 11.0f, pal.ink.withAlpha (0.5f), true, 0.2f, juce::Justification::centredLeft);
+    g.drawRoundedRectangle (chip.reduced (0.9f), pill > 0.0f ? pill : 12.0f, 1.8f);
+    drawText (g, "PRESET", chip.getX() + 14.0f, chip.getCentreY(), 13.0f, pal.ink.withAlpha (0.5f), true, 0.2f, juce::Justification::centredLeft);
     drawText (g, mgr.name().toUpperCase(), chip.getX() + 78.0f, chip.getCentreY(), 13.0f, pal.body, true, 0.06f, juce::Justification::centredLeft);
     const int slot = mgr.abSlot();
     for (int i = 0; i < (showAB ? 3 : 0); ++i)
@@ -150,18 +150,18 @@ inline void paintPresetBar (juce::Graphics& g, const Palette& pal, const vibr::P
         if (selected || flash)
         {
             g.setColour (pal.body);
-            g.fillRoundedRectangle (b, 10.0f);
+            g.fillRoundedRectangle (b, pill > 0.0f ? pill : 10.0f);
             g.setColour (pal.dark);
-            g.drawRoundedRectangle (b.reduced (0.9f), 10.0f, 1.8f);
+            g.drawRoundedRectangle (b.reduced (0.9f), pill > 0.0f ? pill : 10.0f, 1.8f);
         }
         else
         {
             g.setColour (pal.panel);
-            g.fillRoundedRectangle (b, 10.0f);
+            g.fillRoundedRectangle (b, pill > 0.0f ? pill : 10.0f);
             g.setColour (pal.dark);
-            g.drawRoundedRectangle (b.reduced (0.9f), 10.0f, 1.6f);
+            g.drawRoundedRectangle (b.reduced (0.9f), pill > 0.0f ? pill : 10.0f, 1.6f);
         }
-        drawText (g, i == 0 ? "A" : i == 1 ? "B" : flash ? "COPIED" : (slot == 0 ? "TO B" : "TO A"), b.getCentreX(), b.getCentreY(), i < 2 ? 14.0f : flash ? 9.0f : 11.0f,
+        drawText (g, i == 0 ? "A" : i == 1 ? "B" : flash ? "DONE" : (slot == 0 ? "TO B" : "TO A"), b.getCentreX(), b.getCentreY(), i < 2 ? 14.0f : 13.0f,
                   (selected || flash) ? pal.dark : pal.ink.withAlpha (0.8f), true, 0.08f);
     }
     for (int redo = 0; redo < 2; ++redo)
@@ -169,19 +169,63 @@ inline void paintPresetBar (juce::Graphics& g, const Palette& pal, const vibr::P
         const auto b = undoRect (redo != 0, y, showAB);
         const bool can = redo ? undo.canRedo() : undo.canUndo();
         g.setColour (pal.panel);
-        g.fillRoundedRectangle (b, 10.0f);
+        g.fillRoundedRectangle (b, pill > 0.0f ? pill : 10.0f);
         g.setColour (pal.dark);
-        g.drawRoundedRectangle (b.reduced (0.9f), 10.0f, 1.6f);
-        drawText (g, redo ? "REDO" : "UNDO", b.getCentreX(), b.getCentreY(), 11.0f, pal.ink.withAlpha (can ? 0.9f : 0.3f), true, 0.1f);
+        g.drawRoundedRectangle (b.reduced (0.9f), pill > 0.0f ? pill : 10.0f, 1.6f);
+        drawText (g, redo ? "REDO" : "UNDO", b.getCentreX(), b.getCentreY(), 13.0f, pal.ink.withAlpha (can ? 0.9f : 0.3f), true, 0.1f);
     }
 }
+
+// dark look for the preset menu (and its submenus)
+struct PresetMenuLook : juce::LookAndFeel_V4
+{
+    PresetMenuLook()
+    {
+        setColour (juce::PopupMenu::backgroundColourId, juce::Colour (0xff121418));
+        setColour (juce::PopupMenu::textColourId, juce::Colour (0xffd3dae4));
+        setColour (juce::PopupMenu::headerTextColourId, juce::Colour (0xff8992a6));
+        setColour (juce::PopupMenu::highlightedBackgroundColourId, juce::Colour (0xff2c3242));
+        setColour (juce::PopupMenu::highlightedTextColourId, juce::Colours::white);
+    }
+};
+
+// a factory preset row in two columns: the name, then its description, both left aligned
+struct PresetMenuItem : juce::PopupMenu::CustomComponent
+{
+    PresetMenuItem (juce::String n, juce::String d, int nameW, bool tick) : name (std::move (n)), note (std::move (d)), nameWidth (nameW), ticked (tick) {}
+    void getIdealSize (int& w, int& h) override
+    {
+        const juce::Font f (juce::FontOptions (14.0f));
+        w = 30 + nameWidth + 24 + (int) std::ceil (juce::GlyphArrangement::getStringWidth (f, note)) + 16;
+        h = 24;
+    }
+    void paint (juce::Graphics& g) override
+    {
+        const auto& lf = getLookAndFeel();
+        const bool hi = isItemHighlighted();
+        if (hi) { g.setColour (lf.findColour (juce::PopupMenu::highlightedBackgroundColourId)); g.fillRect (getLocalBounds()); }
+        const auto txt = lf.findColour (hi ? juce::PopupMenu::highlightedTextColourId : juce::PopupMenu::textColourId);
+        g.setFont (juce::FontOptions (14.0f));
+        if (ticked) { g.setColour (txt); g.fillEllipse (11.0f, (float) getHeight() * 0.5f - 3.0f, 6.0f, 6.0f); }
+        g.setColour (txt);
+        g.drawText (name, 30, 0, nameWidth, getHeight(), juce::Justification::centredLeft, true);
+        g.setColour (txt.withAlpha (0.6f));
+        g.drawText (note, 30 + nameWidth + 24, 0, getWidth() - (30 + nameWidth + 24) - 8, getHeight(), juce::Justification::centredLeft, true);
+    }
+    juce::String name, note; int nameWidth; bool ticked;
+};
 
 // The preset menu: factory presets, my presets, save as, show the folder.
 inline void showPresetMenu (juce::Component& owner, vibr::PresetManager& mgr, float y, float scale, std::function<void()> done)
 {
+    static PresetMenuLook look;
     juce::PopupMenu menu, factory, user;
     const auto& list = mgr.factory();
-    for (int i = 0; i < (int) list.size(); ++i) factory.addItem (1000 + i, list[(size_t) i].name + (list[(size_t) i].note.isEmpty() ? juce::String() : "  -  " + list[(size_t) i].note), true, mgr.name() == list[(size_t) i].name);
+    int nameW = 0;
+    for (const auto& pr : list) nameW = juce::jmax (nameW, (int) std::ceil (juce::GlyphArrangement::getStringWidth (juce::Font (juce::FontOptions (14.0f)), pr.name)));
+    for (int i = 0; i < (int) list.size(); ++i)
+        factory.addCustomItem (1000 + i, std::make_unique<PresetMenuItem> (list[(size_t) i].name, list[(size_t) i].note, nameW, mgr.name() == list[(size_t) i].name), nullptr);
+    factory.setLookAndFeel (&look); user.setLookAndFeel (&look); menu.setLookAndFeel (&look);
     auto files = mgr.folderFile().findChildFiles (juce::File::findFiles, false, "*.xml");
     files.sort();
     for (int i = 0; i < files.size(); ++i) user.addItem (2000 + i, files[i].getFileNameWithoutExtension(), true, mgr.name() == files[i].getFileNameWithoutExtension());
