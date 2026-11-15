@@ -2,17 +2,9 @@
 #pragma once
 
 #include "PluginProcessor.h"
+#include "ui/VibrUI.h"
 
-// Black knob of the VIBR look (see style.md): matt body with a knurled edge, raised cap, white pointer bar.
-// The knob is drawn 5 px inside its component so the shadow is not clipped.
-class MF1LookAndFeel : public juce::LookAndFeel_V4
-{
-public:
-    void drawRotarySlider (juce::Graphics&, int x, int y, int w, int h, float pos,
-                           float startAngle, float endAngle, juce::Slider&) override;
-};
-
-// MF-1 window, drawn in code on a satin body: header (name, description, power), five panels
+// MF-1 window (1200 x 690) on the shared UI of src/common/ui: header (name, preset chip, undo), five panels
 // FILTER (five filter types), SOURCE (LFO / ENVELOPE / STEPS + SYNC), TONE (cutoff, resonance, depth),
 // MOTION (two knobs renamed per source) and OUTPUT (mix, level), and below them the SEQUENCER: eight bars to drag.
 class MF1AudioProcessorEditor : public juce::AudioProcessorEditor,
@@ -51,13 +43,15 @@ private:
     };
 
     MF1AudioProcessor& proc;
-    MF1LookAndFeel laf;
+    vibr::ui::KnobLookAndFeel laf;
     juce::ComponentBoundsConstrainer constrainer;
     juce::Image grain;
     std::array<Knob, 7> knobs;
     MidiLearnUI midiUI { proc.midiMap };       // right-click a knob: MIDI learn
     juce::ParameterAttachment powerAtt, typeAtt, sourceAtt, syncAtt;
-    int lastStep = -1, dragStep = -1;
+    vibr::ui::PresetBarState barState;
+    vibr::ui::OutputMeter meter;                                                                       // output dB meters
+    int lastStep = -1, dragStep = -1, shownKey = -1, stepsKey = -1;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MF1AudioProcessorEditor)
 };

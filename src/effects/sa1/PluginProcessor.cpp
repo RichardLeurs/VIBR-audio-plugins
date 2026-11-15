@@ -38,11 +38,30 @@ juce::AudioProcessorValueTreeState::ParameterLayout SA1AudioProcessor::createLay
     return layout;
 }
 
+namespace
+{
+// the factory presets (values are plain host values; the rest stays at the defaults: BOOST and CRUSH off, TUBE and TAPE on)
+std::vector<vibr::PresetManager::Factory> sa1FactoryPresets()
+{
+    return {
+        { "Init", "SA-1 at its defaults", {} },
+        { "Warm Tube", "Even-order glow, nothing else", { { "tapeOn", 0 }, { "tubeDrive", 55 }, { "tubeBias", 45 } } },
+        { "Tape Glue", "Soft compression and warmth", { { "tubeOn", 0 }, { "tapeDrive", 55 }, { "tapeWarmth", 65 } } },
+        { "Crunch Boost", "A hot boost into the tube", { { "boostOn", 1 }, { "boostGain", 14 }, { "boostTone", 60 }, { "tubeDrive", 60 }, { "tapeOn", 0 } } },
+        { "Lo-Fi Radio", "Band-limited, dusty and warm", { { "crushOn", 1 }, { "bits", 10 }, { "rate", 8000 }, { "crushMix", 70 }, { "tubeDrive", 25 }, { "tapeDrive", 50 }, { "tapeWarmth", 70 } } },
+        { "8-Bit Grit", "The crusher on its own", { { "tubeOn", 0 }, { "tapeOn", 0 }, { "crushOn", 1 }, { "bits", 6 }, { "rate", 12000 }, { "crushMix", 100 } } },
+        { "Crushed Tape", "A little crush on a warm tape", { { "crushOn", 1 }, { "bits", 12 }, { "rate", 20000 }, { "crushMix", 60 }, { "tapeDrive", 60 }, { "tapeWarmth", 75 }, { "mix", 80 } } },
+        { "Full Chain", "All four stages at work", { { "boostOn", 1 }, { "boostGain", 8 }, { "tubeDrive", 50 }, { "tapeDrive", 50 }, { "crushOn", 1 }, { "bits", 12 }, { "rate", 24000 }, { "crushMix", 40 } } },
+    };
+}
+} // namespace
+
 SA1AudioProcessor::SA1AudioProcessor()
     : AudioProcessor (BusesProperties()
                           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts (*this, nullptr, "SA1", createLayout())
+      apvts (*this, &undoManager, "SA1", createLayout()),
+      presets (*this, apvts, undoManager, "SA-1 Presets", sa1FactoryPresets(), { "power", "bypass" })
 {
     const auto get = [this] (const char* id) { return apvts.getRawParameterValue (id); };
     pPower = get ("power"); pBoostOn = get ("boostOn"); pBoostGain = get ("boostGain"); pBoostTone = get ("boostTone");
@@ -75,7 +94,7 @@ void SA1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     const float from = powerSmooth.getCurrentValue();
     powerSmooth.setTargetValue (pPower->load() > 0.5f ? 1.0f : 0.0f);
     const float to = powerSmooth.skip (n);
-    if (from == 0.0f && to == 0.0f) return;                          // off: the signal passes untouched
+    if (from == 0.0f && to == 0.0f) { outMeter.measure (buffer, n); return; }                          // off: the signal passes untouched
 
     for (int c = 0; c < 2; ++c) dryBuf.copyFrom (c, 0, buffer, c, 0, n);
 
@@ -98,6 +117,7 @@ void SA1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
                 d[i] = s[i] + (d[i] - s[i]) * t;
             }
         }
+    outMeter.measure (buffer, n);
 }
 
 juce::AudioProcessorEditor* SA1AudioProcessor::createEditor() { return new SA1AudioProcessorEditor (*this); }

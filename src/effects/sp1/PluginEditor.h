@@ -2,18 +2,10 @@
 #pragma once
 
 #include "PluginProcessor.h"
+#include "ui/VibrUI.h"
 
-// Black knob of the VIBR look (see style.md): matt body with a knurled edge, raised cap, white pointer bar.
-// The knob is drawn 5 px inside its component so the shadow is not clipped.
-class SP1LookAndFeel : public juce::LookAndFeel_V4
-{
-public:
-    void drawRotarySlider (juce::Graphics&, int x, int y, int w, int h, float pos,
-                           float startAngle, float endAngle, juce::Slider&) override;
-};
-
-// SP-1 window, drawn in code on a satin body: header (name, description, power), four panels:
-// MODE (five mode buttons + FREEZE), SPACE (size, decay, diffusion), CHARACTER (tone, motion, texture) and OUTPUT (mix, level).
+// SP-1 window (1200 x 450), on the shared UI of src/common/ui: header (name, preset chip, undo), the CONTROLS panel with the mode tab pills (SHIMMER, INFINITE,
+// SPECTRAL, MODULATED, ROOMS) on its top edge (SIZE, DECAY, DIFFUSION, TONE, MOTION, TEXTURE and FREEZE) and OUTPUT (MIX, LEVEL, L / R dB meters).
 class SP1AudioProcessorEditor : public juce::AudioProcessorEditor,
                                 private juce::Timer
 {
@@ -33,6 +25,7 @@ private:
     int currentMode() const { return juce::jlimit (0, sp1::kNumModes - 1, (int) std::lround (proc.apvts.getRawParameterValue ("mode")->load())); }
     bool isOn (const char* id) const { return proc.apvts.getRawParameterValue (id)->load() > 0.5f; }
     void toggle (const char* id);
+    void setChoice (const char* id, int index);
 
     struct Knob
     {
@@ -46,12 +39,14 @@ private:
 
     SP1AudioProcessor& proc;
     MidiLearnUI midiUI { proc.midiMap };       // right-click a knob: MIDI learn
-    SP1LookAndFeel laf;
+    vibr::ui::KnobLookAndFeel laf;
     juce::ComponentBoundsConstrainer constrainer;
     juce::Image grain;
     std::array<Knob, 8> knobs;
+    vibr::ui::PresetBarState barState;
     juce::ParameterAttachment powerAtt, modeAtt, freezeAtt;
     int lastMode = -1;
+    vibr::ui::OutputMeter meter;                                                                       // output dB meters
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SP1AudioProcessorEditor)
 };

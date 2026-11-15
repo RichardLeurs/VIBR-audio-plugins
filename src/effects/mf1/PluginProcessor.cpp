@@ -29,11 +29,30 @@ juce::AudioProcessorValueTreeState::ParameterLayout MF1AudioProcessor::createLay
     return layout;
 }
 
+namespace
+{
+// the factory presets (plain host values: type 0 low, 1 band, 2 high, 3 notch, 4 vowel; source 0 LFO, 1 envelope, 2 steps; cutoff / res / depth / m1 / m2 / mix / steps 0 .. 100)
+std::vector<vibr::PresetManager::Factory> mf1FactoryPresets()
+{
+    return {
+        { "Init", "Motion Filter at its defaults", {} },
+        { "Slow Sweep", "A band pass drifting up and down", { { "type", 1 }, { "source", 0 }, { "cutoff", 45 }, { "res", 50 }, { "depth", 70 }, { "m1", 15 }, { "m2", 0 }, { "mix", 100 } } },
+        { "Wobble Bass", "Low pass, fast wobble", { { "type", 0 }, { "source", 0 }, { "cutoff", 30 }, { "res", 70 }, { "depth", 80 }, { "m1", 55 }, { "m2", 0 }, { "mix", 100 } } },
+        { "Auto Wah", "The playing opens the filter", { { "type", 1 }, { "source", 1 }, { "cutoff", 25 }, { "res", 65 }, { "depth", 85 }, { "m1", 55 }, { "m2", 35 }, { "mix", 100 } } },
+        { "Envelope Pluck", "A fast decay on a low pass", { { "type", 0 }, { "source", 1 }, { "cutoff", 20 }, { "res", 60 }, { "depth", 90 }, { "m1", 70 }, { "m2", 20 }, { "mix", 100 } } },
+        { "Step Groove", "Eight steps, locked to the tempo", { { "type", 0 }, { "source", 2 }, { "sync", 1 }, { "cutoff", 35 }, { "res", 60 }, { "depth", 80 }, { "m1", 50 }, { "m2", 10 }, { "mix", 100 } } },
+        { "Vowel Talker", "Vowel shapes moved by the LFO", { { "type", 4 }, { "source", 0 }, { "cutoff", 50 }, { "res", 60 }, { "depth", 75 }, { "m1", 25 }, { "m2", 0 }, { "mix", 100 } } },
+        { "Notch Phase", "A swirling notch, half dry", { { "type", 3 }, { "source", 0 }, { "cutoff", 55 }, { "res", 55 }, { "depth", 60 }, { "m1", 20 }, { "m2", 0 }, { "mix", 60 } } },
+    };
+}
+} // namespace
+
 MF1AudioProcessor::MF1AudioProcessor()
     : AudioProcessor (BusesProperties()
                           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts (*this, nullptr, "MF1", createLayout())
+      apvts (*this, &undoManager, "MF1", createLayout()),
+      presets (*this, apvts, undoManager, "MF-1 Presets", mf1FactoryPresets(), { "power", "bypass" })
 {
     pPower  = apvts.getRawParameterValue ("power");
     pType   = apvts.getRawParameterValue ("type");
@@ -74,7 +93,7 @@ void MF1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     const float from = powerSmooth.getCurrentValue();
     powerSmooth.setTargetValue (pPower->load() > 0.5f ? 1.0f : 0.0f);
     const float to = powerSmooth.skip (n);
-    if (from == 0.0f && to == 0.0f) return;                          // off: the signal passes untouched
+    if (from == 0.0f && to == 0.0f) { outMeter.measure (buffer, n); return; }                          // off: the signal passes untouched
 
     for (int c = 0; c < 2; ++c) dryBuf.copyFrom (c, 0, buffer, c, 0, n);
 
@@ -108,6 +127,7 @@ void MF1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
                 d[i] = s[i] + (d[i] - s[i]) * t;
             }
         }
+    outMeter.measure (buffer, n);
 }
 
 juce::AudioProcessorEditor* MF1AudioProcessor::createEditor() { return new MF1AudioProcessorEditor (*this); }

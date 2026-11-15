@@ -1,52 +1,27 @@
 // VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
 #include "PluginEditor.h"
-#include "VibrLogo.h"
+#include "ui/Presets.h"
 
 namespace
 {
-// layout units: the design is 1200 x 690 (style.md: 20 side margin, 10 gap, name centre 55, rule 104, panels 30 below the rule, 69 above the bottom)
-constexpr float kW = 1200.0f, kH = 690.0f, kMargin = 20.0f, kRuleY = 104.0f;
-constexpr float kPanelY = 134.0f, kPanelH = 236.0f, kKnobR = 26.0f, kPad = 5.0f, kSeqY = 394.0f, kSeqH = 227.0f;
-constexpr float kPanelX[5] = { 20.0f, 210.0f, 400.0f, 710.0f, 950.0f }, kPanelW[5] = { 180.0f, 180.0f, 300.0f, 230.0f, 230.0f };
+namespace ui = vibr::ui;
+using ui::drawText;
+
+// layout units: 1200 x 690 (style.md: 20 side margin, 10 gap, panels 30 below the rule, 24 between the rows)
+constexpr float kW = 1200.0f, kH = 690.0f, kMargin = 20.0f, kBarY = 39.0f;
+constexpr float kPanelY = 134.0f, kPanelH = 236.0f, kKnobR = 24.0f, kPad = 5.0f, kSeqY = 394.0f, kSeqH = 227.0f;
+constexpr float kPanelX[5] = { 20.0f, 184.0f, 348.0f, 660.0f, 880.0f }, kPanelW[5] = { 154.0f, 154.0f, 302.0f, 210.0f, 300.0f };      // 10 between the panels, 20 .. 1180
 constexpr const char* kPanelName[5] = { "FILTER", "SOURCE", "TONE", "MOTION", "OUTPUT" };
 
-const juce::Colour kBody (199, 125, 74), kDark (36, 20, 10), kPanel (26, 27, 30), kInk (238, 238, 232), kIce (143, 211, 244);
-
-juce::Font font (float h, bool bold = false, bool italic = false)
-{
-    if (italic) return juce::Font (juce::FontOptions ("Avenir Next", "Heavy Italic", h));
-    if (! bold) return juce::Font (juce::FontOptions ("Avenir Next", "Medium", h));
-    return juce::Font (juce::FontOptions ("Avenir Next", h, bold ? juce::Font::bold : juce::Font::plain));
-}
-
-float textWidth (const juce::Font& f, const juce::String& s)
-{
-    juce::GlyphArrangement ga;
-    ga.addLineOfText (f, s, 0.0f, 0.0f);
-    return ga.getBoundingBox (0, -1, true).getWidth();
-}
-
-void drawText (juce::Graphics& g, const juce::String& s, float cx, float cy, float size, juce::Colour c, bool bold = true,
-               float kerning = 0.08f, juce::Justification j = juce::Justification::centred, bool italic = false)
-{
-    auto f = font (size, bold, italic).withExtraKerningFactor (kerning);
-    g.setColour (c);
-    g.setFont (f);
-    const float w = textWidth (f, s) + 8.0f;
-    juce::Rectangle<float> r (w, size * 1.6f);
-    if (j == juce::Justification::centred) r = r.withCentre ({ cx, cy });
-    else if (j == juce::Justification::centredRight) r = r.withCentre ({ cx - w * 0.5f, cy });
-    else r = r.withCentre ({ cx + w * 0.5f, cy });
-    g.drawText (s, r, j, false);
-}
+const ui::Palette kPal { juce::Colour (199, 125, 74), juce::Colour (36, 20, 10) };                // the Motion Filter colour #C77D4A and its print
 
 juce::Rectangle<float> panelRect (int i) { return { kPanelX[i], kPanelY, kPanelW[i], kPanelH }; }
 juce::Rectangle<float> seqRect() { return { kMargin, kSeqY, kW - 2.0f * kMargin, kSeqH }; }
-juce::Rectangle<float> typeRect (int m) { const auto r = panelRect (0); return { r.getX() + 14.0f, r.getY() + 46.0f + (float) m * 38.0f, r.getWidth() - 28.0f, 30.0f }; }
-juce::Rectangle<float> sourceRect (int m) { const auto r = panelRect (1); return { r.getX() + 14.0f, r.getY() + 46.0f + (float) m * 44.0f, r.getWidth() - 28.0f, 36.0f }; }
-juce::Rectangle<float> syncRect() { const auto r = panelRect (1); return { r.getX() + 14.0f, r.getY() + 184.0f, r.getWidth() - 28.0f, 36.0f }; }
-juce::Rectangle<float> powerRect() { return juce::Rectangle<float> (50.0f, 50.0f).withCentre ({ kW - kMargin - 16.5f, 43.5f }); }
-juce::Rectangle<float> barsArea() { const auto r = seqRect(); return { r.getX() + 30.0f, r.getY() + 48.0f, r.getWidth() - 60.0f, 124.0f }; }
+// buttons 15 inside the panel edges: the five filter types, the three sources and SYNC under a divider (24 clear below, 23 below the title pill)
+juce::Rectangle<float> typeRect (int m) { const auto r = panelRect (0); return { r.getX() + 15.0f, r.getY() + 34.0f + (float) m * 37.0f, r.getWidth() - 30.0f, 30.0f }; }
+juce::Rectangle<float> sourceRect (int m) { const auto r = panelRect (1); return { r.getX() + 15.0f, r.getY() + 34.0f + (float) m * 42.0f, r.getWidth() - 30.0f, 32.0f }; }
+juce::Rectangle<float> syncRect() { const auto r = panelRect (1); return { r.getX() + 15.0f, r.getY() + 180.0f, r.getWidth() - 30.0f, 32.0f }; }
+juce::Rectangle<float> barsArea() { const auto r = seqRect(); return { r.getX() + 30.0f, r.getY() + 42.0f, r.getWidth() - 60.0f, 130.0f }; }
 juce::Rectangle<float> barRect (int i)
 {
     const auto a = barsArea();
@@ -56,47 +31,15 @@ juce::Rectangle<float> barRect (int i)
 juce::Point<float> knobCentre (int panel, int k, int n)
 {
     const auto r = panelRect (panel);
-    // the knobs (ticks and legends reach 44 each side) keep 14 clear of the panel edge: first and last centre 58 inside it
-    const float inset = 58.0f, x = n > 1 ? r.getX() + inset + (r.getWidth() - 2.0f * inset) * (float) k / (float) (n - 1) : r.getCentreX();
+    // TONE: 96 apart, the first and last centre 55 inside the panel (ticks reach 42: 13 clear); MOTION: the pair 100 apart round the middle (13 clear each side);
+    // OUTPUT: centres x + 55 and x + 155 (100 apart), the dB meters on the right: 13 padding left of the first ticks and right of the scale labels
+    if (panel == 4) return { r.getX() + 55.0f + 100.0f * (float) k, r.getY() + 100.0f };
+    if (panel == 3) return { r.getCentreX() + 100.0f * ((float) k - 0.5f), r.getY() + 100.0f };
+    const float x = n > 1 ? r.getX() + 55.0f + (r.getWidth() - 110.0f) * (float) k / (float) (n - 1) : r.getCentreX();
     return { x, r.getY() + 100.0f };
 }
+juce::Point<float> meterOrigin() { const auto r = panelRect (4); return { r.getX() + 217.0f, r.getY() + 54.0f }; }       // bars 110 high: y + 54 .. y + 164 (the MIX / LEVEL name row), peak values on the value row (y + 192)
 } // namespace
-
-//==============================================================================
-void MF1LookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int w, int h, float pos, float startAngle, float endAngle, juce::Slider&)
-{
-    const auto c = juce::Rectangle<float> ((float) x, (float) y, (float) w, (float) h).getCentre();
-    const float R = (float) juce::jmin (w, h) * 0.5f - 5.0f;
-    const auto circle = [&c] (float r) { return juce::Rectangle<float> (2.0f * r, 2.0f * r).withCentre (c); };
-
-    g.setColour (juce::Colours::black.withAlpha (0.5f));                                            // shadow
-    g.fillEllipse (circle (R).translated (1.0f, R * 0.14f));
-
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff35373d), c.x - R * 0.6f, c.y - R * 0.8f, juce::Colour (0xff08090a), c.x + R * 0.6f, c.y + R * 0.9f, false));
-    g.fillEllipse (circle (R));                                                                     // matt black body
-    for (int k = 0; k < 60; ++k)                                                                    // knurled grip edge
-    {
-        const float a = (float) k * juce::MathConstants<float>::twoPi / 60.0f, s = std::sin (a), co = std::cos (a);
-        g.setColour ((k & 1) ? juce::Colours::black.withAlpha (0.45f) : juce::Colours::white.withAlpha (0.13f));
-        g.drawLine (c.x + s * R * 0.86f, c.y - co * R * 0.86f, c.x + s * R * 0.995f, c.y - co * R * 0.995f, 1.1f);
-    }
-    g.setColour (juce::Colours::white.withAlpha (0.16f));
-    g.drawEllipse (circle (R - 0.5f), 1.0f);
-
-    const float cr = R * 0.74f;                                                                     // raised cap
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff3f4147), c.x - cr * 0.7f, c.y - cr * 0.8f, juce::Colour (0xff121315), c.x + cr * 0.7f, c.y + cr * 0.9f, false));
-    g.fillEllipse (circle (cr));
-    g.setColour (juce::Colours::white.withAlpha (0.22f));
-    g.drawEllipse (circle (cr), 1.0f);
-    g.setGradientFill (juce::ColourGradient (juce::Colours::white.withAlpha (0.16f), c.x - cr * 0.4f, c.y - cr * 0.5f, juce::Colours::transparentWhite, c.x, c.y, true));
-    g.fillEllipse (circle (cr * 0.95f));
-
-    const float a = startAngle + pos * (endAngle - startAngle);                                     // white pointer bar
-    juce::Path bar;
-    bar.addRoundedRectangle (-R * 0.05f, -R * 0.84f, R * 0.10f, R * 0.5f, R * 0.05f);
-    g.setColour (juce::Colour (0xfff2f2ee));
-    g.fillPath (bar, juce::AffineTransform::rotation (a).translated (c));
-}
 
 //==============================================================================
 MF1AudioProcessorEditor::MF1AudioProcessorEditor (MF1AudioProcessor& p)
@@ -114,15 +57,11 @@ MF1AudioProcessorEditor::MF1AudioProcessorEditor (MF1AudioProcessor& p)
     for (auto& k : knobs)
     {
         auto& s = k.slider;
-        s.setSliderStyle (juce::Slider::RotaryVerticalDrag);
-        s.setTextBoxStyle (juce::Slider::NoTextBox, true, 0, 0);
-        s.setRotaryParameters (juce::degreesToRadians (-135.0f), juce::degreesToRadians (135.0f), true);
-        s.setMouseDragSensitivity (160);
-        s.setScrollWheelEnabled (false);
-        s.setPopupDisplayEnabled (true, true, this);
+        ui::setupKnob (s, *this);
         s.setTextValueSuffix (k.kind == 4 ? " dB" : " %");
         auto* par = proc.apvts.getParameter (k.id);
         s.setDoubleClickReturnValue (true, par->convertFrom0to1 (par->getDefaultValue()));
+        s.onDragStart = [this] { proc.undoManager.beginNewTransaction(); };
         addAndMakeVisible (s);
         k.att = std::make_unique<juce::SliderParameterAttachment> (*dynamic_cast<juce::RangedAudioParameter*> (par), s, nullptr);
         midiUI.add (s, k.id);
@@ -133,12 +72,7 @@ MF1AudioProcessorEditor::MF1AudioProcessorEditor (MF1AudioProcessor& p)
     sourceAtt.sendInitialUpdate();
     syncAtt.sendInitialUpdate();
 
-    juce::Random rng (11);                                                                          // satin grain tile
-    grain = juce::Image (juce::Image::ARGB, 128, 128, true);
-    for (int y = 0; y < 128; ++y)
-        for (int x = 0; x < 128; ++x)
-            grain.setPixelAt (x, y, (rng.nextBool() ? juce::Colours::white : juce::Colours::black).withAlpha (rng.nextFloat() * 0.05f));
-
+    grain = ui::makeGrain();
     constrainer.setSizeLimits (720, 414, 2400, 1380);
     constrainer.setFixedAspectRatio ((double) kW / (double) kH);
     setConstrainer (&constrainer);
@@ -156,18 +90,29 @@ MF1AudioProcessorEditor::~MF1AudioProcessorEditor()
 
 void MF1AudioProcessorEditor::paintOverChildren (juce::Graphics& g)
 {
-    midiUI.paintMarks (g, kBody);
+    midiUI.paintMarks (g, kPal.body);
 }
 
 void MF1AudioProcessorEditor::timerCallback()
 {
+    const auto toScreen = [this] (juce::Rectangle<float> r) { return r.transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer(); };
+    meter.update (proc.outMeter);
+    repaint (toScreen (panelRect (4).withTrimmedLeft (panelRect (4).getWidth() - 150.0f).expanded (2.0f)));
     if (midiUI.needsRepaint()) { midiUI.tick(); repaint(); }
+
+    // a preset, undo, A / B or automation changed the source (the MOTION knobs are renamed) or the steps: redraw
+    int stepsKey = 0;
+    for (int i = 0; i < mf1::kNumSteps; ++i) stepsKey = stepsKey * 31 + (int) std::lround (proc.apvts.getRawParameterValue ("step" + juce::String (i + 1))->load());
+    const int shown = choice ("source") * 8 + choice ("type");
+    if (shown != shownKey || stepsKey != this->stepsKey) { shownKey = shown; this->stepsKey = stepsKey; layoutKnobs(); repaint(); }
+
     const int st = proc.currentStep.load();
     if (st != lastStep)
     {
         lastStep = st;
-        repaint (seqRect().expanded (4.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer());
+        repaint (toScreen (seqRect().expanded (4.0f)));
     }
+    if (barState.copiedAt != 0) { repaint (toScreen (juce::Rectangle<float> (0.0f, 30.0f, 900.0f, 50.0f))); if (! barState.copiedRecently()) barState.copiedAt = 0; }
 }
 
 void MF1AudioProcessorEditor::toggle (const char* id)
@@ -191,105 +136,34 @@ void MF1AudioProcessorEditor::resized() { layoutKnobs(); }
 void MF1AudioProcessorEditor::paint (juce::Graphics& g)
 {
     g.addTransform (juce::AffineTransform::scale (scale()));
+    ui::paintBody (g, kPal, kW, kH, grain);
+    ui::paintHeader (g, kPal, "MF-1", "MOTION FILTER", "RHYTHMIC MOVEMENT", isOn ("power"));
+    ui::paintPresetBar (g, kPal, proc.presets, proc.undoManager, kBarY, barState, false, 6.0f);
 
-    // satin body
-    g.setGradientFill (juce::ColourGradient (kBody.brighter (0.22f), 0.0f, 0.0f, kBody.darker (0.18f), kW, kH, false));
-    g.fillRect (0.0f, 0.0f, kW, kH);
-    g.setGradientFill (juce::ColourGradient (juce::Colours::white.withAlpha (0.14f), kW * 0.3f, kH * 0.1f, juce::Colours::transparentWhite, kW * 0.3f, kH * 0.75f, true));
-    g.fillRect (0.0f, 0.0f, kW, kH);
-    g.setTiledImageFill (grain, 0, 0, 1.0f);
-    g.fillRect (0.0f, 0.0f, kW, kH);
-    g.setColour (juce::Colours::white.withAlpha (0.28f));                                           // rim: bright top / left, soft bottom / right
-    g.drawLine (0.0f, 1.5f, kW, 1.5f, 3.0f);
-    g.drawLine (1.5f, 0.0f, 1.5f, kH, 3.0f);
-    g.setColour (juce::Colours::black.withAlpha (0.12f));
-    g.drawLine (0.0f, kH - 1.5f, kW, kH - 1.5f, 3.0f);
-    g.drawLine (kW - 1.5f, 0.0f, kW - 1.5f, kH, 3.0f);
+    for (int i = 0; i < 5; ++i) ui::paintPanel (g, kPal, panelRect (i), kPanelName[i]);
+    ui::paintPanel (g, kPal, seqRect(), "SEQUENCER");
 
-    // header: name left, two description lines right, power switch, rule
-    drawText (g, "MF-1", kMargin + 3.0f, 55.0f, 70.0f, kDark, true, 0.0f, juce::Justification::centredLeft, true);
-    drawText (g, "MOTION FILTER", kW - kMargin - 95.0f, 43.0f, 20.0f, kDark, false, 0.2f, juce::Justification::centredRight);
-    drawText (g, "RHYTHMIC MOVEMENT", kW - kMargin - 95.0f, 67.0f, 17.0f, kDark, false, 0.2f, juce::Justification::centredRight);
-    g.setColour (kDark.withAlpha (0.85f));
-    g.fillRect (kMargin, kRuleY, kW - 2.0f * kMargin, 1.6f);
-
-    {   // power switch: slot, chrome ball, OFF / ON legend
-        const bool on = isOn ("power");
-        const auto sr = juce::Rectangle<float> (33.0f, 17.0f).withCentre ({ kW - kMargin - 16.5f, 43.5f });
-        g.setGradientFill (on ? juce::ColourGradient (juce::Colour (0xff0e3a1e), sr.getX(), sr.getY(), juce::Colour (0xff1a7a3e), sr.getX(), sr.getBottom(), false)
-                              : juce::ColourGradient (juce::Colour (0xff111214), sr.getX(), sr.getY(), juce::Colour (0xff25272b), sr.getX(), sr.getBottom(), false));
-        g.fillRoundedRectangle (sr, 8.5f);
-        g.setColour (juce::Colours::white.withAlpha (0.22f));
-        g.drawRoundedRectangle (sr, 8.5f, 1.0f);
-        const auto ball = juce::Rectangle<float> (14.0f, 14.0f).withCentre ({ on ? sr.getRight() - 8.5f : sr.getX() + 8.5f, sr.getCentreY() });
-        g.setColour (juce::Colours::black.withAlpha (0.5f));
-        g.fillEllipse (ball.translated (0.5f, 1.2f));
-        g.setGradientFill (juce::ColourGradient (juce::Colour (0xfffafbfd), ball.getX() + 3.0f, ball.getY() + 2.0f, juce::Colour (0xff6e727e), ball.getRight(), ball.getBottom(), false));
-        g.fillEllipse (ball);
-        drawText (g, "OFF / ON", kW - kMargin, 68.5f, 13.0f, kDark, false, 0.12f, juce::Justification::centredRight);
-    }
-
-    // panels: charcoal, light outline, title pill on the top edge
-    const auto drawPanel = [&] (juce::Rectangle<float> r, const char* name)
-    {
-        g.setColour (kPanel);
-        g.fillRoundedRectangle (r, 20.0f);
-        g.setColour (kInk.withAlpha (0.55f));
-        g.drawRoundedRectangle (r.reduced (0.5f), 20.0f, 1.4f);
-        const float w = textWidth (font (18.0f, true).withExtraKerningFactor (0.08f), name) + 38.0f;
-        const auto pill = juce::Rectangle<float> (w, 22.0f).withCentre ({ r.getCentreX(), r.getY() });
-        g.setColour (kPanel);
-        g.fillRoundedRectangle (pill, 11.0f);
-        drawText (g, name, pill.getCentreX(), pill.getCentreY(), 18.0f, kBody, true, 0.08f);
-    };
-    for (int i = 0; i < 5; ++i) drawPanel (panelRect (i), kPanelName[i]);
-    drawPanel (seqRect(), "SEQUENCER");
-
-    const auto button = [&] (juce::Rectangle<float> b, const char* label, bool sel, float size)
-    {
-        if (sel) { g.setColour (kBody); g.fillRoundedRectangle (b, 10.0f); }
-        g.setColour (sel ? kBody : kInk.withAlpha (0.35f));
-        g.drawRoundedRectangle (b.reduced (0.5f), 10.0f, 1.2f);
-        drawText (g, label, b.getCentreX(), b.getCentreY(), size, sel ? kDark : kInk.withAlpha (0.85f), true, 0.1f);
-    };
     const int type = choice ("type"), source = choice ("source");
-    for (int m = 0; m < mf1::kNumTypes; ++m) button (typeRect (m), mf1::typeName (m), m == type, 15.0f);
-    for (int m = 0; m < mf1::kNumSources; ++m) button (sourceRect (m), mf1::sourceName (m), m == source, 16.0f);
+    for (int m = 0; m < mf1::kNumTypes; ++m) ui::paintFlatButton (g, kPal, typeRect (m), mf1::typeName (m), m == type, 14.0f, 1.0f, 10.0f);
+    for (int m = 0; m < mf1::kNumSources; ++m) ui::paintFlatButton (g, kPal, sourceRect (m), mf1::sourceName (m), m == source, 14.0f, 1.0f, 10.0f);
     {
-        const bool on = isOn ("sync");
-        const auto b = syncRect();
-        if (on) { g.setColour (kIce.withAlpha (0.22f)); g.fillRoundedRectangle (b.expanded (3.0f), 13.0f); g.setColour (kIce); g.fillRoundedRectangle (b, 10.0f); }
-        g.setColour (on ? kIce : kInk.withAlpha (0.5f));
-        g.drawRoundedRectangle (b.reduced (0.5f), 10.0f, 1.4f);
-        drawText (g, "SYNC", b.getCentreX(), b.getCentreY(), 16.0f, on ? kDark : kInk.withAlpha (0.9f), true, 0.16f);
+        const auto r = panelRect (1);
+        g.setColour (kPal.ink.withAlpha (0.35f));
+        g.fillRect (r.getX() + 15.0f, r.getY() + 163.0f, r.getWidth() - 30.0f, 1.0f);
+        ui::paintFlatButton (g, kPal, syncRect(), "SYNC", isOn ("sync"), 14.0f, 1.0f, 10.0f, 0.16f);
     }
 
-    // knobs: recessed ring, 11 ticks, legends, name and value
+    // knobs: recessed ring, 11 ticks, legends, name, value and the value ring
     for (auto& k : knobs)
     {
         const auto c = knobCentre (k.panel, k.index, k.count);
-        const auto ring = juce::Rectangle<float> (2.0f * (kKnobR + 5.0f), 2.0f * (kKnobR + 5.0f)).withCentre (c);
-        g.setColour (juce::Colours::black.withAlpha (0.5f));
-        g.fillEllipse (ring);
-        g.setColour (juce::Colours::white.withAlpha (0.1f));
-        g.drawEllipse (ring, 1.0f);
-        for (int t = 0; t <= 10; ++t)
-        {
-            const float a = juce::degreesToRadians (-135.0f + 27.0f * (float) t), s = std::sin (a), co = std::cos (a);
-            const bool major = t == 0 || t == 5 || t == 10;
-            const float r0 = kKnobR + 10.0f, r1 = r0 + (major ? 8.0f : 5.0f);
-            g.setColour (kInk.withAlpha (0.85f));
-            g.drawLine (c.x + s * r0, c.y - co * r0, c.x + s * r1, c.y - co * r1, major ? 2.0f : 1.2f);
-        }
-        const float lx = (kKnobR + 18.0f) * 0.7071f, ly = lx + 13.0f;
         const char* lo = k.kind == 4 ? "-24" : k.kind == 1 ? "LOW" : "0";
-        const char* hi = k.kind == 4 ? "+12" : k.kind == 1 ? "HIGH" : "10";
-        drawText (g, lo, c.x - lx, c.y + ly, 12.0f, kInk.withAlpha (0.85f), false, 0.0f);
-        drawText (g, hi, c.x + lx, c.y + ly, 12.0f, kInk.withAlpha (0.85f), false, 0.0f);
-
-        drawText (g, k.name != nullptr ? k.name : mf1::motionName (source, k.index), c.x, kPanelY + 178.0f, 16.0f, kInk.withAlpha (0.95f), true, 0.12f);
-        drawText (g, knobText (k.kind, k.slider.getValue()), c.x, kPanelY + 206.0f, 15.0f, kBody, false, 0.04f);
+        const char* hi = k.kind == 4 ? "+12" : k.kind == 1 ? "HIGH" : k.kind == 0 ? "100" : "10";
+        const float y0 = panelRect (k.panel).getY();
+        ui::paintKnob (g, kPal, c, k.name != nullptr ? k.name : mf1::motionName (source, k.index), knobText (k.kind, k.slider.getValue()), lo, hi, y0 + 164.0f, y0 + 192.0f);
+        ui::paintValueArc (g, c, kKnobR, (float) k.slider.valueToProportionOfLength (k.slider.getValue()), kPal.body);
     }
+    meter.paint (g, meterOrigin().x, meterOrigin().y, isOn ("power"), kPal.body, kPal.ink, 110.0f, 28.0f, 13.0f);
 
     // sequencer: eight bars (dim unless the source is STEPS), the playing step lit
     {
@@ -306,15 +180,14 @@ void MF1AudioProcessorEditor::paint (juce::Graphics& g)
             g.drawRoundedRectangle (b.reduced (0.5f), 8.0f, 1.0f);
             const float h = juce::jmax (8.0f, v * b.getHeight());
             const auto fill = juce::Rectangle<float> (b.getX() + 4.0f, b.getBottom() - h - 0.0f, b.getWidth() - 8.0f, h - 4.0f > 4.0f ? h - 4.0f : 4.0f).withBottomY (b.getBottom() - 4.0f);
-            if (now) { g.setColour (kBody.withAlpha (0.25f)); g.fillRoundedRectangle (fill.expanded (4.0f), 8.0f); }
-            g.setColour (active ? (now ? kBody.brighter (0.35f) : kBody) : kBody.withAlpha (0.35f));
+            if (now) { g.setColour (kPal.body.withAlpha (0.25f)); g.fillRoundedRectangle (fill.expanded (4.0f), 8.0f); }
+            g.setColour (active ? (now ? kPal.body.brighter (0.35f) : kPal.body) : kPal.body.withAlpha (0.35f));
             g.fillRoundedRectangle (fill, 5.0f);
-            drawText (g, juce::String (i + 1), b.getCentreX(), b.getBottom() + 18.0f, 14.0f, now ? kBody : kInk.withAlpha (0.55f), true, 0.1f);
+            drawText (g, juce::String (i + 1), b.getCentreX(), b.getBottom() + 18.0f, 14.0f, now ? kPal.body : kPal.ink.withAlpha (0.75f), true, 0.1f);
         }
     }
 
-    drawText (g, "Made by Richard Leurs | VIBR", kW - kMargin - 20.0f, kSeqY + kSeqH + 35.0f, 13.0f, kDark, false, 0.06f, juce::Justification::centredRight);
-    drawVibrLogo (g, juce::Rectangle<float> (13.0f, 13.0f).withCentre ({ kW - kMargin - 6.5f, kSeqY + kSeqH + 35.0f }), kDark);
+    ui::paintFooter (g, kPal, kSeqY + kSeqH + 35.0f);
 }
 
 juce::String MF1AudioProcessorEditor::knobText (int kind, double v) const
@@ -354,7 +227,9 @@ void MF1AudioProcessorEditor::setStep (int step, float value01, bool begin)
 void MF1AudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 {
     const auto p = e.position / scale();
-    if (powerRect().contains (p)) { toggle ("power"); return; }
+    proc.undoManager.beginNewTransaction();
+    if (ui::powerRect().contains (p)) { toggle ("power"); return; }
+    if (ui::presetBarMouseDown (p, *this, proc.presets, proc.undoManager, kBarY, scale(), barState, [this] { repaint(); }, false)) { layoutKnobs(); return; }
     if (syncRect().expanded (3.0f).contains (p)) { toggle ("sync"); return; }
     for (int m = 0; m < mf1::kNumTypes; ++m)
         if (typeRect (m).expanded (3.0f).contains (p)) { setChoice ("type", m); return; }

@@ -2,19 +2,11 @@
 #pragma once
 
 #include "PluginProcessor.h"
+#include "ui/VibrUI.h"
 
-// Black knob of the VIBR look (see style.md): matt body with a knurled edge, raised cap, white pointer bar.
-// The knob is drawn 5 px inside its component so the shadow is not clipped.
-class GR1LookAndFeel : public juce::LookAndFeel_V4
-{
-public:
-    void drawRotarySlider (juce::Graphics&, int x, int y, int w, int h, float pos,
-                           float startAngle, float endAngle, juce::Slider&) override;
-};
-
-// GR-1 window, drawn in code on a satin body: header (name, description, power), four panels ENVELOPE (four grain shapes + FREEZE),
-// GRAINS (size, density, position, spray), PITCH (pitch, random, reverse) and OUTPUT (spread, mix, level), and below them the CLOUD:
-// every grain that sounds is a dot (older to newer, pitch up and down).
+// GR-1 window (1200 x 690) on the shared UI of src/common/ui: header (name, preset chip, A / B, undo), row 1 the panels ENVELOPE (four grain shapes + FREEZE),
+// GRAINS (size, density, position, spray) and PITCH (pitch, random, reverse); row 2 the CLOUD (every grain that sounds is a dot, older to newer, pitch up and
+// down) and OUTPUT (spread, mix, level + the L / R dB meters).
 class GR1AudioProcessorEditor : public juce::AudioProcessorEditor,
                                 private juce::Timer
 {
@@ -48,11 +40,13 @@ private:
 
     GR1AudioProcessor& proc;
     MidiLearnUI midiUI { proc.midiMap };       // right-click a knob: MIDI learn
-    GR1LookAndFeel laf;
+    vibr::ui::KnobLookAndFeel laf;
     juce::ComponentBoundsConstrainer constrainer;
     juce::Image grain;
     std::array<Knob, 10> knobs;
+    vibr::ui::PresetBarState barState;
     juce::ParameterAttachment powerAtt, shapeAtt, freezeAtt, syncAtt;
+    vibr::ui::OutputMeter meter;                                                                       // output dB meters
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GR1AudioProcessorEditor)
 };

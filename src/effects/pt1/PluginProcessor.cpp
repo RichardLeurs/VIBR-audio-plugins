@@ -31,11 +31,38 @@ juce::AudioProcessorValueTreeState::ParameterLayout PT1AudioProcessor::createLay
     return layout;
 }
 
+namespace
+{
+// the factory presets (plain host values; the interval values are the chord's semitones as the INTERVAL knob stores them)
+std::vector<vibr::PresetManager::Factory> pt1FactoryPresets()
+{
+    using Values = std::vector<std::pair<juce::String, float>>;
+    const auto chord = [] (int c, Values extra = {})
+    {
+        Values v;
+        for (int i = 0; i < pt1::kNumVoices; ++i) v.push_back ({ "int" + juce::String (i + 1), 100.0f * pt1::intervalValue (pt1::chordSemis (c, i)) });
+        for (auto& e : extra) v.push_back (e);
+        return v;
+    };
+    return {
+        { "Init", "A triad in C major", {} },
+        { "Open Fifths", "Stacked fifths, wide and hollow", chord (1, { { "mix", 45 }, { "spread", 85 } }) },
+        { "Suspended Air", "Suspended chord, light and open", chord (2, { { "mix", 40 }, { "spread", 90 } }) },
+        { "Tight Cluster", "Close notes, free of the key", chord (3, { { "intel", 0 }, { "mix", 35 }, { "spread", 60 } }) },
+        { "Octave Choir", "Octaves up and down", chord (4, { { "mix", 55 }, { "spread", 95 }, { "det1", 54 }, { "det2", 46 }, { "det3", 53 }, { "det4", 47 } }) },
+        { "Minor Triad", "A minor triad in A minor", chord (0, { { "root", 9 }, { "scale", 1 }, { "mix", 55 }, { "spread", 80 } }) },
+        { "Dorian Stack", "A suspended chord in D dorian", chord (2, { { "root", 2 }, { "scale", 4 }, { "mix", 50 } }) },
+        { "Pentatonic Shimmer", "Octaves in a pentatonic key", chord (4, { { "scale", 2 }, { "mix", 45 }, { "spread", 100 }, { "lvl3", 40 }, { "lvl4", 40 } }) },
+    };
+}
+} // namespace
+
 PT1AudioProcessor::PT1AudioProcessor()
     : AudioProcessor (BusesProperties()
                           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts (*this, nullptr, "PT1", createLayout())
+      apvts (*this, &undoManager, "PT1", createLayout()),
+      presets (*this, apvts, undoManager, "PT-1 Presets", pt1FactoryPresets(), { "power", "bypass" })
 {
     midiMap.setDefault ("mix", 1);
     midiMap.setDefault ("spread", 11);
@@ -78,7 +105,7 @@ void PT1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     const float from = powerSmooth.getCurrentValue();
     powerSmooth.setTargetValue (pPower->load() > 0.5f ? 1.0f : 0.0f);
     const float to = powerSmooth.skip (n);
-    if (from == 0.0f && to == 0.0f) return;                          // off: the signal passes untouched
+    if (from == 0.0f && to == 0.0f) { outMeter.measure (buffer, n); return; }                          // off: the signal passes untouched
 
     for (int c = 0; c < 2; ++c) dryBuf.copyFrom (c, 0, buffer, c, 0, n);
 
@@ -106,6 +133,7 @@ void PT1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
                 d[i] = s[i] + (d[i] - s[i]) * t;
             }
         }
+    outMeter.measure (buffer, n);
 }
 
 juce::AudioProcessorEditor* PT1AudioProcessor::createEditor() { return new PT1AudioProcessorEditor (*this); }

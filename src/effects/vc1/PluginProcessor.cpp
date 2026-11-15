@@ -37,11 +37,31 @@ juce::AudioProcessorValueTreeState::ParameterLayout VC1AudioProcessor::createLay
     return layout;
 }
 
+namespace
+{
+// the factory presets (values are plain host values; every matrix depth m<source><destination> is 0 .. 100 with 50 = no modulation, 100 = +100 %)
+std::vector<vibr::PresetManager::Factory> vc1FactoryPresets()
+{
+    return {
+        { "Init", "A starting patch: LFO 1 and the envelope on the filter", {} },
+        { "Auto Wah", "The playing opens the filter", { { "cutoff", 25 }, { "res", 65 }, { "envsens", 60 }, { "envrel", 45 }, { "m00", 95 }, { "m10", 50 }, { "type", 1 } } },
+        { "Slow Sweep", "A slow LFO moves a low pass", { { "cutoff", 40 }, { "res", 55 }, { "rate1", 15 }, { "m00", 50 }, { "m10", 90 } } },
+        { "Tremolo Pan", "LFO 1 on the level, LFO 2 on the pan", { { "cutoff", 100 }, { "res", 0 }, { "rate1", 55 }, { "rate2", 35 }, { "m00", 50 }, { "m10", 50 }, { "m11", 85 }, { "m23", 90 } } },
+        { "Vibrato Drift", "Random and LFO move the pitch", { { "cutoff", 100 }, { "res", 0 }, { "rate1", 60 }, { "m00", 50 }, { "m10", 50 }, { "m12", 62 }, { "m32", 58 } } },
+        { "Envelope Ducker", "Loud notes pull the level down", { { "cutoff", 100 }, { "res", 0 }, { "envsens", 55 }, { "envrel", 55 }, { "m00", 50 }, { "m10", 50 }, { "m01", 10 } } },
+        { "Random Filter", "Stepped random on the cutoff", { { "cutoff", 45 }, { "res", 60 }, { "rand", 55 }, { "m00", 50 }, { "m10", 50 }, { "m30", 92 } } },
+        { "Cross-Mod Wobble", "LFO 2 bends the rate of LFO 1", { { "cutoff", 40 }, { "res", 60 }, { "rate1", 50 }, { "rate2", 40 }, { "xmod", 65 }, { "m10", 88 }, { "m20", 60 } } },
+        { "Wheel Filter", "The mod wheel opens the filter", { { "cutoff", 20 }, { "res", 55 }, { "m00", 50 }, { "m10", 50 }, { "m40", 100 } } },
+    };
+}
+} // namespace
+
 VC1AudioProcessor::VC1AudioProcessor()
     : AudioProcessor (BusesProperties()
                           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts (*this, nullptr, "VC1", createLayout())
+      apvts (*this, &undoManager, "VC1", createLayout()),
+      presets (*this, apvts, undoManager, "VC-1 Presets", vc1FactoryPresets(), { "power", "bypass" })
 {
     pPower   = apvts.getRawParameterValue ("power");
     pSync    = apvts.getRawParameterValue ("sync");
@@ -79,12 +99,13 @@ void VC1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
 {
     juce::ScopedNoDenormals noDenormals;
     const int n = buffer.getNumSamples();
+    midiMap.process (midi);
     if (n == 0 || buffer.getNumChannels() < 2 || n > dryBuf.getNumSamples()) return;
 
     const float from = powerSmooth.getCurrentValue();
     powerSmooth.setTargetValue (pPower->load() > 0.5f ? 1.0f : 0.0f);
     const float to = powerSmooth.skip (n);
-    if (from == 0.0f && to == 0.0f) return;                          // off: the signal passes untouched
+    if (from == 0.0f && to == 0.0f) { outMeter.measure (buffer, n); return; }                          // off: the signal passes untouched
 
     for (int c = 0; c < 2; ++c) dryBuf.copyFrom (c, 0, buffer, c, 0, n);
 
@@ -129,19 +150,29 @@ void VC1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
                 d[i] = s[i] + (d[i] - s[i]) * t;
             }
         }
+    outMeter.measure (buffer, n);
 }
 
 juce::AudioProcessorEditor* VC1AudioProcessor::createEditor() { return new VC1AudioProcessorEditor (*this); }
 
 void VC1AudioProcessor::getStateInformation (juce::MemoryBlock& dest)
 {
-    if (auto xml = apvts.copyState().createXml()) copyXmlToBinary (*xml, dest);
+    auto state = apvts.copyState();
+    state.appendChild (midiMap.toTree(), nullptr);
+    if (auto xml = state.createXml()) copyXmlToBinary (*xml, dest);
 }
 
 void VC1AudioProcessor::setStateInformation (const void* data, int size)
 {
     if (auto xml = getXmlFromBinary (data, size))
-        if (xml->hasTagName (apvts.state.getType())) { auto st = juce::ValueTree::fromXml (*xml); vibr::BypassLink::normalise (st); apvts.replaceState (st); }
+        if (xml->hasTagName (apvts.state.getType()))
+        {
+            auto st = juce::ValueTree::fromXml (*xml);
+            midiMap.fromTree (st.getChildWithName ("MIDIMAP"));
+            st.removeChild (st.getChildWithName ("MIDIMAP"), nullptr);
+            vibr::BypassLink::normalise (st);
+            apvts.replaceState (st);
+        }
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new VC1AudioProcessor(); }

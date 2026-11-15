@@ -38,12 +38,30 @@ juce::AudioProcessorValueTreeState::ParameterLayout DY1AudioProcessor::createLay
     return layout;
 }
 
+namespace
+{
+// the factory presets (values are plain host values)
+std::vector<vibr::PresetManager::Factory> dy1FactoryPresets()
+{
+    return {
+        { "Init", "Gate and transient shaper at their defaults", {} },
+        { "Tight Drums", "Gate the ring, add punch", { { "gateThresh", -42 }, { "gateRelease", 80 }, { "attack", 45 }, { "sustain", -30 } } },
+        { "Snare Snap", "Sharp attack, short tail", { { "gateThresh", -46 }, { "gateRelease", 60 }, { "attack", 65 }, { "sustain", -45 } } },
+        { "Room Tamer", "Expand the room away", { { "gateOn", 0 }, { "expOn", 1 }, { "expThresh", -38 }, { "expRatio", 3 }, { "expRelease", 220 }, { "sustain", -35 } } },
+        { "Sustain Boost", "Longer notes, softer attack", { { "gateOn", 0 }, { "attack", -15 }, { "sustain", 60 } } },
+        { "Gentle Gate", "A slow gate for noisy takes", { { "gateThresh", -56 }, { "gateRelease", 300 }, { "transOn", 0 } } },
+        { "Soft Pad", "Rounded attacks, an open tail", { { "gateOn", 0 }, { "attack", -60 }, { "sustain", 25 } } },
+    };
+}
+} // namespace
+
 DY1AudioProcessor::DY1AudioProcessor()
     : AudioProcessor (BusesProperties()
                           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)
                           .withInput  ("Sidechain", juce::AudioChannelSet::stereo(), false)),
-      apvts (*this, nullptr, "DY1", createLayout())
+      apvts (*this, &undoManager, "DY1", createLayout()),
+      presets (*this, apvts, undoManager, "DY-1 Presets", dy1FactoryPresets(), { "power", "bypass" })
 {
     const auto get = [this] (const char* id) { return apvts.getRawParameterValue (id); };
     pPower = get ("power"); pGateOn = get ("gateOn"); pGateThresh = get ("gateThresh"); pGateRelease = get ("gateRelease");
@@ -96,7 +114,7 @@ void DY1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     const float from = powerSmooth.getCurrentValue();
     powerSmooth.setTargetValue (pPower->load() > 0.5f ? 1.0f : 0.0f);
     const float to = powerSmooth.skip (n);
-    if (from == 0.0f && to == 0.0f) return;                          // off: the signal passes untouched
+    if (from == 0.0f && to == 0.0f) { outMeter.measure (buffer, n); return; }                        // off: the signal passes untouched
 
     for (int c = 0; c < 2; ++c) dryBuf.copyFrom (c, 0, buffer, c, 0, n);
 
@@ -118,6 +136,7 @@ void DY1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
                 d[i] = s[i] + (d[i] - s[i]) * t;
             }
         }
+    outMeter.measure (buffer, n);
 }
 
 juce::AudioProcessorEditor* DY1AudioProcessor::createEditor() { return new DY1AudioProcessorEditor (*this); }

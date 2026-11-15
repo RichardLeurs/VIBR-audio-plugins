@@ -2,17 +2,9 @@
 #pragma once
 
 #include "PluginProcessor.h"
+#include "ui/VibrUI.h"
 
-// Black knob of the VIBR look (see style.md): matt body with a knurled edge, raised cap, white pointer bar.
-// The knob is drawn 5 px inside its component so the shadow is not clipped.
-class DY1LookAndFeel : public juce::LookAndFeel_V4
-{
-public:
-    void drawRotarySlider (juce::Graphics&, int x, int y, int w, int h, float pos,
-                           float startAngle, float endAngle, juce::Slider&) override;
-};
-
-// DY-1 window, drawn in code on a satin body: header (name, description, power), four panels in a row: GATE, EXPANDER, TRANSIENT (each with its
+// DY-1 window, drawn in code on a satin body: header (name, preset chip, undo / redo, description, power), four panels in a row: GATE, EXPANDER, TRANSIENT (each with its
 // own on / off switch: click the title) and OUTPUT (mix, level), and under them the ACTION display: the input level and the gain of the chain
 // over the last five seconds, with the gate and expander thresholds.
 class DY1AudioProcessorEditor : public juce::AudioProcessorEditor,
@@ -47,12 +39,14 @@ private:
     };
 
     DY1AudioProcessor& proc;
-    DY1LookAndFeel laf;
+    vibr::ui::KnobLookAndFeel laf;
     juce::ComponentBoundsConstrainer constrainer;
     juce::Image grain;
     std::array<Knob, 9> knobs;
     MidiLearnUI midiUI { proc.midiMap };       // right-click a knob: MIDI learn
+    vibr::ui::PresetBarState barState;
     juce::ParameterAttachment powerAtt, gateAtt, expAtt, transAtt;
+    vibr::ui::OutputMeter meter;                                   // output dB meters
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DY1AudioProcessorEditor)
 };

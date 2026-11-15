@@ -13,7 +13,7 @@ namespace
 constexpr float kW = 1200.0f, kMargin = 20.0f, kRuleY = 104.0f;
 constexpr float kRow1Y = 134.0f, kRow1H = 247.0f, kChainY = 405.0f, kChainH = 44.0f, kRow3Y = 473.0f, kRow3H = 296.0f, kRow4Y = 793.0f, kRow4H = 130.0f, kKnobR = 24.0f, kPad = 5.0f, kKnobPitch = 108.0f;
 // panels: 0 INPUT, 2 OUTPUT, 4 LOUDNESS (row 1); 3 SPECTRUM (step EQ), 5 STAGES + 6 their display (steps 1 to 4), 1 LIMITER + 6 its gain reduction (step LIMITER) (row 3); 7 REFERENCE (row 4)
-constexpr float kPanelX[8] = { 20.0f, 20.0f, 860.0f, 20.0f, 220.0f, 20.0f, 730.0f, 20.0f }, kPanelW[8] = { 190.0f, 700.0f, 320.0f, 1160.0f, 630.0f, 700.0f, 450.0f, 1160.0f };
+constexpr float kPanelX[8] = { 20.0f, 20.0f, 860.0f, 20.0f, 220.0f, 20.0f, 810.0f, 20.0f }, kPanelW[8] = { 190.0f, 780.0f, 320.0f, 1160.0f, 630.0f, 780.0f, 370.0f, 1160.0f };
 constexpr const char* kPanelName[8] = { "INPUT", "LIMITER", "OUTPUT", "SPECTRUM", "LOUDNESS", "STAGES", "GAIN REDUCTION", "REFERENCE" };
 constexpr const char* kTabName[4] = { "MULTIBAND", "IMAGER", "COLOUR", "BUS" };
 constexpr const char* kBandName[4] = { "LOW", "LOW-MID", "HIGH-MID", "HIGH" };
@@ -30,9 +30,9 @@ juce::Rectangle<float> panelRect (int i) { return { kPanelX[i], i == 7 ? kRow4Y 
 float knobDy (int panel) { return panel == 1 || panel == 5 ? 24.0f : 0.0f; }                  // the knob row of the taller row 3 panels sits 24 lower
 juce::Rectangle<float> powerRect() { return juce::Rectangle<float> (50.0f, 50.0f).withCentre ({ kW - kMargin - 16.5f, 43.5f }); }
 juce::Rectangle<float> targetChipRect() { return { vibr::ui::kBarX, 22.0f, vibr::ui::kChipW, 34.0f }; }          // as wide as the preset chip under it
-juce::Rectangle<float> plotRect() { const auto r = panelRect (3); return { r.getX() + 62.0f, r.getY() + 28.0f, r.getWidth() - 84.0f, r.getHeight() - 128.0f }; }
-// the strip under the plot: the selected EQ band (type, frequency, gain, Q) and its buttons: EQ IN, BAND ON, STEREO, L, R, M, S
-juce::Rectangle<float> eqStripRect() { const auto r = panelRect (3); return { r.getX() + 14.0f, r.getBottom() - 80.0f, r.getWidth() - 28.0f, 34.0f }; }
+juce::Rectangle<float> plotRect() { const auto r = panelRect (3); return { r.getX() + 57.0f, r.getY() + 58.0f, r.getWidth() - 106.0f, r.getHeight() - 133.0f }; }   // the dB labels (left) and EQ gain labels (right) run from x + 22 to x + 1140, the same as the buttons below; 12 px above the box (spectrum buttons) and 12 px below the Hz labels (bottom buttons)
+// the selected EQ band (type, frequency, gain, Q): text on the top left of the panel, above the BEFORE label
+juce::Rectangle<float> eqInfoRect() { const auto r = panelRect (3); return { r.getX() + 54.0f, r.getY() + 12.0f, 440.0f, 26.0f }; }
 // the second strip: the dynamic EQ of the selected band: DYN, ABOVE / BELOW, and four fields (threshold, ratio, attack, release) to drag
 juce::Rectangle<float> eqDynStripRect() { const auto r = panelRect (3); return { r.getX() + 14.0f, r.getBottom() - 44.0f, r.getWidth() - 28.0f, 34.0f }; }
 juce::Rectangle<float> eqDynButtonRect (int i) { const auto s = eqDynStripRect(); return i == 0 ? juce::Rectangle<float> (s.getX() + 8.0f, s.getY() + 2.0f, 64.0f, 30.0f) : juce::Rectangle<float> (s.getX() + 78.0f, s.getY() + 2.0f, 84.0f, 30.0f); }
@@ -40,9 +40,10 @@ juce::Rectangle<float> eqDynFieldRect (int i) { const auto s = eqDynStripRect();
 juce::Rectangle<float> eqPhaseRect() { const auto s = eqDynStripRect(); return { s.getX() + 680.0f + (s.getWidth() - 752.0f), s.getY() + 2.0f, 66.0f, 30.0f }; }      // MIN / LIN: the phase mode of the EQ
 juce::Rectangle<float> eqButtonRect (int i)
 {
-    static const float w[7] = { 64.0f, 64.0f, 76.0f, 38.0f, 38.0f, 38.0f, 38.0f };
-    const auto s = eqStripRect();
-    float x = s.getX() + 352.0f + (s.getWidth() - 752.0f);
+    // EQ IN, BAND ON, STEREO, L, R, M, S: on the bottom strip between the REL field (ends at s.x + 670) and MIN PH (starts at s.x + 1060)
+    static const float w[7] = { 58.0f, 66.0f, 70.0f, 32.0f, 32.0f, 32.0f, 32.0f };
+    const auto s = eqDynStripRect();
+    float x = s.getX() + 686.0f;
     for (int k = 0; k < i; ++k) x += w[k] + 6.0f;
     return { x, s.getY() + 2.0f, w[i], 30.0f };
 }
@@ -56,20 +57,29 @@ juce::Point<float> knobCentre (int panel, int k, int n)
 {
     const auto r = panelRect (panel);
     // the knobs sit 108 apart around the middle of the panel (ticks and legends reach 42 each side)
-    if (panel == 2) return { r.getX() + 62.0f + kKnobPitch * (float) k, r.getY() + 92.0f };          // OUTPUT: the knobs on the left, the meters on the right
+    if (panel == 2) return { r.getX() + 62.0f + 103.0f * (float) k, r.getY() + 92.0f };               // OUTPUT: knobs at x + 62 and x + 165 (tick rings 19 apart, and 19 from the right ring to the bars at x + 226), the meters on the right
     return { r.getCentreX() + kKnobPitch * ((float) k - 0.5f * (float) (n - 1)), r.getY() + 92.0f + knobDy (panel) };
 }
 // the buttons of rows 2 and 3: LIMITER: TRANSPARENT, PUNCHY, LOUD, AUTO GAIN; OUTPUT: DELTA, SHAPE (the dither noise shaping); BUS: BUS IN, SIDECHAIN HIGH-PASS
 juce::Rectangle<float> buttonRect (int i)
 {
-    if (i < 4 || i >= 6) { const auto r = panelRect (1); const int pos = i < 4 ? i : i - 2; return { r.getX() + 35.0f + (float) pos * 107.0f, r.getY() + 248.0f, 99.0f, 30.0f }; }       // six buttons: TRANSPARENT, PUNCHY, LOUD, AUTO TO TARGET, AUTO REL., FREEZE
+    if (i < 4 || i >= 6) { const auto r = panelRect (1); const int pos = i < 4 ? i : i - 2; return { r.getX() + (r.getWidth() - 634.0f) * 0.5f + (float) pos * 107.0f, r.getY() + 248.0f, 99.0f, 30.0f }; }       // six buttons: TRANSPARENT, PUNCHY, LOUD, AUTO TO TARGET, AUTO REL., FREEZE
     const auto r = panelRect (2);
     return { r.getX() + 15.0f + (float) (i - 4) * 115.0f, r.getY() + 204.0f, 105.0f, 30.0f };
 }
 // the INPUT panel: polarity, rumble high-pass (cycles off / 20 / 30 / 40 / 60 Hz), mono check
 juce::Rectangle<float> inputButtonRect (int i) { const auto r = panelRect (0); return { r.getX() + 12.0f + (float) i * 57.0f, r.getY() + 204.0f, 52.0f, 30.0f }; }
 // the options of the spectrum: SMOOTH / FFT, slope, HOLD, FREEZE, source (mid, side, left, right); small buttons on the top right of the SPECTRUM panel
-juce::Rectangle<float> specButtonRect (int i) { const auto r = panelRect (3); static const float w[5] = { 62.0f, 62.0f, 46.0f, 56.0f, 62.0f }; float x = r.getRight() - 14.0f; for (int k = 4; k >= i; --k) x -= w[k] + 4.0f; return { x + 4.0f, r.getY() + 8.0f, w[i], 18.0f }; }
+juce::Rectangle<float> specButtonRect (int i) { const auto r = panelRect (3); static const float w[5] = { 110.0f, 110.0f, 66.0f, 80.0f, 110.0f }; float x = r.getRight() - 14.0f; for (int k = 4; k >= i; --k) x -= w[k] + 4.0f; return { x + 4.0f, r.getY() + 12.0f, w[i], 26.0f }; }
+// a button that cycles through several settings on each click: a row of dots along its bottom edge, the dot of the current setting lit
+void paintCycleDots (juce::Graphics& g, juce::Rectangle<float> b, int steps, int cur, bool on)
+{
+    for (int d = 0; d < steps; ++d)
+    {
+        g.setColour (d == cur ? (on ? kDark : kBody) : (on ? kDark.withAlpha (0.35f) : kInk.withAlpha (0.3f)));
+        g.fillEllipse (juce::Rectangle<float> (4.0f, 4.0f).withCentre ({ b.getCentreX() + ((float) d - 0.5f * (float) (steps - 1)) * 8.0f, b.getBottom() - 4.5f }));
+    }
+}
 // the CHAIN strip between the spectrum and the workbench: the stages in signal order (EQ, MULTIBAND, IMAGER, COLOUR, BUS, LIMITER) as pills with a power dot on the
 // left and a little gain reduction bar; a click selects the stage in the workbench below, the dot (or a double click) switches it on and off
 constexpr int kChainStages = 6;
@@ -85,7 +95,17 @@ const char* const kChainOn[kChainStages] = { "eqOn", "mbOn", "imgOn", "colourOn"
 juce::Rectangle<float> stageButtonRect (int i, int n)
 {
     const auto r = panelRect (5);
-    const float gap = n <= 4 ? 10.0f : n <= 5 ? 8.0f : 6.0f, w = n <= 4 ? 150.0f : n <= 5 ? 118.0f : (630.0f - gap * (float) (n - 1)) / (float) n;
+    const float gap = n <= 4 ? 10.0f : n <= 5 ? 8.0f : 6.0f;
+    if (n == 8)                                                                              // the multiband row: widths follow the longest label of each button (13 px text), scaled to fill the panel
+    {
+        static const float chars[8] = { 6.0f, 11.0f, 5.0f, 9.0f, 13.0f, 10.0f, 10.0f, 11.0f };
+        float sum = 0.0f; for (float c : chars) sum += c * 6.8f + 14.0f;
+        const float k = (r.getWidth() - 70.0f - gap * 7.0f) / sum;
+        float x = r.getX() + 35.0f;
+        for (int j = 0; j < i; ++j) x += (chars[j] * 6.8f + 14.0f) * k + gap;
+        return { x, r.getY() + 248.0f, (chars[i] * 6.8f + 14.0f) * k, 30.0f };
+    }
+    const float w = n <= 4 ? 150.0f : n <= 5 ? 118.0f : (r.getWidth() - 70.0f - gap * (float) (n - 1)) / (float) n;
     return { r.getX() + 35.0f + (float) i * (w + gap), r.getY() + 248.0f, w, 30.0f };
 }
 juce::Rectangle<float> dispRect() { const auto r = panelRect (6); return { r.getX() + 18.0f, r.getY() + 36.0f, r.getWidth() - 36.0f, 188.0f }; }
@@ -191,6 +211,7 @@ void MS1AudioProcessorEditor::timerCallback()
     if (autoOpen) { autoRefresh(); repaint (autoRect().expanded (4.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer()); }
     if (autoIsLearning != proc.autoAn.learning.load()) { autoIsLearning = ! autoIsLearning; repaint (autoButtonRect().expanded (4.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer()); }
     meter.update (proc.outMeter);                                                    // the OUTPUT L / R dB meters
+    if (proc.overLatch.exchange (false)) overLitUntil = juce::Time::getMillisecondCounter() + 1500;     // each overshoot lights the OVER lamp for 1.5 s
     repaint (juce::Rectangle<float> (0.0f, kRow1Y - 6.0f, kW, designH() - kRow1Y + 6.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer());     // the meters, history and displays move
     if (matchNoteTicks > 0) --matchNoteTicks;
     if (barState.copiedAt != 0) { repaint (juce::Rectangle<float> (0.0f, 50.0f, 900.0f, 50.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer()); if (! barState.copiedRecently()) barState.copiedAt = 0; }
@@ -235,7 +256,9 @@ void MS1AudioProcessorEditor::applyTarget (int index)
 
 void MS1AudioProcessorEditor::showTargetMenu()
 {
+    static vibr::ui::PresetMenuLook look;                                          // the same dark menu as the PRESET dropdown
     juce::PopupMenu menu;
+    menu.setLookAndFeel (&look);
     for (int i = 0; i < ms1::kNumTargets; ++i)
     {
         const auto& t = ms1::target (i);
@@ -406,6 +429,8 @@ void MS1AudioProcessorEditor::drawSpectrum (juce::Graphics& g)
         for (int i = 0; i < 5; ++i)
         {
             vibr::ui::paintFlatButton (g, kPal, specButtonRect (i), label[i], on[i], 13.0f, 1.0f, 7.0f, 0.04f, 1.0f);
+            static const int steps[5] = { 2, 3, 0, 0, 4 };                                // SMOOTH / FFT, the slope and the source cycle through settings on each click
+            if (steps[i] > 0) paintCycleDots (g, specButtonRect (i), steps[i], i == 0 ? mode : i == 1 ? sl : src, on[i]);
         }
     }
     drawEq (g);
@@ -482,15 +507,13 @@ void MS1AudioProcessorEditor::drawEq (juce::Graphics& g)
         }
     }
 
-    // the strip: type, frequency, gain, Q of the selected band; buttons EQ IN, BAND ON, STEREO / L / R / M / S
-    const auto s = eqStripRect();
-    g.setColour (juce::Colours::black.withAlpha (0.4f));
-    g.fillRoundedRectangle (s, 8.0f);
+    // type, frequency, gain, Q of the selected band: top left of the panel, above BEFORE
+    const auto s = eqInfoRect();
     const auto& e = bands[(size_t) selBand];
     const char* type = selBand == 0 ? "LOW SHELF" : selBand == ms1::kEqBands - 1 ? "HIGH SHELF" : "BELL";
     const juce::String freq = e.freq >= 1000.0f ? juce::String (e.freq * 0.001f, 2) + " kHz" : juce::String ((int) std::lround (e.freq)) + " Hz";
     drawText (g, juce::String (selBand + 1) + "  " + type + "   " + freq + "   " + juce::String::formatted ("%+.1f dB", (double) e.gainDb) + "   Q " + juce::String (e.q, 2),
-              s.getX() + 12.0f, s.getCentreY(), 12.0f, kInk.withAlpha (0.95f), true, 0.06f, juce::Justification::centredLeft);
+              s.getX(), s.getCentreY(), 13.0f, kInk.withAlpha (0.95f), true, 0.06f, juce::Justification::centredLeft);
     {   // the dynamic strip of the selected band
         const juce::String id = "eq" + juce::String (selBand + 1);
         const auto s2 = eqDynStripRect();
@@ -504,12 +527,21 @@ void MS1AudioProcessorEditor::drawEq (juce::Graphics& g)
         {
             const bool lin = choice ("eqPhase") == 1;
             vibr::ui::paintFlatButton (g, kPal, eqPhaseRect(), lin ? "LINEAR" : "MIN PH", lin, 13.0f, 1.0f, 8.0f, 0.06f, 1.2f);
+            paintCycleDots (g, eqPhaseRect(), 2, lin ? 1 : 0, lin);
         }
         const float thr = value ((id + "DynThr").toRawUTF8()), ratio = value ((id + "DynRatio").toRawUTF8()), atk = value ((id + "DynAtk").toRawUTF8()), rel = value ((id + "DynRel").toRawUTF8());
         const juce::String text[4] = { "THR " + juce::String (thr, 1) + " dB", "RATIO " + juce::String (ratio, 1) + ":1", "ATT " + juce::String (atk, atk < 10.0f ? 1 : 0) + " ms", "REL " + juce::String ((int) std::lround (rel)) + " ms" };
         for (int i = 0; i < 4; ++i)
         {
-            vibr::ui::paintField (g, kPal, eqDynFieldRect (i), text[i], dyn);
+            static const char* suffix[4] = { "DynThr", "DynRatio", "DynAtk", "DynRel" };
+            const auto f = eqDynFieldRect (i);
+            vibr::ui::paintField (g, kPal, f, text[i], dyn, 13.0f);
+            if (auto* par = proc.apvts.getParameter (id + suffix[i]))                       // the value as a bar along the bottom edge: the field is dragged up / down, a double click resets it
+            {
+                const auto track = juce::Rectangle<float> (f.getX() + 10.0f, f.getBottom() - 6.0f, f.getWidth() - 20.0f, 3.0f);
+                g.setColour (kInk.withAlpha (dyn ? 0.18f : 0.08f)); g.fillRoundedRectangle (track, 1.5f);
+                g.setColour (dyn ? kBody : kInk.withAlpha (0.3f)); g.fillRoundedRectangle (track.withWidth (track.getWidth() * par->getValue()), 1.5f);
+            }
         }
     }
     const char* labels[7] = { "EQ IN", "BAND ON", "STEREO", "L", "R", "M", "S" };
@@ -523,11 +555,11 @@ void MS1AudioProcessorEditor::drawEq (juce::Graphics& g)
 //==============================================================================
 // LOUDNESS: momentary, short-term, integrated, range, true-peak hold and the limiter's gain reduction, and the short-term history
 // OUTPUT panel: true-peak bars for the left and right channel (the tick is the limiter ceiling, red above it, the mark holds the highest peak for 1.5 s), their peak
-// in dB under them, and the OVER lamp: it lights red when the output went above the ceiling and stays lit until RESET or a click on it
+// in dB under them, and the OVER lamp: it lights red when the output went above the ceiling and goes out 1.5 s after the last overshoot (RESET or a click on it clears it at once)
 void MS1AudioProcessorEditor::drawOutputMeters (juce::Graphics& g)
 {
     meter.paint (g, meterOrigin().x, meterOrigin().y, isOn ("power"), kBody, kInk, 110.0f, 26.0f, 13.0f);
-    const bool over = proc.overLatch.load (std::memory_order_relaxed);
+    const bool over = (juce::int32) (overLitUntil - juce::Time::getMillisecondCounter()) > 0;
     const auto lamp = overRect();
     g.setColour (over ? kRed : juce::Colours::black.withAlpha (0.45f)); g.fillRoundedRectangle (lamp, 10.0f);
     g.setColour (over ? kRed : kInk.withAlpha (0.35f)); g.drawRoundedRectangle (lamp.reduced (0.5f), 10.0f, 1.2f);
@@ -649,13 +681,13 @@ std::vector<MS1AudioProcessorEditor::StageButton> MS1AudioProcessorEditor::stage
         const juce::String b = "mb" + juce::String (selMb + 1);
         out = { { "MB IN", isOn ("mbOn"), flip ("mbOn") }, { juce::String (kBandName[selMb]) + " ON", isOn ((b + "On").toRawUTF8()), flip (b + "On") },
                 { "SOLO", isOn ((b + "Solo").toRawUTF8()), flip (b + "Solo") }, { "AUTO REL.", isOn ((b + "Auto").toRawUTF8()), flip (b + "Auto") } };
-        out.push_back ({ choice ("mbPhase") == 1 ? "PHASE: LINEAR" : "PHASE: MIN", choice ("mbPhase") == 1, [this] { setChoice ("mbPhase", choice ("mbPhase") == 0 ? 1 : 0); } });
+        out.push_back ({ choice ("mbPhase") == 1 ? "PHASE: LINEAR" : "PHASE: MIN", choice ("mbPhase") == 1, [this] { setChoice ("mbPhase", choice ("mbPhase") == 0 ? 1 : 0); }, 2, choice ("mbPhase") == 1 ? 1 : 0 });
         const float knee = value ("mbKnee"), det = value ("mbRms"), sc = value ("mbScHz");
         const float nextKnee = knee < 1.0f ? 3.0f : knee < 4.5f ? 6.0f : knee < 9.0f ? 12.0f : 0.0f, nextDet = det < 25.0f ? 50.0f : det < 75.0f ? 100.0f : 0.0f;
         const float nextSc = sc < 30.0f ? 60.0f : sc < 90.0f ? 120.0f : sc < 180.0f ? 250.0f : 20.0f;
-        out.push_back ({ "KNEE " + juce::String ((int) std::lround (knee)) + " DB", knee > 0.5f, [this, nextKnee] { setFloat ("mbKnee", nextKnee); } });
-        out.push_back ({ det < 25.0f ? "DET: PEAK" : det < 75.0f ? "DET: BLEND" : "DET: RMS", det >= 25.0f, [this, nextDet] { setFloat ("mbRms", nextDet); } });
-        out.push_back ({ sc < 30.0f ? juce::String ("SC HPF: OFF") : "SC: " + juce::String ((int) std::lround (sc)) + " HZ", sc >= 30.0f, [this, nextSc] { setFloat ("mbScHz", nextSc); } });
+        out.push_back ({ "KNEE " + juce::String ((int) std::lround (knee)) + " DB", knee > 0.5f, [this, nextKnee] { setFloat ("mbKnee", nextKnee); }, 4, knee < 1.0f ? 0 : knee < 4.5f ? 1 : knee < 9.0f ? 2 : 3 });
+        out.push_back ({ det < 25.0f ? "DET: PEAK" : det < 75.0f ? "DET: BLEND" : "DET: RMS", det >= 25.0f, [this, nextDet] { setFloat ("mbRms", nextDet); }, 3, det < 25.0f ? 0 : det < 75.0f ? 1 : 2 });
+        out.push_back ({ sc < 30.0f ? juce::String ("SC HPF: OFF") : "SC: " + juce::String ((int) std::lround (sc)) + " HZ", sc >= 30.0f, [this, nextSc] { setFloat ("mbScHz", nextSc); }, 4, sc < 30.0f ? 0 : sc < 90.0f ? 1 : sc < 180.0f ? 2 : 3 });
     }
     else if (tab == 1) out = { { "IMAGER IN", isOn ("imgOn"), flip ("imgOn") }, { "AUTO SAFE WIDTH", isOn ("imgSafe"), flip ("imgSafe") } };
     else if (tab == 2)
@@ -663,13 +695,13 @@ std::vector<MS1AudioProcessorEditor::StageButton> MS1AudioProcessorEditor::stage
         static const char* modes[3] = { "MODE: STEREO", "MODE: MID", "MODE: SIDE" };
         const int ch = choice ("colourChar"), md = choice ("colourMode");
         out = { { "COLOUR IN", isOn ("colourOn"), flip ("colourOn") }, { "TAPE", ch == 0, pick ("colourChar", 0) }, { "TUBE", ch == 1, pick ("colourChar", 1) },
-                { "TRANSFORMER", ch == 2, pick ("colourChar", 2) }, { modes[juce::jlimit (0, 2, md)], md != 0, [this, md] { setChoice ("colourMode", (md + 1) % 3); } } };
+                { "TRANSFORMER", ch == 2, pick ("colourChar", 2) }, { modes[juce::jlimit (0, 2, md)], md != 0, [this, md] { setChoice ("colourMode", (md + 1) % 3); }, 3, juce::jlimit (0, 2, md) } };
     }
     else
     {
         static const char* sc[4] = { "SC HPF: OFF", "SC HPF: 60 HZ", "SC HPF: 90 HZ", "SC HPF: 150 HZ" };
         const int c = choice ("busSc");
-        out = { { "BUS IN", isOn ("busOn"), flip ("busOn") }, { sc[juce::jlimit (0, 3, c)], c != 0, [this, c] { setChoice ("busSc", (c + 1) % 4); } } };
+        out = { { "BUS IN", isOn ("busOn"), flip ("busOn") }, { sc[juce::jlimit (0, 3, c)], c != 0, [this, c] { setChoice ("busSc", (c + 1) % 4); }, 4, juce::jlimit (0, 3, c) } };
     }
     return out;
 }
@@ -794,7 +826,7 @@ void MS1AudioProcessorEditor::drawStageDisplay (juce::Graphics& g)
             g.fillRect (sq.getCentreX() + std::clamp (sx, -1.0f, 1.0f) * half * 0.95f - 0.8f, sq.getCentreY() - std::clamp (my, -1.0f, 1.0f) * half * 0.95f - 0.8f, 1.6f, 1.6f);
         }
     }
-    if (tab == 0) drawText (g, juce::String (kBandName[selMb]) + " BAND SELECTED: CLICK A BAND, DRAG THE CROSSOVERS", panel.getCentreX(), panel.getY() + 264.0f, 13.0f, kInk.withAlpha (0.5f), true, 0.1f);
+    if (tab == 0) drawText (g, juce::String (kBandName[selMb]) + " BAND: CLICK A BAND, DRAG A CROSSOVER", panel.getCentreX(), panel.getY() + 264.0f, 13.0f, kInk.withAlpha (0.5f), true, 0.04f);
     else
     {
         const float c = proc.stereoMeter.corrShort.load (std::memory_order_relaxed), ci = proc.stereoMeter.corrInt.load (std::memory_order_relaxed);
@@ -910,6 +942,7 @@ void MS1AudioProcessorEditor::paint (juce::Graphics& g)
     {
         if ((i < 4 || i >= 6) && (step != 5 || autoOpen)) continue;                                // the limiter buttons belong to the LIMITER step
         vibr::ui::paintFlatButton (g, kPal, buttonRect (i), label[i], btnOn[i], 13.0f, 1.0f, 9.0f, 0.06f);
+        if (i == 5) paintCycleDots (g, buttonRect (i), 3, shape, btnOn[i]);                    // the dither shape: flat, gentle, aggressive
     }
 
     {   // the INPUT panel buttons
@@ -919,6 +952,8 @@ void MS1AudioProcessorEditor::paint (juce::Graphics& g)
         for (int i = 0; i < 3; ++i)
         {
             vibr::ui::paintFlatButton (g, kPal, inputButtonRect (i), i == 0 && on[0] ? "INVERT" : lab[i], on[i], 13.0f, 1.0f, 9.0f, 0.04f);
+            if (i == 0) paintCycleDots (g, inputButtonRect (i), 2, on[0] ? 1 : 0, on[0]);                                    // PHASE / INVERT
+            else if (i == 1) paintCycleDots (g, inputButtonRect (i), 5, hpf < 1.0f ? 0 : hpf < 25.0f ? 1 : hpf < 35.0f ? 2 : hpf < 50.0f ? 3 : 4, on[1]);   // HPF: off, 20, 30, 40, 60 Hz
         }
     }
     if (! autoOpen && step >= 1 && step <= 4)
@@ -927,6 +962,7 @@ void MS1AudioProcessorEditor::paint (juce::Graphics& g)
         for (int i = 0; i < (int) sb.size(); ++i)
         {
             vibr::ui::paintFlatButton (g, kPal, stageButtonRect (i, (int) sb.size()), sb[(size_t) i].label, sb[(size_t) i].on, 13.0f);
+            if (sb[(size_t) i].steps > 0) paintCycleDots (g, stageButtonRect (i, (int) sb.size()), sb[(size_t) i].steps, sb[(size_t) i].cur, sb[(size_t) i].on);
         }
     }
 
@@ -996,8 +1032,8 @@ void MS1AudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
             repaint();
             return;
         }
-    if (resetRect().expanded (3.0f).contains (p)) { proc.requestReset(); repaint(); return; }
-    if (overRect().expanded (3.0f).contains (p)) { proc.overLatch.store (false); repaint(); return; }
+    if (resetRect().expanded (3.0f).contains (p)) { proc.requestReset(); overLitUntil = 0; repaint(); return; }
+    if (overRect().expanded (3.0f).contains (p)) { proc.overLatch.store (false); overLitUntil = 0; repaint(); return; }
 
     // the dynamic EQ strip, the EQ strip buttons, then the band nodes
     const juce::String id = "eq" + juce::String (selBand + 1);

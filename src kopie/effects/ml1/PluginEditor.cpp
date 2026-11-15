@@ -1,0 +1,384 @@
+// VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
+#include "PluginEditor.h"
+#include "ui/Presets.h"
+#include <complex>
+#include <cstring>
+#include <functional>
+
+namespace
+{
+using vibr::ui::drawText;
+namespace ui = vibr::ui;
+
+constexpr float kW = 1200.0f, kH = 690.0f, kRow1Y = 134.0f, kRow1H = 247.0f, kRow2Y = 405.0f, kRow2H = 216.0f, kKnobR = 24.0f, kPad = 5.0f, kBarY = 39.0f;
+const ui::Palette kPal { juce::Colour (19, 191, 160), juce::Colour (6, 35, 29) };            // the Modulation colour #13BFA0 and its print
+const juce::Colour kBody = kPal.body, kInk = kPal.ink;
+
+// panels: 0 CONTROLS (mode tabs), 1 OUTPUT, 2 MOTION (display)
+constexpr float kPanelX[3] = { 20.0f, 730.0f, 20.0f }, kPanelW[3] = { 700.0f, 450.0f, 1160.0f };
+juce::Rectangle<float> panelRect (int i) { return { kPanelX[i], i < 2 ? kRow1Y : kRow2Y, kPanelW[i], i < 2 ? kRow1H : kRow2H }; }
+juce::Point<float> knobCentre (int panel, int k, int n)
+{
+    const auto r = panelRect (panel);
+    const float cx = panel == 1 ? r.getX() + 176.0f : r.getCentreX();          // the output knobs left of the dB meters; knobs + meters are one centred group (about 84 px free each side)
+    return { cx + 108.0f * ((float) k - 0.5f * (float) (n - 1)), r.getY() + 92.0f };
+}
+juce::Point<float> meterOrigin() { const auto r = panelRect (1); return { r.getX() + 350.0f, r.getY() + 46.0f }; }       // 110 high: the bars end on the MIX / LEVEL labels (y + 156), the peak values sit on the readout row (y + 182)
+juce::Rectangle<float> variantRect (int v) { const auto r = panelRect (0); return { r.getX() + 30.0f + (float) v * 130.0f, r.getY() + 204.0f, 120.0f, 30.0f }; }
+juce::Rectangle<float> syncRect() { const auto r = panelRect (0); return { r.getRight() - 150.0f, r.getY() + 204.0f, 120.0f, 30.0f }; }
+juce::Rectangle<float> motionRect() { const auto r = panelRect (2); return { r.getX() + 24.0f, r.getY() + 34.0f, r.getWidth() - 48.0f, r.getHeight() - 56.0f }; }
+const std::vector<juce::String> kModeTabs { "CHORUS", "VIBRATO", "FLANGER", "PHASER", "UNI-VIBE", "ROTARY", "RING MOD" };
+}
+
+//==============================================================================
+ML1AudioProcessorEditor::ML1AudioProcessorEditor (ML1AudioProcessor& p)
+    : AudioProcessorEditor (&p), proc (p),
+      knobs { { { "rate", 0, 0, 3, "RATE", 0, {}, {} },     { "depth", 0, 1, 3, "DEPTH", 1, {}, {} },    { "extra", 0, 2, 3, nullptr, 1, {}, {} },
+                { "mix", 1, 0, 2, "MIX", 1, {}, {} },       { "level", 1, 1, 2, "LEVEL", 2, {}, {} } } },
+      powerAtt (*p.apvts.getParameter ("power"), [this] (float) { repaint(); }, nullptr)
+{
+    setLookAndFeel (&laf);
+    for (auto& k : knobs)
+    {
+        ui::setupKnob (k.slider, *this);
+        auto* par = proc.apvts.getParameter (k.id);
+        k.slider.setDoubleClickReturnValue (true, par->convertFrom0to1 (par->getDefaultValue()));
+        k.slider.onDragStart = [this] { proc.undoManager.beginNewTransaction(); };
+        addAndMakeVisible (k.slider);
+        k.att = std::make_unique<juce::SliderParameterAttachment> (*dynamic_cast<juce::RangedAudioParameter*> (par), k.slider, nullptr);
+        midiUI.add (k.slider, k.id);
+        k.slider.onValueChange = [this] { repaint(); };
+    }
+    powerAtt.sendInitialUpdate();
+    grain = ui::makeGrain();
+    constrainer.setSizeLimits (720, 414, 2400, 1380);
+    constrainer.setFixedAspectRatio ((double) kW / (double) kH);
+    setConstrainer (&constrainer);
+    setResizable (true, true);
+    setSize ((int) kW, (int) kH);
+    layoutKnobs();
+    startTimerHz (30);
+}
+
+ML1AudioProcessorEditor::~ML1AudioProcessorEditor()
+{
+    stopTimer();
+    setLookAndFeel (nullptr);
+}
+
+void ML1AudioProcessorEditor::paintOverChildren (juce::Graphics& g)
+{
+    midiUI.paintMarks (g, kBody);
+}
+
+void ML1AudioProcessorEditor::timerCallback()
+{
+    meter.update (proc.outMeter);
+    repaint (panelRect (1).withTrimmedLeft (panelRect (1).getWidth() - 150.0f).expanded (2.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer());
+    if (midiUI.needsRepaint()) { midiUI.tick(); repaint(); }
+    if (currentMode() != shownMode) { layoutKnobs(); repaint(); }                                   // the mode changed by a preset, the host or a click
+    repaint (panelRect (2).expanded (4.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer());     // the picture moves
+    if (barState.copiedAt != 0) { repaint (juce::Rectangle<float> (0.0f, 30.0f, 900.0f, 50.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer()); if (! barState.copiedRecently()) barState.copiedAt = 0; }
+}
+
+void ML1AudioProcessorEditor::toggle (const char* id)
+{
+    auto* par = proc.apvts.getParameter (id);
+    par->beginChangeGesture(); par->setValueNotifyingHost (par->getValue() > 0.5f ? 0.0f : 1.0f); par->endChangeGesture();
+}
+void ML1AudioProcessorEditor::setChoice (const char* id, int index)
+{
+    auto* par = proc.apvts.getParameter (id);
+    par->beginChangeGesture(); par->setValueNotifyingHost (par->convertTo0to1 ((float) index)); par->endChangeGesture();
+}
+
+int ML1AudioProcessorEditor::countOf (const Knob& k) const
+{
+    return k.panel == 0 && ! ml1::hasExtra (currentMode()) ? 2 : k.count;       // the two knobs of the new modes are centred
+}
+
+void ML1AudioProcessorEditor::layoutKnobs()
+{
+    const float sc = scale(), d = 2.0f * (kKnobR + kPad) * sc;
+    for (auto& k : knobs)
+    {
+        k.slider.setBounds (juce::Rectangle<float> (d, d).withCentre (knobCentre (k.panel, k.index, countOf (k)) * sc).toNearestInt());
+        if (k.name == nullptr) k.slider.setVisible (ml1::hasExtra (currentMode()));                 // the third knob (WIDTH / FEEDBACK) exists in the four original modes only
+    }
+    shownMode = currentMode();
+}
+
+void ML1AudioProcessorEditor::resized() { layoutKnobs(); }
+
+//==============================================================================
+// MOTION display: a live picture of the effect.
+//   CHORUS   one lane per voice with the delay of each voice (8 .. 30 ms) sliding along it
+//   VIBRATO  the LFO wave with the moving dot, and the pitch bend (cents) it makes
+//   FLANGER  the comb filter (frequency response) for the delay and feedback right now
+//   PHASER   the notches of the all-pass chain for the sweep position and feedback right now
+void ML1AudioProcessorEditor::drawMotion (juce::Graphics& g, int mode, int variant)
+{
+    const auto r = motionRect();
+    g.setColour (juce::Colours::black.withAlpha (0.45f));
+    g.fillRoundedRectangle (r.expanded (8.0f), 10.0f);
+    juce::Graphics::ScopedSaveState ss (g);
+    g.reduceClipRegion (r.expanded (8.0f).toNearestInt());
+
+    const auto& eng = proc.getEngine();
+    const bool power = isOn ("power");
+    const float phase = power ? eng.visPhase.load (std::memory_order_relaxed) : 0.0f, hz = power ? eng.visHz.load (std::memory_order_relaxed) : 0.0f;
+    const float visA = power ? eng.visA.load (std::memory_order_relaxed) : 0.0f, visB = power ? eng.visB.load (std::memory_order_relaxed) : 0.0f;
+    const auto param = [this] (const char* id) { return proc.apvts.getRawParameterValue (id)->load() * 0.01f; };
+    const float depth = param ("depth"), extra = param ("extra");
+    const float x0 = r.getX() + 20.0f, x1 = r.getRight() - 20.0f, w = x1 - x0;
+    constexpr float twoPi = juce::MathConstants<float>::twoPi;
+
+    drawText (g, hz >= 1000.0f ? juce::String (hz * 0.001f, 2) + " kHz" : (mode == ml1::RingMod ? juce::String ((int) std::lround (hz)) : juce::String (hz, 2)) + " Hz", r.getX() + 14.0f, r.getY() + 16.0f, 15.0f, kBody, true, 0.06f, juce::Justification::centredLeft);
+
+    if (mode == ml1::UniVibe)
+    {
+        // the four all-pass stages sliding along a frequency axis (100 Hz .. 8 kHz) with the lamp
+        const float yTop = r.getY() + 34.0f, yAxis = r.getBottom() - 38.0f;
+        const auto xOf = [&] (float f) { return x0 + w * std::log (f / 100.0f) / std::log (80.0f); };
+        g.setColour (kInk.withAlpha (0.3f));
+        g.drawLine (x0, yAxis, x1, yAxis, 1.4f);
+        for (float f : { 100.0f, 300.0f, 1000.0f, 3000.0f, 8000.0f })
+        {
+            g.drawLine (xOf (f), yAxis, xOf (f), yAxis + 6.0f, 1.4f);
+            drawText (g, f >= 1000.0f ? juce::String ((int) (f / 1000.0f)) + " kHz" : juce::String ((int) f) + " Hz", xOf (f), yAxis + 17.0f, 13.0f, kInk.withAlpha (0.75f), false, 0.04f);
+        }
+        const float lamp = visA;
+        for (int k = 0; k < 4; ++k)
+        {
+            const float x = xOf (ml1::vibeStageHz (k, lamp)), top = yTop + 8.0f * (float) (3 - k);
+            const auto bar = juce::Rectangle<float> (x - 4.0f, top, 8.0f, yAxis - top);
+            g.setColour (kBody.withAlpha (0.18f));
+            g.fillRoundedRectangle (bar.expanded (6.0f, 0.0f), 7.0f);
+            g.setColour (kBody.withAlpha (0.55f + 0.45f * lamp));
+            g.fillRoundedRectangle (bar, 4.0f);
+            drawText (g, juce::String (k + 1), x, top - 8.0f, 13.0f, kInk.withAlpha (0.75f), true, 0.0f);
+        }
+        const auto lampC = juce::Point<float> (r.getCentreX(), r.getY() + 16.0f);
+        g.setColour (kBody.withAlpha (0.12f + 0.3f * lamp));
+        g.fillEllipse (juce::Rectangle<float> (26.0f, 26.0f).withCentre (lampC));
+        g.setColour (kBody.withAlpha (0.35f + 0.65f * lamp));
+        g.fillEllipse (juce::Rectangle<float> (11.0f, 11.0f).withCentre (lampC));
+        drawText (g, variant == 1 ? "PHASE VIBRATO" : "PHASE CHORUS", r.getRight() - 14.0f, r.getY() + 16.0f, 13.0f, kInk.withAlpha (0.75f), true, 0.2f, juce::Justification::centredRight);
+    }
+    else if (mode == ml1::Rotary)
+    {
+        // the drum and the horn turning at their real speeds
+        const auto disc = [&] (juce::Point<float> c, float rad, float th, const char* label)
+        {
+            g.setColour (juce::Colour (0xff141518));
+            g.fillEllipse (juce::Rectangle<float> (2.0f * rad, 2.0f * rad).withCentre (c));
+            g.setColour (kInk.withAlpha (0.4f));
+            g.drawEllipse (juce::Rectangle<float> (2.0f * rad, 2.0f * rad).withCentre (c), 1.6f);
+            for (int t = 0; t < 12; ++t)                                                   // grille ticks round the rim
+            {
+                const float an = twoPi * (float) t / 12.0f;
+                g.drawLine (c.x + std::sin (an) * (rad - 8.0f), c.y - std::cos (an) * (rad - 8.0f), c.x + std::sin (an) * (rad - 2.0f), c.y - std::cos (an) * (rad - 2.0f), 1.2f);
+            }
+            const juce::Point<float> tip (c.x + std::sin (th) * (rad - 10.0f), c.y - std::cos (th) * (rad - 10.0f));
+            g.setColour (kBody);
+            g.drawLine (c.x, c.y, tip.x, tip.y, 3.5f);
+            g.fillEllipse (juce::Rectangle<float> (13.0f, 13.0f).withCentre (tip));
+            g.fillEllipse (juce::Rectangle<float> (9.0f, 9.0f).withCentre (c));
+            drawText (g, label, c.x, c.y + rad + 14.0f, 13.0f, kInk.withAlpha (0.75f), true, 0.2f);
+        };
+        disc ({ r.getCentreX() - 130.0f, r.getY() + 70.0f }, 58.0f, visB, "DRUM");
+        disc ({ r.getCentreX() + 130.0f, r.getY() + 70.0f }, 40.0f, visA, "HORN");
+        drawText (g, variant == 1 ? "FAST (TREMOLO)" : "SLOW (CHORALE)", r.getRight() - 14.0f, r.getY() + 16.0f, 13.0f, kInk.withAlpha (0.75f), true, 0.2f, juce::Justification::centredRight);
+    }
+    else if (mode == ml1::RingMod)
+    {
+        // the input, the carrier and the resulting product
+        const float rate = param ("rate"), cyc = 1.0f + 5.0f * rate, gx0 = r.getX() + 110.0f, gw = r.getRight() - 24.0f - gx0, rowH = (r.getHeight() - 44.0f) / 3.0f;
+        const auto carrierAt = [&] (float u) { return ml1::ringCarrier (u * cyc - visA, variant); };
+        const auto trace = [&] (int row, float thick, juce::Colour col, const std::function<float (float)>& fn, const char* label)
+        {
+            const float yc = r.getY() + 32.0f + rowH * ((float) row + 0.5f);
+            juce::Path path;
+            for (int i = 0; i <= 240; ++i)
+            {
+                const float u = (float) i / 240.0f, y = yc - fn (u) * rowH * 0.42f;
+                if (i == 0) path.startNewSubPath (gx0, y); else path.lineTo (gx0 + gw * u, y);
+            }
+            g.setColour (kInk.withAlpha (0.15f));
+            g.drawLine (gx0, yc, gx0 + gw, yc, 1.0f);
+            g.setColour (col);
+            g.strokePath (path, juce::PathStrokeType (thick, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            drawText (g, label, r.getX() + 14.0f, yc, 13.0f, kInk.withAlpha (0.75f), true, 0.2f, juce::Justification::centredLeft);
+        };
+        trace (0, 2.0f, kInk.withAlpha (0.55f), [] (float u) { return std::sin (twoPi * 6.0f * u); }, "INPUT");
+        trace (1, 2.0f, kInk.withAlpha (0.55f), carrierAt, "CARRIER");
+        trace (2, 3.2f, kBody, [&] (float u) { return std::sin (twoPi * 6.0f * u) * ((1.0f - depth) + depth * carrierAt (u)); }, "RESULT");
+        drawText (g, variant == 0 ? "SINE CARRIER" : variant == 1 ? "TRIANGLE CARRIER" : "SQUARE CARRIER", r.getRight() - 14.0f, r.getY() + 16.0f, 13.0f, kInk.withAlpha (0.75f), true, 0.2f, juce::Justification::centredRight);
+    }
+    else if (mode == ml1::Chorus)
+    {
+        const int voices = ml1::voiceCount (variant);
+        const float yTop = r.getY() + 34.0f, laneH = (r.getHeight() - 70.0f) / 4.0f;
+        const auto xOf = [&] (float ms) { return x0 + w * (ms - 8.0f) / 22.0f; };
+        for (int v = 0; v < voices; ++v)
+        {
+            const float yc = yTop + laneH * ((float) v + 0.5f) + (float) (4 - voices) * laneH * 0.5f;
+            const float ms = ml1::chorusDelayMs (v, ml1::lfoShape (phase + (float) v / (float) voices, false), depth);
+            g.setColour (kInk.withAlpha (0.25f));
+            g.drawLine (x0, yc, x1, yc, 1.4f);
+            g.setColour (kBody.withAlpha (0.2f));
+            g.fillRoundedRectangle (juce::Rectangle<float> (xOf (ml1::chorusDelayMs (v, -1.0f, depth)), yc - 5.0f, xOf (ml1::chorusDelayMs (v, 1.0f, depth)) - xOf (ml1::chorusDelayMs (v, -1.0f, depth)), 10.0f), 5.0f);
+            g.setColour (kBody);
+            g.fillEllipse (juce::Rectangle<float> (16.0f, 16.0f).withCentre ({ xOf (ms), yc }));
+        }
+        g.setColour (kInk.withAlpha (0.3f));
+        g.drawLine (x0, r.getBottom() - 30.0f, x1, r.getBottom() - 30.0f, 1.4f);
+        for (float ms : { 8.0f, 19.0f, 30.0f })
+        {
+            g.drawLine (xOf (ms), r.getBottom() - 30.0f, xOf (ms), r.getBottom() - 24.0f, 1.4f);
+            drawText (g, juce::String ((int) ms) + " ms", xOf (ms), r.getBottom() - 12.0f, 13.0f, kInk.withAlpha (0.75f), false, 0.04f);
+        }
+        drawText (g, juce::String (voices) + " VOICE CHORUS", r.getRight() - 14.0f, r.getY() + 16.0f, 13.0f, kInk.withAlpha (0.75f), true, 0.2f, juce::Justification::centredRight);
+    }
+    else if (mode == ml1::Vibrato)
+    {
+        const bool tri = variant == 1;
+        const float yc = r.getCentreY() + 2.0f, amp = r.getHeight() * 0.3f;
+        juce::Path wave;
+        for (int i = 0; i <= 120; ++i)
+        {
+            const float u = (float) i / 120.0f, y = yc - ml1::lfoShape (u, tri) * amp;
+            if (i == 0) wave.startNewSubPath (x0, y); else wave.lineTo (x0 + w * u, y);
+        }
+        g.setColour (kInk.withAlpha (0.25f));
+        g.drawLine (x0, yc, x1, yc, 1.2f);
+        g.setColour (kInk.withAlpha (0.6f));
+        g.strokePath (wave, juce::PathStrokeType (2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        const float lfo = ml1::lfoShape (phase, tri);
+        const juce::Point<float> dot (x0 + w * phase, yc - lfo * amp);
+        g.setColour (kBody.withAlpha (0.25f));
+        g.drawLine (dot.x, yc, dot.x, dot.y, 2.0f);
+        g.setColour (kBody);
+        g.fillEllipse (juce::Rectangle<float> (16.0f, 16.0f).withCentre (dot));
+        // the pitch follows the slope of the delay: -d(delay)/dt (a rising delay lowers the pitch)
+        const float slope = tri ? (phase < 0.5f ? 4.0f : -4.0f) : twoPi * std::cos (twoPi * phase);
+        const float ratio = 1.0f - 0.0036f * depth * slope * hz;
+        const float cents = 1200.0f * std::log2 (std::max (0.2f, ratio));
+        drawText (g, juce::String::formatted ("%+d cents", (int) std::lround (power ? cents : 0.0f)), x1 - 6.0f, r.getBottom() - 16.0f, 16.0f, kBody, true, 0.04f, juce::Justification::centredRight);
+        drawText (g, tri ? "TRIANGLE PITCH WOBBLE" : "SINE PITCH WOBBLE", r.getRight() - 14.0f, r.getY() + 16.0f, 13.0f, kInk.withAlpha (0.75f), true, 0.2f, juce::Justification::centredRight);
+    }
+    else
+    {
+        // frequency response, 20 Hz .. 20 kHz on a log axis, -30 .. +12 dB
+        const float yTop = r.getY() + 32.0f, yBot = r.getBottom() - 28.0f;
+        const auto yOf = [&] (float db) { return yBot - (yBot - yTop) * (std::clamp (db, -30.0f, 12.0f) + 30.0f) / 42.0f; };
+        const float lfo = ml1::lfoShape (phase, false), fs = 48000.0f;
+        const float fb = ml1::feedbackAmount (extra) * (mode == ml1::Flanger && variant == 1 ? -1.0f : 1.0f);
+        const auto magnitude = [&] (float f) -> float
+        {
+            const float om = twoPi * f / fs;
+            const std::complex<float> z1 = std::polar (1.0f, -om);
+            if (mode == ml1::Flanger)
+            {
+                const float d = ml1::flangerDelayMs (lfo, depth) * 0.001f * fs;
+                const std::complex<float> zd = std::polar (1.0f, -om * d);
+                return std::abs (0.5f * (1.0f + zd) / (1.0f - fb * zd)) * (1.0f - 0.6f * std::abs (fb));
+            }
+            const float tn = std::tan (ml1::kPi * std::min (ml1::phaserCentreHz (lfo, depth), 0.45f * fs) / fs), a = (tn - 1.0f) / (tn + 1.0f);
+            const std::complex<float> ap = (a + z1) / (1.0f + a * z1);
+            std::complex<float> gAll (1.0f, 0.0f);
+            for (int k = 0; k < ml1::stageCount (variant); ++k) gAll *= ap;
+            const float fbp = 0.95f * fb;                                   // the engine's feedback around the chain (one sample late)
+            const std::complex<float> v = gAll / (1.0f - fbp * z1 * gAll);
+            return std::abs (0.5f * (1.0f + v)) * (1.0f - 0.5f * fbp);
+        };
+        const auto xOf = [&] (float f) { return x0 + w * std::log (f / 20.0f) / std::log (1000.0f); };
+        g.setColour (kInk.withAlpha (0.25f));
+        g.drawLine (x0, yOf (0.0f), x1, yOf (0.0f), 1.0f);
+        g.drawLine (x0, yBot, x1, yBot, 1.4f);
+        for (float f : { 20.0f, 200.0f, 2000.0f, 20000.0f })
+        {
+            g.drawLine (xOf (f), yBot, xOf (f), yBot + 6.0f, 1.4f);
+            drawText (g, f >= 1000.0f ? juce::String ((int) (f / 1000.0f)) + " kHz" : juce::String ((int) f) + " Hz", xOf (f), yBot + 16.0f, 13.0f, kInk.withAlpha (0.75f), false, 0.0f);
+        }
+        juce::Path curve, fill;
+        for (int i = 0; i <= 160; ++i)
+        {
+            const float f = 20.0f * std::pow (1000.0f, (float) i / 160.0f), x = x0 + w * (float) i / 160.0f;
+            const float db = 20.0f * std::log10 (std::max (1.0e-4f, magnitude (f))), y = yOf (db);
+            if (i == 0) { curve.startNewSubPath (x, y); fill.startNewSubPath (x, yBot); fill.lineTo (x, y); }
+            else { curve.lineTo (x, y); fill.lineTo (x, y); }
+        }
+        fill.lineTo (x1, yBot);
+        fill.closeSubPath();
+        g.setColour (kBody.withAlpha (0.16f));
+        g.fillPath (fill);
+        g.setColour (kBody);
+        g.strokePath (curve, juce::PathStrokeType (2.6f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        drawText (g, mode == ml1::Flanger ? (variant == 1 ? "COMB, NEGATIVE FEEDBACK" : "COMB, POSITIVE FEEDBACK")
+                                          : juce::String (ml1::stageCount (variant)) + "-STAGE ALL-PASS NOTCHES",
+                  r.getRight() - 14.0f, r.getY() + 16.0f, 13.0f, kInk.withAlpha (0.75f), true, 0.14f, juce::Justification::centredRight);
+    }
+}
+
+
+//==============================================================================
+void ML1AudioProcessorEditor::paint (juce::Graphics& g)
+{
+    g.addTransform (juce::AffineTransform::scale (scale()));
+    ui::paintBody (g, kPal, kW, kH, grain);
+    ui::paintHeader (g, kPal, "ML-1", "MODULATION LAB", "WAVE MOVEMENT", isOn ("power"));
+    ui::paintPresetBar (g, kPal, proc.presets, proc.undoManager, kBarY, barState, false, 6.0f);
+
+    const int mode = currentMode(), variant = currentVariant();
+    ui::paintPanel (g, kPal, panelRect (0), {});
+    ui::paintTabs (g, kPal, panelRect (0), kModeTabs, mode);
+    ui::paintPanel (g, kPal, panelRect (1), "OUTPUT");
+    ui::paintPanel (g, kPal, panelRect (2), "MOTION");
+    drawMotion (g, mode, variant);
+
+    // the TYPE buttons of the mode (voices, LFO wave, feedback polarity, stages) and SYNC (the rate becomes a note length of the host tempo)
+    for (int v = 0; v < ml1::variantCount (mode); ++v) ui::paintFlatButton (g, kPal, variantRect (v), ml1::variantName (mode, v), v == variant, 13.0f);
+    {
+        const bool avail = ml1::hasSync (mode);                                                    // the rotary and the ring mod have no tempo sync
+        ui::paintFlatButton (g, kPal, syncRect(), "SYNC", avail && isOn ("sync"), 13.0f, avail ? 1.0f : 0.3f);
+    }
+
+    for (auto& k : knobs)
+    {
+        if (! k.slider.isVisible()) continue;
+        const double v = k.slider.getValue();
+        juce::String txt, lo = "0", hi = "100";
+        if (k.kind == 2) { txt = juce::String::formatted ("%+d dB", (int) std::lround (v)); lo = "-24"; hi = "+12"; }
+        else if (k.kind == 0)
+        {
+            const float f = (float) v * 0.01f;
+            if (isOn ("sync") && ml1::hasSync (mode)) txt = ml1::divisionName (ml1::divisionIndex (f));
+            else
+            {
+                const float hz = mode == ml1::Rotary ? ml1::hornHz (f, variant == 1) : ml1::rateHz (mode, f);
+                txt = hz >= 1000.0f ? juce::String (hz * 0.001f, 2) + " kHz" : (mode == ml1::RingMod ? juce::String ((int) std::lround (hz)) : juce::String (hz, 2)) + " Hz";
+            }
+        }
+        else txt = juce::String ((int) std::lround (v)) + " %";
+        const auto c = knobCentre (k.panel, k.index, countOf (k));
+        ui::paintKnob (g, kPal, c, k.name == nullptr ? ml1::extraName (mode) : k.kind == 0 ? ml1::rateName (mode) : std::strcmp (k.id, "depth") == 0 ? ml1::depthName (mode) : k.name, txt, lo, hi, panelRect (k.panel).getY() + 154.0f, panelRect (k.panel).getY() + 182.0f);
+        ui::paintValueArc (g, c, kKnobR, (float) k.slider.valueToProportionOfLength (k.slider.getValue()), kBody);
+    }
+    meter.paint (g, meterOrigin().x, meterOrigin().y, isOn ("power"), kBody, kInk, 110.0f, 26.0f, 13.0f);
+    ui::paintFooter (g, kPal, kRow2Y + kRow2H + 35.0f);
+}
+
+void ML1AudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
+{
+    const auto p = e.position / scale();
+    proc.undoManager.beginNewTransaction();
+    if (ui::powerRect().contains (p)) { toggle ("power"); return; }
+    if (ui::presetBarMouseDown (p, *this, proc.presets, proc.undoManager, kBarY, scale(), barState, [this] { repaint(); }, false)) { layoutKnobs(); return; }
+    const auto tabs = ui::tabRects (panelRect (0), kModeTabs);
+    for (int i = 0; i < (int) tabs.size(); ++i)
+        if (tabs[(size_t) i].expanded (3.0f).contains (p)) { setChoice ("mode", i); setChoice ("variant", 0); repaint(); return; }
+    if (ml1::hasSync (currentMode()) && syncRect().expanded (3.0f).contains (p)) { toggle ("sync"); repaint(); return; }
+    for (int v = 0; v < ml1::variantCount (currentMode()); ++v)
+        if (variantRect (v).expanded (3.0f).contains (p)) { setChoice ("variant", v); repaint(); return; }
+}

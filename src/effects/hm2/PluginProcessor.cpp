@@ -26,11 +26,30 @@ juce::AudioProcessorValueTreeState::ParameterLayout HM2AudioProcessor::createLay
     return layout;
 }
 
+namespace
+{
+// the factory presets (values are plain host values; character 0 Tube, 1 Tape, 2 Transistor, 3 Fold; the knobs 0 .. 100, level in dB)
+std::vector<vibr::PresetManager::Factory> hm2FactoryPresets()
+{
+    return {
+        { "Init", "Tube at its defaults", {} },
+        { "Warm Tube", "Even harmonics, soft and thick", { { "character", 0 }, { "drive", 45 }, { "oddeven", 25 }, { "tone", 70 }, { "mix", 100 } } },
+        { "Tape Glue", "Gentle tape colour", { { "character", 1 }, { "drive", 35 }, { "oddeven", 40 }, { "tilt", 40 }, { "tone", 65 }, { "mix", 100 } } },
+        { "Odd Grit", "Odd harmonics, edgy", { { "character", 2 }, { "drive", 65 }, { "oddeven", 85 }, { "tone", 75 }, { "mix", 100 } } },
+        { "Fold Fire", "Wave folder, bright", { { "character", 3 }, { "drive", 70 }, { "oddeven", 60 }, { "tilt", 65 }, { "mix", 80 } } },
+        { "Octave Shine", "Added octave above", { { "character", 0 }, { "drive", 40 }, { "octave", 45 }, { "focus", 55 }, { "mix", 70 } } },
+        { "Sub Weight", "Sub octave for the low end", { { "character", 1 }, { "drive", 40 }, { "sub", 55 }, { "focus", 25 }, { "tilt", 30 }, { "mix", 70 } } },
+        { "Air Exciter", "Drive on the highs only", { { "character", 2 }, { "drive", 55 }, { "focus", 80 }, { "tilt", 75 }, { "tone", 85 }, { "mix", 40 } } },
+    };
+}
+} // namespace
+
 HM2AudioProcessor::HM2AudioProcessor()
     : AudioProcessor (BusesProperties()
                           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts (*this, nullptr, "HM2", createLayout())
+      apvts (*this, &undoManager, "HM2", createLayout()),
+      presets (*this, apvts, undoManager, "HM-2 Presets", hm2FactoryPresets(), { "power", "bypass" })
 {
     pPower   = apvts.getRawParameterValue ("power");
     pCharacter = apvts.getRawParameterValue ("character");
@@ -58,8 +77,9 @@ void HM2AudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     dryBuf.setSize (2, juce::jmax (samplesPerBlock, 8192));
 }
 
-void HM2AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
+void HM2AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
+    midiMap.process (midi);
     juce::ScopedNoDenormals noDenormals;
     const int n = buffer.getNumSamples();
     if (n == 0 || buffer.getNumChannels() < 2 || n > dryBuf.getNumSamples()) return;
@@ -67,7 +87,7 @@ void HM2AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     const float from = powerSmooth.getCurrentValue();
     powerSmooth.setTargetValue (pPower->load() > 0.5f ? 1.0f : 0.0f);
     const float to = powerSmooth.skip (n);
-    if (from == 0.0f && to == 0.0f) return;                          // off: the signal passes untouched
+    if (from == 0.0f && to == 0.0f) { outMeter.measure (buffer, n); return; }                       // off: the signal passes untouched
 
     for (int c = 0; c < 2; ++c) dryBuf.copyFrom (c, 0, buffer, c, 0, n);
 
@@ -93,19 +113,28 @@ void HM2AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
                 d[i] = s[i] + (d[i] - s[i]) * t;
             }
         }
+    outMeter.measure (buffer, n);
 }
 
 juce::AudioProcessorEditor* HM2AudioProcessor::createEditor() { return new HM2AudioProcessorEditor (*this); }
 
 void HM2AudioProcessor::getStateInformation (juce::MemoryBlock& dest)
 {
-    if (auto xml = apvts.copyState().createXml()) copyXmlToBinary (*xml, dest);
+    auto state = apvts.copyState();
+    state.appendChild (midiMap.toTree(), nullptr);
+    if (auto xml = state.createXml()) copyXmlToBinary (*xml, dest);
 }
 
 void HM2AudioProcessor::setStateInformation (const void* data, int size)
 {
     if (auto xml = getXmlFromBinary (data, size))
-        if (xml->hasTagName (apvts.state.getType())) { auto st = juce::ValueTree::fromXml (*xml); vibr::BypassLink::normalise (st); apvts.replaceState (st); }
+        if (xml->hasTagName (apvts.state.getType())) {
+            auto st = juce::ValueTree::fromXml (*xml);
+            midiMap.fromTree (st.getChildWithName ("MIDIMAP"));
+            st.removeChild (st.getChildWithName ("MIDIMAP"), nullptr);
+            vibr::BypassLink::normalise (st);
+            apvts.replaceState (st);
+        }
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new HM2AudioProcessor(); }

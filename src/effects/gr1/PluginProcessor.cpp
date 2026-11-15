@@ -29,11 +29,30 @@ juce::AudioProcessorValueTreeState::ParameterLayout GR1AudioProcessor::createLay
     return layout;
 }
 
+namespace
+{
+// the factory presets (values are plain host values: shape 0 .. 3, the knobs 0 .. 100, level in dB)
+std::vector<vibr::PresetManager::Factory> gr1FactoryPresets()
+{
+    return {
+        { "Init", "Grain at its defaults", {} },
+        { "Soft Cloud", "Long, smooth grains", { { "shape", 0 }, { "size", 70 }, { "density", 60 }, { "position", 30 }, { "spray", 40 }, { "spread", 80 }, { "mix", 70 } } },
+        { "Glass Dust", "Tiny bright grains, an octave up", { { "shape", 1 }, { "size", 15 }, { "density", 80 }, { "pitch", 100 }, { "random", 25 }, { "spray", 50 }, { "mix", 65 } } },
+        { "Reverse Swell", "Grains played backwards", { { "shape", 3 }, { "size", 65 }, { "density", 55 }, { "position", 45 }, { "reverse", 80 }, { "mix", 75 } } },
+        { "Rain Drops", "Sparse percussive ticks", { { "shape", 2 }, { "size", 25 }, { "density", 30 }, { "spray", 60 }, { "random", 40 }, { "spread", 90 }, { "mix", 60 } } },
+        { "Deep Drift", "An octave down, wide and slow", { { "shape", 0 }, { "size", 80 }, { "density", 45 }, { "position", 55 }, { "pitch", 0 }, { "spread", 100 }, { "mix", 70 } } },
+        { "Tempo Pulse", "Grains locked to the tempo", { { "shape", 1 }, { "sync", 1 }, { "size", 40 }, { "density", 50 }, { "spray", 10 }, { "mix", 80 } } },
+        { "Frozen Moment", "Freeze what just played", { { "shape", 0 }, { "freeze", 1 }, { "size", 60 }, { "density", 70 }, { "spray", 45 }, { "spread", 85 }, { "mix", 100 } } },
+    };
+}
+} // namespace
+
 GR1AudioProcessor::GR1AudioProcessor()
     : AudioProcessor (BusesProperties()
                           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts (*this, nullptr, "GR1", createLayout())
+      apvts (*this, &undoManager, "GR1", createLayout()),
+      presets (*this, apvts, undoManager, "GR-1 Presets", gr1FactoryPresets(), { "power", "bypass" })
 {
     midiMap.setDefault ("mix", 1);
     midiMap.setDefault ("size", 11);
@@ -77,7 +96,7 @@ void GR1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     const float from = powerSmooth.getCurrentValue();
     powerSmooth.setTargetValue (pPower->load() > 0.5f ? 1.0f : 0.0f);
     const float to = powerSmooth.skip (n);
-    if (from == 0.0f && to == 0.0f) return;                          // off: the signal passes untouched
+    if (from == 0.0f && to == 0.0f) { outMeter.measure (buffer, n); return; }                        // off: the signal passes untouched
 
     for (int c = 0; c < 2; ++c) dryBuf.copyFrom (c, 0, buffer, c, 0, n);
 
@@ -110,6 +129,7 @@ void GR1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
                 d[i] = s[i] + (d[i] - s[i]) * t;
             }
         }
+    outMeter.measure (buffer, n);
 }
 
 juce::AudioProcessorEditor* GR1AudioProcessor::createEditor() { return new GR1AudioProcessorEditor (*this); }

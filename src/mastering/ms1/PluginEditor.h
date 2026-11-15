@@ -37,7 +37,7 @@ private:
         int tab = -1;                 // the stage tab the knob belongs to (row 3), -1 = always shown
         bool perBand = false;         // a multiband knob: follows the selected band
     };
-    struct StageButton { juce::String label; bool on; std::function<void()> act; };
+    struct StageButton { juce::String label; bool on; std::function<void()> act; int steps = 0, cur = 0; };      // steps > 0: the button cycles through that many settings, a row of dots shows the current one
     void timerCallback() override;
     float scale() const { return (float) getWidth() / 1200.0f; }
     void layoutKnobs();
@@ -105,6 +105,7 @@ private:
     std::array<Knob, 30> knobs;
     juce::String matchNote;                         // the answer to the MATCH EQ button, shown for a few seconds
     int matchNoteTicks = 0;
+    juce::uint32 overLitUntil = 0;                                       // the OVER lamp stays lit until this time (ms counter), 1.5 s after the last overshoot
     bool specHold = false, specFreeze = false, frozenValid = false;      // spectrum: peak hold line, frozen picture
     std::array<float, ms1::kBands> holdPeak {}, frozenPre {}, frozenPost {};
     vibr::ui::PresetBarState barState;              // the COPIED flash of the A / B copy button

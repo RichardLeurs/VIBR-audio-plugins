@@ -3,18 +3,11 @@
 
 #include "PluginProcessor.h"
 #include "MidiTarget.h"
-
-// Black knob of the VIBR look (see style.md): matt body with a knurled edge, raised cap, white pointer bar.
-// The knob is drawn 5 px inside its component so the shadow is not clipped.
-class SA1LookAndFeel : public juce::LookAndFeel_V4
-{
-public:
-    void drawRotarySlider (juce::Graphics&, int x, int y, int w, int h, float pos,
-                           float startAngle, float endAngle, juce::Slider&) override;
-};
+#include "ui/VibrUI.h"
 
 // SA-1 window, drawn in code on a satin body: header (name, description, power), four stage panels in a row: BOOST, TUBE, TAPE and CRUSH (each
-// with its own on / off switch: click the title), and under them the SHAPE display (the transfer curve and the waveform of the chain) and OUTPUT.
+// with its own on / off switch: click the title), and under them the SHAPE display (the transfer curve and the waveform of the chain) and OUTPUT (MIX, LEVEL and
+// the L / R dB meters). Shared UI of src/common/ui: preset bar, knob value ring, output meter.
 class SA1AudioProcessorEditor : public juce::AudioProcessorEditor,
                                 private juce::Timer
 {
@@ -48,13 +41,16 @@ private:
     };
 
     SA1AudioProcessor& proc;
-    SA1LookAndFeel laf;
+    vibr::ui::KnobLookAndFeel laf;
     juce::ComponentBoundsConstrainer constrainer;
     juce::Image grain;
     std::array<Knob, 11> knobs;
     MidiTarget stageTarget[4];                 // over the stage pills (BOOST, TUBE, TAPE, CRUSH switches): MIDI learn targets
     MidiLearnUI midiUI { proc.midiMap };       // right-click a knob: MIDI learn
     juce::ParameterAttachment powerAtt, boostAtt, tubeAtt, tapeAtt, crushAtt;
+    vibr::ui::PresetBarState barState;
+    vibr::ui::OutputMeter meter;                                                                       // output dB meters
+    bool shownOn[4] { true, true, true, true };                                                        // the stage switches the knob dimming was last set for
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SA1AudioProcessorEditor)
 };

@@ -28,11 +28,30 @@ juce::AudioProcessorValueTreeState::ParameterLayout SR1AudioProcessor::createLay
     return layout;
 }
 
+namespace
+{
+// the factory presets (values are plain host values; root 0..11, scale 0..5, texture 0..2, the rest 0..100, level in dB)
+std::vector<vibr::PresetManager::Factory> sr1FactoryPresets()
+{
+    return {
+        { "Init", "Sympathetic Resonator at its defaults", {} },
+        { "Pentatonic Haze", "A soft major-pentatonic wash", { { "scale", 2 }, { "texture", 2 }, { "strings", 70 }, { "decay", 70 }, { "damping", 35 }, { "mix", 45 } } },
+        { "Wooden Harp", "Warm, short-lived wooden strings", { { "scale", 0 }, { "texture", 0 }, { "strings", 55 }, { "decay", 40 }, { "damping", 60 }, { "tension", 20 }, { "mix", 50 } } },
+        { "Glass Bells", "Bright, long ringing glass", { { "scale", 3 }, { "texture", 2 }, { "strings", 80 }, { "decay", 85 }, { "damping", 15 }, { "motion", 45 }, { "mix", 55 } } },
+        { "Metal Drone", "Dense minor strings that sustain", { { "root", 9 }, { "scale", 1 }, { "texture", 1 }, { "strings", 90 }, { "decay", 95 }, { "damping", 20 }, { "tension", 45 }, { "mix", 60 } } },
+        { "Dorian Shimmer", "Moving strings in Dorian", { { "root", 2 }, { "scale", 4 }, { "texture", 2 }, { "strings", 75 }, { "decay", 65 }, { "motion", 70 }, { "fine", 55 }, { "mix", 50 } } },
+        { "Whole-Tone Dream", "Floating, unresolved colour", { { "scale", 5 }, { "texture", 1 }, { "strings", 65 }, { "decay", 75 }, { "damping", 30 }, { "motion", 55 }, { "mix", 55 } } },
+        { "Subtle Body", "Just a little sympathy", { { "texture", 0 }, { "strings", 40 }, { "decay", 35 }, { "damping", 55 }, { "mix", 25 } } },
+    };
+}
+} // namespace
+
 SR1AudioProcessor::SR1AudioProcessor()
     : AudioProcessor (BusesProperties()
                           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts (*this, nullptr, "SR1", createLayout())
+      apvts (*this, &undoManager, "SR1", createLayout()),
+      presets (*this, apvts, undoManager, "SR-1 Presets", sr1FactoryPresets(), { "power", "bypass" })
 {
     midiMap.setDefault ("mix", 1);
     midiMap.setDefault ("decay", 11);
@@ -73,7 +92,7 @@ void SR1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     const float from = powerSmooth.getCurrentValue();
     powerSmooth.setTargetValue (pPower->load() > 0.5f ? 1.0f : 0.0f);
     const float to = powerSmooth.skip (n);
-    if (from == 0.0f && to == 0.0f) return;                          // off: the signal passes untouched
+    if (from == 0.0f && to == 0.0f) { outMeter.measure (buffer, n); return; }                       // off: the signal passes untouched
 
     for (int c = 0; c < 2; ++c) dryBuf.copyFrom (c, 0, buffer, c, 0, n);
 
@@ -100,6 +119,7 @@ void SR1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
                 d[i] = s[i] + (d[i] - s[i]) * t;
             }
         }
+    outMeter.measure (buffer, n);
 }
 
 juce::AudioProcessorEditor* SR1AudioProcessor::createEditor() { return new SR1AudioProcessorEditor (*this); }

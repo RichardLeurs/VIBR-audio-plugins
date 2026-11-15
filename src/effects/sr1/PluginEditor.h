@@ -2,19 +2,10 @@
 #pragma once
 
 #include "PluginProcessor.h"
+#include "ui/VibrUI.h"
 
-// Black knob of the VIBR look (see style.md): matt body with a knurled edge, raised cap, white pointer bar.
-// The knob is drawn 5 px inside its component so the shadow is not clipped.
-class SR1LookAndFeel : public juce::LookAndFeel_V4
-{
-public:
-    void drawRotarySlider (juce::Graphics&, int x, int y, int w, int h, float pos,
-                           float startAngle, float endAngle, juce::Slider&) override;
-};
-
-// SR-1 window, drawn in code on a satin body: header (name, description, power), four panels TUNING (root, scale, fine),
-// TEXTURE (wood / metal / glass), RESONATORS (strings, decay, damping, tension, motion) and OUTPUT (blend, level), and below them the
-// harp: every string that rings is drawn, longer for lower notes, trembling and glowing with its level.
+// SR-1 window (1200 x 690) on the shared UI of src/common/ui: header (name, preset chip, A / B, undo, power), row 1 the panels TUNING (root, scale, fine),
+// TEXTURE (wood / metal / glass) and RESONATORS (strings, decay, damping, tension, motion); row 2 the STRINGS harp and OUTPUT (blend, level, L / R dB meters). The harp: every string that rings is drawn, longer for lower notes, trembling and glowing with its level.
 class SR1AudioProcessorEditor : public juce::AudioProcessorEditor,
                                 private juce::Timer
 {
@@ -48,11 +39,13 @@ private:
 
     SR1AudioProcessor& proc;
     MidiLearnUI midiUI { proc.midiMap };       // right-click a knob: MIDI learn
-    SR1LookAndFeel laf;
+    vibr::ui::KnobLookAndFeel laf;
     juce::ComponentBoundsConstrainer constrainer;
     juce::Image grain;
     std::array<Knob, 10> knobs;
+    vibr::ui::PresetBarState barState;
     juce::ParameterAttachment powerAtt, textureAtt;
+    vibr::ui::OutputMeter meter;                                                                       // output dB meters
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SR1AudioProcessorEditor)
 };

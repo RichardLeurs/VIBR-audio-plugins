@@ -2,18 +2,10 @@
 #pragma once
 
 #include "PluginProcessor.h"
+#include "ui/VibrUI.h"
 
-// Black knob of the VIBR look (see style.md): matt body with a knurled edge, raised cap, white pointer bar.
-// The knob is drawn 5 px inside its component so the shadow is not clipped.
-class PT1LookAndFeel : public juce::LookAndFeel_V4
-{
-public:
-    void drawRotarySlider (juce::Graphics&, int x, int y, int w, int h, float pos,
-                           float startAngle, float endAngle, juce::Slider&) override;
-};
-
-// PT-1 window, drawn in code on a satin body: header (name, description, power), four VOICE panels (INTERVAL, DETUNE, LEVEL and the note
-// the voice plays now), and below them KEY (key, scale, INTELLIGENT, the note heard), CHORDS (five presets for the four intervals) and OUTPUT.
+// PT-1 window (1200 x 690), on the shared UI of src/common/ui: header (name, preset chip, undo, power), four VOICE panels (INTERVAL, DETUNE, LEVEL and the note the
+// voice plays now), and below them KEY (key, scale, INTELLIGENT, the note heard), CHORDS (five presets for the four intervals) and OUTPUT (SPREAD, MIX, LEVEL, L / R dB meters).
 class PT1AudioProcessorEditor : public juce::AudioProcessorEditor,
                                 private juce::Timer
 {
@@ -37,9 +29,9 @@ private:
 
     struct Knob
     {
-        const char* id = nullptr;
-        int kind = 0;
-        float cx = 0, cy = 0, r = 20;
+        juce::String id;
+        int kind = 0;                 // 0 interval, 1 detune, 2 level, 3 root, 4 scale, 5 percent, 6 dB
+        float cx = 0, cy = 0, nameY = 0, valueY = 0;
         const char* name = nullptr;
         juce::Slider slider;
         std::unique_ptr<juce::SliderParameterAttachment> att;
@@ -47,12 +39,14 @@ private:
 
     PT1AudioProcessor& proc;
     MidiLearnUI midiUI { proc.midiMap };       // right-click a knob: MIDI learn
-    PT1LookAndFeel laf;
+    vibr::ui::KnobLookAndFeel laf;
     juce::ComponentBoundsConstrainer constrainer;
     juce::Image grain;
     std::vector<std::unique_ptr<Knob>> knobs;
+    vibr::ui::PresetBarState barState;
     juce::ParameterAttachment powerAtt, intelAtt, rootAtt, scaleAtt;
-    juce::StringArray keepIds;                         // keeps the parameter ids alive for the knobs
+    vibr::ui::OutputMeter meter;                                                                       // output dB meters
+    float shownNote[pt1::kNumVoices] { -2.0f, -2.0f, -2.0f, -2.0f }, shownHeard = -2.0f;               // the notes last painted (repaint only on a change)
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PT1AudioProcessorEditor)
 };

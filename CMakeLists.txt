@@ -41,7 +41,7 @@ if(APPLE AND NOT RL_ARCH STREQUAL _host_arch)       # this Mac's own architectur
   set(CMAKE_OSX_ARCHITECTURES "${RL_ARCH}" CACHE STRING "Architecture of the built plugins (follows RL_ARCH)" FORCE)
 endif()
 
-project(VSTWorkspace VERSION 0.1.0)
+project(VSTWorkspace VERSION 0.2.0)
 
 
 set(CMAKE_CXX_STANDARD 20)

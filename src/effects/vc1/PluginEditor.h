@@ -2,19 +2,11 @@
 #pragma once
 
 #include "PluginProcessor.h"
+#include "ui/VibrUI.h"
 
-// Black knob of the VIBR look (see style.md): matt body with a knurled edge, raised cap, white pointer bar.
-// The knob is drawn 5 px inside its component so the shadow is not clipped.
-class VC1LookAndFeel : public juce::LookAndFeel_V4
-{
-public:
-    void drawRotarySlider (juce::Graphics&, int x, int y, int w, int h, float pos,
-                           float startAngle, float endAngle, juce::Slider&) override;
-};
-
-// VC-1 window, drawn in code on a satin body: header (name, description, power), the MODULATION MATRIX (five sources in rows, with their own
+// VC-1 window, drawn in code on the shared UI of src/common/ui: header (name, description, preset chip, undo / redo, power), the MODULATION MATRIX (five sources in rows, with their own
 // knobs and a lamp that shows the source live, four destinations in columns, a depth knob -100 .. +100 at every crossing),
-// the FILTER panel (cutoff, resonance, type) and CROSS / OUTPUT (X-MOD, mix, level).
+// the FILTER panel (cutoff, resonance, type) and CROSS / OUTPUT (X-MOD, mix, level and the L / R dB meters).
 class VC1AudioProcessorEditor : public juce::AudioProcessorEditor,
                                 private juce::Timer
 {
@@ -23,6 +15,7 @@ public:
     ~VC1AudioProcessorEditor() override;
 
     void paint (juce::Graphics&) override;
+    void paintOverChildren (juce::Graphics&) override;
     void resized() override;
     void mouseDown (const juce::MouseEvent&) override;
 
@@ -51,11 +44,14 @@ private:
         { "m30", "m31", "m32", "m33" }, { "m40", "m41", "m42", "m43" } };
 
     VC1AudioProcessor& proc;
-    VC1LookAndFeel laf;
+    MidiLearnUI midiUI { proc.midiMap };       // right-click a knob: MIDI learn
+    vibr::ui::KnobLookAndFeel laf;
     juce::ComponentBoundsConstrainer constrainer;
     juce::Image grain;
     std::vector<std::unique_ptr<Knob>> knobs;
+    vibr::ui::PresetBarState barState;
     juce::ParameterAttachment powerAtt, syncAtt, typeAtt, shape1Att, shape2Att;
+    vibr::ui::OutputMeter meter;                                                                       // output dB meters
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VC1AudioProcessorEditor)
 };

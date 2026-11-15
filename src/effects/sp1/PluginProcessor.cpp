@@ -2,6 +2,23 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
+namespace
+{
+// the factory presets (values are plain host values; size / decay / diffusion / tone / motion / texture / mix 0 .. 100, level in dB, mode 0 .. 4)
+std::vector<vibr::PresetManager::Factory> sp1FactoryPresets()
+{
+    return {
+        { "Init", "Space Engine at its defaults", {} },
+        { "Angel Shimmer", "Octave-up bloom", { { "mode", 0 }, { "size", 70 }, { "decay", 75 }, { "texture", 60 }, { "mix", 45 } } },
+        { "Endless Hall", "A tail that never ends", { { "mode", 1 }, { "size", 80 }, { "decay", 90 }, { "diffusion", 80 }, { "mix", 50 } } },
+        { "Spectral Cloud", "Smeared, glassy spectrum", { { "mode", 2 }, { "size", 65 }, { "decay", 70 }, { "motion", 50 }, { "texture", 65 }, { "mix", 55 } } },
+        { "Slow Drift", "A chorused, moving space", { { "mode", 3 }, { "decay", 65 }, { "motion", 60 }, { "texture", 55 }, { "mix", 40 } } },
+        { "Small Room", "Tight and natural", { { "mode", 4 }, { "size", 30 }, { "decay", 35 }, { "diffusion", 60 }, { "mix", 30 } } },
+        { "Frozen Chord", "Freeze what just played", { { "mode", 1 }, { "freeze", 1 }, { "size", 75 }, { "decay", 85 }, { "mix", 70 } } },
+    };
+}
+} // namespace
+
 juce::AudioProcessorValueTreeState::ParameterLayout SP1AudioProcessor::createLayout()
 {
     using namespace juce;
@@ -30,7 +47,8 @@ SP1AudioProcessor::SP1AudioProcessor()
     : AudioProcessor (BusesProperties()
                           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts (*this, nullptr, "SP1", createLayout())
+      apvts (*this, &undoManager, "SP1", createLayout()),
+      presets (*this, apvts, undoManager, "SP-1 Presets", sp1FactoryPresets(), { "power", "bypass" })
 {
     pPower   = apvts.getRawParameterValue ("power");
     pMode    = apvts.getRawParameterValue ("mode");
@@ -72,7 +90,7 @@ void SP1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     const float from = powerSmooth.getCurrentValue();
     powerSmooth.setTargetValue (pPower->load() > 0.5f ? 1.0f : 0.0f);
     const float to = powerSmooth.skip (n);
-    if (from == 0.0f && to == 0.0f) return;                          // off: the signal passes untouched
+    if (from == 0.0f && to == 0.0f) { outMeter.measure (buffer, n); return; }                        // off: the signal passes untouched
 
     for (int c = 0; c < 2; ++c) dryBuf.copyFrom (c, 0, buffer, c, 0, n);
 
@@ -98,6 +116,7 @@ void SP1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
                 d[i] = s[i] + (d[i] - s[i]) * t;
             }
         }
+    outMeter.measure (buffer, n);
 }
 
 juce::AudioProcessorEditor* SP1AudioProcessor::createEditor() { return new SP1AudioProcessorEditor (*this); }

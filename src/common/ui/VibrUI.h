@@ -253,11 +253,11 @@ inline void paintValueCard (juce::Graphics& g, const Palette& pal, juce::Rectang
 
 //==============================================================================
 // A knob's decoration around its centre: the recessed ring, 11 ticks, the legends under the ends, the name and the value (in the body colour) in two rows at
-// nameY / valueY. `dim` fades a knob that does not apply (a stage that is off).
+// nameY / valueY. `dim` fades a knob that does not apply (a stage that is off). `knobR`: the knob radius (24 unless a tight panel needs a smaller knob).
 inline void paintKnob (juce::Graphics& g, const Palette& pal, juce::Point<float> c, const juce::String& name, const juce::String& value, const juce::String& lo,
-                       const juce::String& hi, float nameY, float valueY, float dim = 1.0f)
+                       const juce::String& hi, float nameY, float valueY, float dim = 1.0f, float knobR = kKnobR)
 {
-    const auto ring = juce::Rectangle<float> (2.0f * (kKnobR + 5.0f), 2.0f * (kKnobR + 5.0f)).withCentre (c);
+    const auto ring = juce::Rectangle<float> (2.0f * (knobR + 5.0f), 2.0f * (knobR + 5.0f)).withCentre (c);
     g.setColour (juce::Colours::black.withAlpha (0.5f * dim + 0.2f * (1.0f - dim)));
     g.fillEllipse (ring);
     g.setColour (juce::Colours::white.withAlpha (0.1f));
@@ -266,11 +266,11 @@ inline void paintKnob (juce::Graphics& g, const Palette& pal, juce::Point<float>
     {
         const float a = juce::degreesToRadians (-135.0f + 27.0f * (float) t), s = std::sin (a), co = std::cos (a);
         const bool major = t == 0 || t == 5 || t == 10;
-        const float r0 = kKnobR + 10.0f, r1 = r0 + (major ? 8.0f : 5.0f);
+        const float r0 = knobR + 10.0f, r1 = r0 + (major ? 8.0f : 5.0f);
         g.setColour (pal.ink.withAlpha (0.85f * dim));
         g.drawLine (c.x + s * r0, c.y - co * r0, c.x + s * r1, c.y - co * r1, major ? 2.0f : 1.2f);
     }
-    const float lx = (kKnobR + 18.0f) * 0.7071f, ly = lx + 13.0f;
+    const float lx = (knobR + 18.0f) * 0.7071f, ly = lx + 13.0f;
     drawText (g, lo, c.x - lx, c.y + ly, 13.0f, pal.ink.withAlpha (0.85f * dim), false, 0.0f);
     drawText (g, hi, c.x + lx, c.y + ly, 13.0f, pal.ink.withAlpha (0.85f * dim), false, 0.0f);
     drawText (g, name, c.x, nameY, 15.0f, pal.ink.withAlpha (0.95f * dim), true, 0.1f);
