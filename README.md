@@ -206,7 +206,7 @@ The signed bundles of each architecture are collected in `~/Developer/VIBR/relea
 `build.sh` configures and builds into `~/Developer/VIBR` (outside iCloud; the x86_64 build tree is `~/Developer/VIBR-x86_64`); it is a thin wrapper around:
 
 ```bash
-cmake -S . -B ~/Developer/VIBR -DRL_ARCH=arm64 -DRELEASES_DIR=~/Developer/VIBR/releases/arm64
+cmake -S config -B ~/Developer/VIBR -DRL_ARCH=arm64 -DRELEASES_DIR=~/Developer/VIBR/releases/arm64
 cmake --build ~/Developer/VIBR --config Release -j8
 ```
 

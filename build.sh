@@ -118,10 +118,11 @@ build_arch() {
   local a="$1" tree="$OUT" ok=1
   [ "$a" = "$HOST" ] || tree="$OUT-$a"            # this Mac's own architecture keeps the original build tree
   mkdir -p "$tree"
+  if [ -f "$tree/CMakeCache.txt" ] && ! grep -qx "CMAKE_HOME_DIRECTORY:INTERNAL=$SRC/config" "$tree/CMakeCache.txt"; then rm -f "$tree/CMakeCache.txt"; fi      # the tree was configured from another source folder (the repository root): configure again
   echo "==> configure  ($a: $SRC -> $tree)"
   local gen=()
   if [ "$IS_WIN" = 1 ] && [ -z "${CMAKE_GENERATOR:-}" ]; then gen=(-A x64); fi      # no -G: CMake picks the newest Visual Studio it finds (2022, 2026 ...); set CMAKE_GENERATOR to use another (e.g. Ninja)
-  if ! cmake -S "$SRC" -B "$tree" ${gen[@]+"${gen[@]}"} -DRL_ARCH="$a" -DRL_INSTALL_PLUGINS="$install" -DRELEASES_DIR="$OUT/releases/$a" > "$tree/configure.log" 2>&1; then
+  if ! cmake -S "$SRC/config" -B "$tree" ${gen[@]+"${gen[@]}"} -DRL_ARCH="$a" -DRL_INSTALL_PLUGINS="$install" -DRELEASES_DIR="$OUT/releases/$a" > "$tree/configure.log" 2>&1; then
     echo "${C_RED}Configure failed${C_OFF} (log: $tree/configure.log):"; grep -E "CMake Error|error" "$tree/configure.log" | head -20; exit 1
   fi
   [ "$configure_only" = 1 ] && return 0

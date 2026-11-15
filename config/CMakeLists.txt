@@ -1,6 +1,8 @@
 # VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
-# The main build file. The CMakeLists.txt in the repository root only includes it (cmake_minimum_required is there), so CMAKE_CURRENT_SOURCE_DIR and
-# CMAKE_SOURCE_DIR are the repository root and CMAKE_CURRENT_LIST_DIR is this config/ folder (with plugins.conf).
+# The main build file: configure with  cmake -S config -B ~/Developer/VIBR  (build.sh does this). The sources are in the folder above (RL_ROOT).
+
+cmake_minimum_required(VERSION 3.22)
+get_filename_component(RL_ROOT "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)      # the repository root: src/, assets/, tools/
 
 # JUCE's bundle step passes DEPENDS to add_custom_command(TARGET); newer CMake warns about it (harmless).
 # The default variable (not cmake_policy) reaches JUCE's own directory scope, which resets policies.
@@ -79,16 +81,16 @@ else()
 endif()
 
 # All build output lives in ONE place outside iCloud-synced folders: ~/Developer/VIBR
-#   - the CMake build tree (configure with: cmake -S . -B ~/Developer/VIBR)
+#   - the CMake build tree (configure with: cmake -S config -B ~/Developer/VIBR)
 #   - plus, after every build, the signed bundles collected in  <RELEASES_DIR> = <BUILD_OUTPUT_DIR>/releases/{new,vintage,experimental,mastering,multieffect,drumcomputer}/{VST3,AU,Standalone}
 set(BUILD_OUTPUT_DIR "$ENV{HOME}/Developer/VIBR" CACHE PATH "Collects the signed VST3 / AU / Standalone bundles of every plugin")
 if(NOT "${CMAKE_BINARY_DIR}" STREQUAL "${BUILD_OUTPUT_DIR}" AND NOT "${CMAKE_BINARY_DIR}" STREQUAL "${BUILD_OUTPUT_DIR}-${RL_ARCH}")
-  message(WARNING "Build tree is ${CMAKE_BINARY_DIR}; the project builds in ${BUILD_OUTPUT_DIR} (cmake -S . -B ${BUILD_OUTPUT_DIR}).")
+  message(WARNING "Build tree is ${CMAKE_BINARY_DIR}; the project builds in ${BUILD_OUTPUT_DIR} (cmake -S config -B ${BUILD_OUTPUT_DIR}).")
 endif()
 
 # The VIBR icon of every plugin bundle (VST3, AU, Standalone): each plugin passes it to juce_add_plugin as ICON_BIG.
 # assets/icon.svg is the logo (the same file as website/icon.svg); assets/icon.png is the 1024 x 1024 app icon rendered from it.
-set(RL_ICON "${CMAKE_SOURCE_DIR}/assets/icon.png")
+set(RL_ICON "${RL_ROOT}/assets/icon.png")
 
 # The signed VST3 / AU / Standalone bundles of every plugin are collected here after each build.
 # Layout: <RELEASES_DIR>/{new,vintage,experimental,mastering,multieffect,drumcomputer}/{VST3,AU,Standalone}, one RELEASES_DIR per architecture:
@@ -234,25 +236,25 @@ endfunction()
 #   src/common/        header-only code shared by several plugins (target rl_common)
 #   src/effects/<name>/ one folder per effect plugin (DD-1, DM-1, ... SD-3); each has its own CMakeLists.txt
 #   src/drumcomputer/  the TR-08 drum machine (src/drumcomputer/tr08; an instrument, not a pedal)
-add_subdirectory(src/common)
+add_subdirectory(${RL_ROOT}/src/common src/common)
 
 set(EFFECTS dd1 dm1 ce1 re1 re2 ds1 bf3 cs3 lm2 ph2 ge7 eh2 tr2  sl2 od2 oc5 bs1 mm1 sd1 sd3 sp1 rv1 mf1 hm2 gr1 sr1 vc1 pt1 dy1 sa1 su1 ml1 dl1 dn1 dv1 rh1 rb1 al1)
 # AX-1 (skeuomorphic UI test, src/effects/ax1 is gitignored): add ax1 to the list above to build it
 foreach(effect IN LISTS EFFECTS)
-  if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/src/effects/${effect}/CMakeLists.txt)     # a pedal whose folder was removed is skipped
-    add_subdirectory(src/effects/${effect})
+  if(EXISTS ${RL_ROOT}/src/effects/${effect}/CMakeLists.txt)     # a pedal whose folder was removed is skipped
+    add_subdirectory(${RL_ROOT}/src/effects/${effect} src/effects/${effect})
   endif()
 endforeach()
 
-#add_subdirectory(src/multieffect/me1)      # ME-1: self-contained, its own effect modules
-add_subdirectory(src/mastering/ms1)       # MS-1: the mastering suite (src/mastering)
-#add_subdirectory(src/drumcomputer/tr08)
+#add_subdirectory(${RL_ROOT}/src/multieffect/me1 src/multieffect/me1)      # ME-1: self-contained, its own effect modules
+add_subdirectory(${RL_ROOT}/src/mastering/ms1 src/mastering/ms1)       # MS-1: the mastering suite (src/mastering)
+#add_subdirectory(${RL_ROOT}/src/drumcomputer/tr08 src/drumcomputer/tr08)
 
 # Screenshot tools for the website (not part of the normal build): tools/screenshot
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tools/screenshot")      # tools/ is not in the repository (.gitignore): skipped when missing, e.g. on the GitHub runners
-  add_subdirectory(tools/screenshot)
+if(EXISTS "${RL_ROOT}/tools/screenshot")      # tools/ is not in the repository (.gitignore): skipped when missing, e.g. on the GitHub runners
+  add_subdirectory(${RL_ROOT}/tools/screenshot tools/screenshot)
 endif()
 # Unit test for the shared MIDI map (not part of the normal build): tools/midi-test
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tools/midi-test")
-  add_subdirectory(tools/midi-test)
+if(EXISTS "${RL_ROOT}/tools/midi-test")
+  add_subdirectory(${RL_ROOT}/tools/midi-test tools/midi-test)
 endif()
