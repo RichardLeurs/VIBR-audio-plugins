@@ -4,9 +4,10 @@
 #
 # Builds the plugins, one CPU architecture per build (smaller bundles than a universal binary). After each build the signed
 # VST3 / AU / Standalone bundles are collected in
-#   ~/Developer/VIBR/releases/<arch>/{new,vintage,experimental,mastering,multieffect,drumcomputer}/{VST3,AU,Standalone}     (<arch> = arm64 or x86_64; on Windows win64, without AU)
+#   ~/Developer/VIBR/releases/<arch>/{new,vintage,experimental,mastering,multieffect,drumcomputer}/{VST3,AU,Standalone}     (<arch> = arm64 or x86_64; on Windows win64, on Linux linux64 or linuxarm64, both without AU)
 # 
 # After each build every releases/<arch>/<group>/<format> folder is zipped to ~/Developer/VIBR/zip/VIBR-<group>-<format>-<arch>.zip (e.g. VIBR-new-AU-arm64.zip). The group of each plugin is set in plugins.conf.
+# Linux (linux64 = x86_64): run this script on a Linux machine with a C++20 compiler, CMake and the JUCE dependencies (see INSTALL.md): VST3 and Standalone, no AU.
 # Windows (win64): run this script on a Windows machine in Git Bash with Visual Studio 2022 (C++ desktop workload) and CMake installed. A Mac cannot build the Windows plugins.
 #
 #   ./build.sh                    build everything for this Mac's architecture (build tree ~/Developer/VIBR)
@@ -24,8 +25,8 @@ set -euo pipefail
 SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OUT="$HOME/Developer/VIBR"
 HOST="$(uname -m)"
-IS_WIN=0
-case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) IS_WIN=1; HOST="win64" ;; esac        # Git Bash on Windows
+IS_WIN=0 IS_LINUX=0
+case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) IS_WIN=1; HOST="win64" ;;   Linux*) IS_LINUX=1; [ "$HOST" = x86_64 ] && HOST="linux64" || HOST="linuxarm64" ;; esac        # Git Bash on Windows / Linux (linux64 = x86_64, linuxarm64 = aarch64)
 JOBS="${JOBS:-8}"
 
 clean=0 configure_only=0 zip=1 install=OFF arch="$HOST" targets=()
@@ -42,9 +43,11 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
-case "$arch" in arm64|x86_64|all|win64) ;; *) echo "--arch must be arm64, x86_64, all or win64" >&2; exit 2 ;; esac
+case "$arch" in arm64|x86_64|all|win64|linux64|linuxarm64) ;; *) echo "--arch must be arm64, x86_64, all, win64 or linux64" >&2; exit 2 ;; esac
 if [ "$arch" = win64 ] && [ "$IS_WIN" = 0 ]; then echo "--arch win64 must be run on Windows (Git Bash with Visual Studio 2022 and CMake): a Mac cannot build the Windows plugins" >&2; exit 2; fi
 if [ "$arch" != win64 ] && [ "$IS_WIN" = 1 ]; then echo "on Windows only --arch win64 works" >&2; exit 2; fi
+if [ "$IS_LINUX" = 1 ] && [ "$arch" != "$HOST" ]; then echo "on Linux only --arch $HOST works" >&2; exit 2; fi
+if [ "$IS_LINUX" = 0 ] && [[ "$arch" == linux* ]]; then echo "--arch $arch must be run on Linux" >&2; exit 2; fi
 
 build_arch() {
   local a="$1" tree="$OUT"
@@ -74,7 +77,7 @@ build_arch() {
         [ -d "$d" ] || continue
         cp "$SRC/INSTALL.md" "$d/INSTALL.md"; cp "$SRC/LICENSE" "$d/LICENSE"      # every zip holds the install notes and the license (INSTALL.md links to LICENSE)
         rm -f "$z"
-        if [ "$IS_WIN" = 1 ]; then (cd "$OUT/releases/$a/$g" && cmake -E tar cf "$z" --format=zip "$f")      # the zip holds the folder VST3 / Standalone, as on the Mac
+        if [ "$IS_WIN" = 1 ] || [ "$IS_LINUX" = 1 ]; then (cd "$OUT/releases/$a/$g" && cmake -E tar cf "$z" --format=zip "$f")      # the zip holds the folder VST3 / Standalone, as on the Mac (Windows and Linux)
         else ditto -c -k --keepParent "$d" "$z"; fi          # ditto keeps the code signature and symlinks of the bundles intact
       done
     done

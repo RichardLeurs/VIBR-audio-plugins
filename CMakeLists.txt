@@ -24,6 +24,13 @@ endif()
 set(RL_ARCH "" CACHE STRING "CPU architecture of this build: arm64 or x86_64 on a Mac, win64 on Windows (empty = this machine's)")
 if(CMAKE_HOST_WIN32)
   set(_host_arch "win64")
+elseif(CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux")        # linux64 (x86_64) or linuxarm64 (aarch64); build.sh --arch linux64 runs on a Linux machine
+  execute_process(COMMAND uname -m OUTPUT_VARIABLE _uname_m OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+  if(_uname_m STREQUAL "x86_64")
+    set(_host_arch "linux64")
+  else()
+    set(_host_arch "linuxarm64")
+  endif()
 else()
   execute_process(COMMAND uname -m OUTPUT_VARIABLE _host_arch OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
 endif()
@@ -62,7 +69,7 @@ FetchContent_MakeAvailable(JUCE)
 # By default nothing is installed: the bundles are only collected in the releases folder. ./build.sh --install (RL_INSTALL_PLUGINS=ON)
 # also installs the VST3 / AU of this Mac's architecture in ~/Library/Audio/Plug-Ins (needed to run auval or to use them in a DAW).
 option(RL_INSTALL_PLUGINS "Install the built VST3 / AU in ~/Library/Audio/Plug-Ins" OFF)
-if(RL_INSTALL_PLUGINS AND RL_ARCH STREQUAL _host_arch AND NOT WIN32)        # Windows builds are only collected in the releases folder (win64), never installed
+if(RL_INSTALL_PLUGINS AND RL_ARCH STREQUAL _host_arch AND APPLE)        # Windows and Linux builds are only collected in the releases folder, never installed
   set(RL_INSTALL ON)
 else()
   set(RL_INSTALL OFF)
@@ -189,9 +196,9 @@ function(copy_vst3_after_build plugin)
         COMMENT "Installing signed ${plugin} AU"
         VERBATIM)
     endif()
-  elseif(WIN32)
-    # Windows: the VST3 is a folder (<name>.vst3/Contents/x86_64-win/<name>.vst3) and the standalone a single .exe; both are collected in RELEASES_DIR/<group>/{VST3,Standalone}
-    # (RELEASES_DIR = <BUILD_OUTPUT_DIR>/releases/win64). There is no AU on Windows. The bundles are not code-signed.
+  else()
+    # Windows and Linux: the VST3 is a folder (<name>.vst3/Contents/x86_64-win/<name>.vst3 on Windows, .../x86_64-linux/<name>.so on Linux) and the standalone a single .exe; both are collected in RELEASES_DIR/<group>/{VST3,Standalone}
+    # (RELEASES_DIR = <BUILD_OUTPUT_DIR>/releases/win64). There is no AU on Windows or Linux. The bundles are not code-signed.
     if(TARGET ${plugin}_VST3)
       add_custom_command(TARGET ${plugin}_VST3 POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory "${_rel}/VST3"

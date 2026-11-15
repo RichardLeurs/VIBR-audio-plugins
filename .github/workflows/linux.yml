@@ -1,0 +1,54 @@
+name: Linux build
+
+# VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
+
+# Builds all VIBR plugins (VST3 + Standalone) for 64-bit Linux (x86_64) with ./build.sh --arch linux64, using the groups in plugins.conf,
+# and attaches the zips (VIBR-<group>-<format>-linux64.zip) to the workflow run. Start it from the Actions tab, or push a tag like v1.0.
+# A tag push also uploads the zips to the GitHub release of that tag. There is no AU on Linux. The Linux build is not tested by the project.
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  linux64:
+    runs-on: ubuntu-22.04      # old enough that the plugins also load on older distributions (glibc)
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install the JUCE dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake git zip \
+            libasound2-dev libjack-jackd2-dev libfreetype-dev libfontconfig1-dev \
+            libx11-dev libxcomposite-dev libxcursor-dev libxext-dev libxinerama-dev libxrandr-dev libxrender-dev \
+            libgl1-mesa-dev libcurl4-openssl-dev
+
+      - name: Build (VST3 + Standalone)
+        env:
+          JOBS: 4
+        run: ./build.sh --arch linux64
+
+      - name: List zips
+        run: ls -l ~/Developer/VIBR/zip
+
+      - name: Collect zips
+        run: |
+          mkdir -p dist
+          cp ~/Developer/VIBR/zip/*.zip dist/
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: vibr-linux64
+          path: dist/*.zip
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.zip
