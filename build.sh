@@ -72,7 +72,7 @@ build_arch() {
       for f in VST3 AU Standalone; do                # (win64 has no AU folder: it is skipped)
         d="$OUT/releases/$a/$g/$f"; z="$OUT/zip/VIBR-$g-$f-$a.zip"
         [ -d "$d" ] || continue
-        cp "$SRC/INSTALL.md" "$d/INSTALL.md"; cp "$SRC/LICENSE" "$d/LICENSE.md"; cp "$SRC/LICENSE" "$d/LICENSE"      # every zip holds the install notes and the license (INSTALL.md links to LICENSE)
+        cp "$SRC/INSTALL.md" "$d/INSTALL.md"; cp "$SRC/LICENSE" "$d/LICENSE"      # every zip holds the install notes and the license (INSTALL.md links to LICENSE)
         rm -f "$z"
         if [ "$IS_WIN" = 1 ]; then (cd "$OUT/releases/$a/$g" && cmake -E tar cf "$z" --format=zip "$f")      # the zip holds the folder VST3 / Standalone, as on the Mac
         else ditto -c -k --keepParent "$d" "$z"; fi          # ditto keeps the code signature and symlinks of the bundles intact
