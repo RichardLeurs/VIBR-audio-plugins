@@ -1,6 +1,6 @@
 # VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
-
-cmake_minimum_required(VERSION 3.22)
+# The main build file. The CMakeLists.txt in the repository root only includes it (cmake_minimum_required is there), so CMAKE_CURRENT_SOURCE_DIR and
+# CMAKE_SOURCE_DIR are the repository root and CMAKE_CURRENT_LIST_DIR is this config/ folder (with plugins.conf).
 
 # JUCE's bundle step passes DEPENDS to add_custom_command(TARGET); newer CMake warns about it (harmless).
 # The default variable (not cmake_policy) reaches JUCE's own directory scope, which resets policies.
@@ -249,10 +249,10 @@ add_subdirectory(src/mastering/ms1)       # MS-1: the mastering suite (src/maste
 #add_subdirectory(src/drumcomputer/tr08)
 
 # Screenshot tools for the website (not part of the normal build): tools/screenshot
-if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/tools/screenshot")      # tools/ is not in the repository (.gitignore): skipped when missing, e.g. on the GitHub runners
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tools/screenshot")      # tools/ is not in the repository (.gitignore): skipped when missing, e.g. on the GitHub runners
   add_subdirectory(tools/screenshot)
 endif()
 # Unit test for the shared MIDI map (not part of the normal build): tools/midi-test
-if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/tools/midi-test")
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tools/midi-test")
   add_subdirectory(tools/midi-test)
 endif()

@@ -2,7 +2,7 @@ name: Linux build
 
 # VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
 
-# Builds all VIBR plugins (VST3 + Standalone) for 64-bit Linux (x86_64) with ./build.sh --arch linux64, using the groups in plugins.conf,
+# Builds all VIBR plugins (VST3 + Standalone) for 64-bit Linux (x86_64) with ./build.sh --arch linux64, using the groups in config/plugins.conf,
 # and attaches the zips (VIBR-<group>-<format>-linux64.zip) to the workflow run. Start it from the Actions tab, or push a tag like v1.0.
 # A tag push also uploads the zips to the GitHub release of that tag. There is no AU on Linux. The Linux build is not tested by the project.
 
