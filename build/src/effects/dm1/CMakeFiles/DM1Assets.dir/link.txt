@@ -1,2 +1,0 @@
-/usr/bin/ar qc libDM1Assets.a CMakeFiles/DM1Assets.dir/juce_binarydata_DM1Assets/JuceLibraryCode/BinaryData1.cpp.o
-/usr/bin/ranlib libDM1Assets.a

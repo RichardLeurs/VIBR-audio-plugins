@@ -1,2 +1,0 @@
-/usr/bin/ar qc libCE1Assets.a CMakeFiles/CE1Assets.dir/juce_binarydata_CE1Assets/JuceLibraryCode/BinaryData1.cpp.o
-/usr/bin/ranlib libCE1Assets.a
