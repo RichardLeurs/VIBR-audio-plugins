@@ -59,13 +59,16 @@ FetchContent_MakeAvailable(JUCE)
 
 # A build for the other architecture must not be installed on this Mac: JUCE's own post-build copy would overwrite the plugins of
 # this Mac's architecture in ~/Library/Audio/Plug-Ins, so it is redirected into the build tree, and the install / share steps below are skipped.
-if(RL_ARCH STREQUAL _host_arch AND NOT WIN32)        # Windows builds are only collected in the releases folder (win64), never installed
+# By default nothing is installed: the bundles are only collected in the releases folder. ./build.sh --install (RL_INSTALL_PLUGINS=ON)
+# also installs the VST3 / AU of this Mac's architecture in ~/Library/Audio/Plug-Ins (needed to run auval or to use them in a DAW).
+option(RL_INSTALL_PLUGINS "Install the built VST3 / AU in ~/Library/Audio/Plug-Ins" OFF)
+if(RL_INSTALL_PLUGINS AND RL_ARCH STREQUAL _host_arch AND NOT WIN32)        # Windows builds are only collected in the releases folder (win64), never installed
   set(RL_INSTALL ON)
 else()
   set(RL_INSTALL OFF)
   set_property(GLOBAL PROPERTY JUCE_VST3_COPY_DIR "${CMAKE_BINARY_DIR}/not-installed/VST3")
   set_property(GLOBAL PROPERTY JUCE_AU_COPY_DIR   "${CMAKE_BINARY_DIR}/not-installed/Components")
-  message(STATUS "Building for ${RL_ARCH} on a ${_host_arch} Mac: the bundles are collected in the releases folder only, not installed")
+  message(STATUS "Not installing the plugins: the bundles are collected in the releases folder only (build.sh --install installs them)")
 endif()
 
 # All build output lives in ONE place outside iCloud-synced folders: ~/Developer/VIBR

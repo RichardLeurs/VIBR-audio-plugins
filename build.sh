@@ -17,6 +17,7 @@
 #   ./build.sh --clean [names]    rebuild from scratch (needed to re-run the collect / copy steps when nothing changed)
 #   ./build.sh --configure        only (re)configure
 #   ./build.sh --no-zip           skip the zip step
+#   ./build.sh --install          also install the VST3 / AU in ~/Library/Audio/Plug-Ins (default: only ~/Developer/VIBR/releases; auval needs the install)
 #   JOBS=4 ./build.sh             number of parallel jobs (default 8)
 set -euo pipefail
 
@@ -27,14 +28,15 @@ IS_WIN=0
 case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) IS_WIN=1; HOST="win64" ;; esac        # Git Bash on Windows
 JOBS="${JOBS:-8}"
 
-clean=0 configure_only=0 zip=1 arch="$HOST" targets=()
+clean=0 configure_only=0 zip=1 install=OFF arch="$HOST" targets=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --clean)     clean=1 ;;
     --configure) configure_only=1 ;;
     --no-zip)    zip=0 ;;
+    --install)   install=ON ;;
     --arch)      shift; arch="${1:-}" ;;
-    -h|--help)   sed -n '3,18p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help)   sed -n '3,19p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*)          echo "unknown option: $1" >&2; exit 2 ;;
     *)           targets+=("${1%_All}_All") ;;      # DD-1 or DD-1_All
   esac
@@ -51,7 +53,7 @@ build_arch() {
   echo "==> configure  ($a: $SRC -> $tree)"
   local gen=()
   if [ "$IS_WIN" = 1 ] && [ -z "${CMAKE_GENERATOR:-}" ]; then gen=(-A x64); fi      # no -G: CMake picks the newest Visual Studio it finds (2022, 2026 ...); set CMAKE_GENERATOR to use another (e.g. Ninja)
-  cmake -S "$SRC" -B "$tree" ${gen[@]+"${gen[@]}"} -DRL_ARCH="$a" -DRELEASES_DIR="$OUT/releases/$a"
+  cmake -S "$SRC" -B "$tree" ${gen[@]+"${gen[@]}"} -DRL_ARCH="$a" -DRL_INSTALL_PLUGINS="$install" -DRELEASES_DIR="$OUT/releases/$a"
   [ "$configure_only" = 1 ] && return 0
 
   local args=(--build "$tree" --config Release -j "$JOBS")
