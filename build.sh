@@ -10,7 +10,7 @@
 # Linux (linux64 = x86_64): run this script on a Linux machine with a C++20 compiler, CMake and the JUCE dependencies (see INSTALL.md): VST3 and Standalone, no AU.
 # Windows (win64): run this script on a Windows machine in Git Bash with Visual Studio 2022 (C++ desktop workload) and CMake installed. A Mac cannot build the Windows plugins.
 #
-#   ./build.sh                    build everything for this Mac's architecture (build tree ~/Developer/VIBR)
+#   ./build.sh                    build everything for this ARM architecture (build tree ~/Developer/VIBR)
 #   ./build.sh --arch x86_64      build everything for Intel (build tree ~/Developer/VIBR-x86_64)
 #   ./build.sh --arch all         arm64 and x86_64 one after the other
 #   ./build.sh --arch win64       (on Windows) build everything for 64-bit Windows: VST3 and Standalone in ~/Developer/VIBR/releases/win64 (build tree ~/Developer/VIBR-win64)
@@ -48,7 +48,7 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
-case "$arch" in arm64|x86_64|all|win64|linux64|linuxarm64) ;; *) echo "--arch must be arm64, x86_64, all, win64 or linux64" >&2; exit 2 ;; esac
+case "$arch" in arm64|x86_64|all|win64|linux64|linuxarm64) ;; *) echo "--arch must be arm64, x86_64, all, win64, linux64 or linuxarm64" >&2; exit 2 ;; esac
 if [ "$arch" = win64 ] && [ "$IS_WIN" = 0 ]; then echo "--arch win64 must be run on Windows (Git Bash with Visual Studio 2022 and CMake): a Mac cannot build the Windows plugins" >&2; exit 2; fi
 if [ "$arch" != win64 ] && [ "$IS_WIN" = 1 ]; then echo "on Windows only --arch win64 works" >&2; exit 2; fi
 if [ "$IS_LINUX" = 1 ] && [ "$arch" != "$HOST" ]; then echo "on Linux only --arch $HOST works" >&2; exit 2; fi

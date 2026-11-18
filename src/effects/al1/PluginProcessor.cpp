@@ -197,7 +197,7 @@ bool AL1AudioProcessor::loadIrData (int slot, const juce::MemoryBlock& data, con
     const double seconds = (double) reader->lengthInSamples / reader->sampleRate;
     if (seconds > (double) kMaxIrSeconds + 0.05) { if (error) *error = "The impulse response is longer than 3 seconds."; return false; }
 
-    const int len = (int) juce::jmin<juce::int64> (reader->lengthInSamples, 16384);
+    const int len = (int) std::min<juce::int64> (reader->lengthInSamples, 16384);
     juce::AudioBuffer<float> b ((int) juce::jmax<unsigned> (1u, reader->numChannels), len);
     reader->read (&b, 0, len, 0, true, true);
     std::array<float, kCurvePoints> curve {};
