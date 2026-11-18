@@ -18,20 +18,20 @@
 #include <vector>
 #include "../od2/OD2DSP.h"
 #include "../ds1/DS1DSP.h"
-#include "../sa1/SaturatorEngine.h"
-#include "../hm2/HarmonicEngine.h"
+#include "SaturatorEngine.h"
+#include "HarmonicEngine.h"
 
 namespace dv1
 {
-constexpr int kNumModes = 6, kNumOdTypes = od2::kNumTypes;
-enum Mode { Overdrive, Distortion, Tube, Tape, Fold, Crush };
+constexpr int kNumModes = 8, kNumOdTypes = od2::kNumTypes;
+enum Mode { Overdrive, Distortion, Tube, Tape, Fold, Crush, Chain, Harmonics };
 
 inline int clampMode (int m) { return std::clamp (m, 0, kNumModes - 1); }
-inline const char* modeName (int m) { static const char* n[kNumModes] = { "OVERDRIVE", "DISTORTION", "TUBE", "TAPE", "FOLD", "CRUSH" }; return n[clampMode (m)]; }
-inline int variantCount (int mode) { return mode == Overdrive ? 0 : 2; }
+inline const char* modeName (int m) { static const char* n[kNumModes] = { "OVERDRIVE", "DISTORTION", "TUBE", "TAPE", "FOLD", "CRUSH", "CHAIN", "HARMONICS" }; return n[clampMode (m)]; }
+inline int variantCount (int mode) { return mode == Overdrive || mode == Chain || mode == Harmonics ? 0 : 2; }
 inline const char* variantName (int mode, int v)
 {
-    static const char* n[kNumModes][2] = { { "", "" }, { "CLASSIC", "MODERN" }, { "SINGLE", "PUSH-PULL" }, { "NEW", "AGED" }, { "TRANSISTOR", "FOLDBACK" }, { "HARD", "SMOOTH" } };
+    static const char* n[kNumModes][2] = { { "", "" }, { "CLASSIC", "MODERN" }, { "SINGLE", "PUSH-PULL" }, { "NEW", "AGED" }, { "TRANSISTOR", "FOLDBACK" }, { "HARD", "SMOOTH" }, { "", "" }, { "", "" } };
     return n[clampMode (mode)][std::clamp (v, 0, 1)];
 }
 inline const char* odTypeName (int t) { return od2::typeDef (t).name; }
@@ -52,6 +52,12 @@ struct Params
     float warmth = 0.5f;                                   // TAPE: 0 .. 1
     float fold = 0.5f, symmetry = 1.0f;                    // FOLD: 0 .. 1
     float bits = 8.0f, rate = 12000.0f, crushMix = 1.0f;   // CRUSH: 1 .. 16, Hz, 0 .. 1
+    // CHAIN (the SA-1: BOOST -> TUBE -> TAPE -> CRUSH, each stage with its switch; BOOST on / gain are the shared boostOn / boostDb)
+    float boostTone = 0.5f, tubeDrive = 0.4f, tapeDrive = 0.4f;     // 0 .. 1
+    bool tubeOn = true, tapeOn = true, crushOn = false;
+    // HARMONICS (the HM-2: a saturator per band split at FOCUS, odd / even bias, octave up, sub octave; DRIVE and TONE are the shared drive / tone knobs)
+    int character = 0;                                     // 0 tube, 1 tape, 2 transistor, 3 fold
+    float oddEven = 0.5f, octave = 0.0f, sub = 0.0f, focus = 0.4f, tilt = 0.5f;     // 0 .. 1
 };
 
 // the pre-gain of the drive knob in each mode (linear), used by the engine and by the display
@@ -90,6 +96,18 @@ inline float staticCurve (const Params& p, float x)
             const float u = x * g * (c == hm2::Fold ? 0.25f + p.fold * 1.5f : 0.25f), bias = (1.0f - p.symmetry) * 0.8f;
             return hm2::saturateBiased (u, c, bias);
         }
+        case Chain:
+        {
+            sa1::Params sp;                                    // the chain without filters; the BOOST gain is applied by the caller (the editor's `boost`)
+            sp.boostOn = false; sp.tubeOn = p.tubeOn; sp.tapeOn = p.tapeOn; sp.crushOn = p.crushOn;
+            sp.tubeDrive = p.tubeDrive; sp.tubeBias = p.tubeBias; sp.tapeDrive = p.tapeDrive; sp.bits = p.bits; sp.crushMix = p.crushMix;
+            return sa1::shape (x, sp);
+        }
+        case Harmonics:                                         // the saturator of the character only (the band split, the octave and the sub are not part of the curve)
+        {
+            hm2::Params hp; hp.oddEven = p.oddEven;
+            return hm2::saturateBiased (x * dbToGain (hm2::driveDb (p.drive)), std::clamp (p.character, 0, hm2::kNumCharacters - 1), hm2::biasOf (hp));
+        }
         default: return sa1::crushCurve (x * g, p.bits);
     }
 }
@@ -109,6 +127,8 @@ public:
         os->initProcessing ((size_t) kChunk);
         lat = (int) std::lround (os->getLatencyInSamples());
         for (auto& d : dryDelay) d.assign (8192, 0.0f);
+        for (auto& d : chainDelay) d.assign (8192, 0.0f);
+        chain.prepare (fs); harm.prepare (fs);
         reset();
     }
 
@@ -116,6 +136,8 @@ public:
     {
         if (os) os->reset();
         for (auto& d : dryDelay) std::fill (d.begin(), d.end(), 0.0f);
+        for (auto& d : chainDelay) std::fill (d.begin(), d.end(), 0.0f);
+        chain.reset(); harm.reset(); cpos = 0;
         wpos = 0;
         for (auto& c : ch) c.reset();
         gS = 1.0f; boostS = 1.0f; autoGain = 1.0f; inPow = outPow = 1.0e-6f; fade = 1.0f; lastMode = lastVariant = lastOdType = -1;
@@ -146,6 +168,7 @@ private:
         if (changed)
         {
             if (lastMode >= 0) { fade = 0.0f; for (auto& c : ch) c.reset(); }
+            if (p.mode == Chain || p.mode == Harmonics) { chain.reset(); harm.reset(); for (auto& d : chainDelay) std::fill (d.begin(), d.end(), 0.0f); cpos = 0; }
             for (auto& c : ch)
             {
                 c.od.prepare (osRate); c.ds.prepare (osRate); c.dsTone.prepare (fs);
@@ -184,7 +207,7 @@ private:
 
         // pre: BOOST and, in OVERDRIVE, the noise gate (host rate)
         const float sm = 1.0f - std::exp (-1.0f / (0.02f * fs));
-        const float boostT = p.boostOn ? dbToGain (p.boostDb) : 1.0f;
+        const float boostT = p.boostOn && mode != Chain ? dbToGain (p.boostDb) : 1.0f;      // CHAIN has its own BOOST stage (with TONE)
         for (int i = 0; i < n; ++i)
         {
             boostS += (boostT - boostS) * sm;
@@ -201,9 +224,32 @@ private:
         const float smOs = 1.0f - std::exp (-1.0f / (0.03f * fs * 4.0f));
         if (mode == Distortion) for (auto& c : ch) c.ds.opamp.setBandwidth (gT);
         for (int i = 0; i < (n << 2); ++i) { gS += (gT - gS) * smOs; gOs[i] = gS; }
+        const bool hosted = mode == Chain || mode == Harmonics;       // CHAIN and HARMONICS run the SA-1 / HM-2 engine at the host rate (no oversampling)
+        if (mode == Harmonics)
+        {
+            hm2::Params hp; hp.character = std::clamp (p.character, 0, hm2::kNumCharacters - 1); hp.drive = p.drive; hp.oddEven = p.oddEven; hp.octave = p.octave; hp.sub = p.sub;
+            hp.focus = p.focus; hp.tilt = p.tilt; hp.tone = p.tone;
+            harm.process (io[0], io[1], n, hp, 1.0f, 1.0f);
+        }
+        if (mode == Chain)
+        {
+            sa1::Params sp;                                    // the SA-1 chain at the host rate (as the SA-1 plugin), then delayed to line up with the dry path and the other modes
+            sp.boostOn = p.boostOn; sp.boostGain = p.boostDb; sp.boostTone = p.boostTone; sp.tubeOn = p.tubeOn; sp.tubeDrive = p.tubeDrive; sp.tubeBias = p.tubeBias;
+            sp.tapeOn = p.tapeOn; sp.tapeDrive = p.tapeDrive; sp.tapeWarmth = p.warmth; sp.crushOn = p.crushOn; sp.bits = p.bits; sp.rate = p.rate; sp.crushMix = p.crushMix; sp.mix = 1.0f;
+            chain.process (io[0], io[1], n, sp, 1.0f);
+        }
+        if (hosted)
+        {
+            for (int c = 0; c < 2; ++c)
+                for (int i = 0; i < n; ++i)
+                {
+                    auto& b = chainDelay[c]; b[(size_t) ((cpos + i) & 8191)] = io[c][i]; io[c][i] = b[(size_t) ((cpos + i - lat) & 8191)];
+                }
+            cpos += n;
+        }
         juce::dsp::AudioBlock<float> block (io, 2, (size_t) n);
-        auto up = os->processSamplesUp (block);
-        if (mode != Crush)
+        auto up = hosted ? juce::dsp::AudioBlock<float>() : os->processSamplesUp (block);
+        if (mode != Crush && ! hosted)
         {
             const float bias = (1.0f - p.symmetry) * 0.8f;
             for (int c = 0; c < 2; ++c)
@@ -238,7 +284,7 @@ private:
                 }
             }
         }
-        os->processSamplesDown (block);
+        if (! hosted) os->processSamplesDown (block);
 
         // post (host rate): tone, tape filters, crush, level trim, MIX, AUTO LEVEL, LEVEL
         const float trim = mode == Overdrive ? dbToGain (od2::typeDef (p.odType).trimDb) : mode == Distortion ? ds1::levelGain (0.5f) : mode == Fold ? 0.9f : 1.0f;
@@ -260,6 +306,7 @@ private:
                 {
                     case Overdrive: y = s.stack.process (y); break;
                     case Distortion: y = s.dsTone.process (y, p.tone); break;
+                    case Chain: case Harmonics: break;
                     case Tape:
                     {
                         const float lp = s.bumpLp.lp (y);
@@ -311,7 +358,10 @@ private:
     unsigned seed = 12345u;
     std::unique_ptr<juce::dsp::Oversampling<float>> os;
     Chan ch[2];
-    std::vector<float> dryDelay[2];
+    std::vector<float> dryDelay[2], chainDelay[2];
+    sa1::Engine chain;
+    hm2::Engine harm;
+    int cpos = 0;
     float dry[2][kChunk] {};
     float gOs[kChunk * 4] {};
 };

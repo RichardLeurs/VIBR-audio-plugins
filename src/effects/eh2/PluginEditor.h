@@ -2,16 +2,13 @@
 #pragma once
 
 #include "PluginProcessor.h"
+#include "ui/PedalLook.h"
+#include "ui/PedalEditor.h"
 
 // Black knurled knob with a raised cap and a white pointer (same as the DM-1), drawn over the scales printed in the background.
-class EH2LookAndFeel : public juce::LookAndFeel_V4
-{
-public:
-    void drawRotarySlider (juce::Graphics&, int x, int y, int w, int h, float pos,
-                           float startAngle, float endAngle, juce::Slider&) override;
-};
+using EH2LookAndFeel = vibr::ui::PedalKnobLookAndFeel;
 
-class EH2AudioProcessorEditor : public juce::AudioProcessorEditor,
+class EH2AudioProcessorEditor : public vibr::ui::PedalEditor,
                                 private juce::Timer
 {
 public:
@@ -33,8 +30,6 @@ private:
 
     EH2AudioProcessor& proc;
     EH2LookAndFeel laf;
-    juce::ComponentBoundsConstrainer constrainer;
-    juce::Image background;
     Knob mix, freq, sens;
     bool lastOn = true;
     bool lastSens = false;

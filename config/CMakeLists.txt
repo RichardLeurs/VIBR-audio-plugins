@@ -95,6 +95,7 @@ set(RL_ICON "${RL_ROOT}/assets/icon.png")
 # The signed VST3 / AU / Standalone bundles of every plugin are collected here after each build.
 # Layout: <RELEASES_DIR>/{new,vintage,experimental,mastering,multieffect,drumcomputer}/{VST3,AU,Standalone}, one RELEASES_DIR per architecture:
 #   ~/Developer/VIBR/releases/arm64  and  ~/Developer/VIBR/releases/x86_64
+set(TEST_DIR "${BUILD_OUTPUT_DIR}/test/${RL_ARCH}" CACHE PATH "Folder that collects the bundles of the plugins marked 'test' in plugins.conf (<TEST_DIR>/<group>/{VST3,AU,Standalone}); never zipped, never part of a release or the website")
 set(RELEASES_DIR "${BUILD_OUTPUT_DIR}/releases/${RL_ARCH}" CACHE PATH "Folder that collects the signed bundles of this architecture, split in effects / drumcomputer / multieffect (each with VST3, AU and Standalone subfolders)")
 
 # Optional extra folders that receive a copy of every built VST3 (a ;-separated list). Off by default.
@@ -122,19 +123,27 @@ endif()
 #   1. re-signs the VST3 / AU / Standalone bundles (with SIGN_IDENTITY, ad-hoc if missing), so the signature covers the whole bundle - hosts such as
 #      Ableton can reject the bare linker signature JUCE leaves behind;
 #   2. re-installs the signed VST3 and AU into ~/Library/Audio/Plug-Ins (JUCE's own install step runs before signing);
-#   3. collects the signed VST3 / AU / Standalone bundles in RELEASES_DIR/<group>/{VST3,AU,Standalone}, where <group> is the
+#   3. collects the signed VST3 / AU / Standalone bundles in RELEASES_DIR/<group>/{VST3,AU,Standalone} (a target of its own that runs on every build, also when nothing was
+#      recompiled), where <group> is the
 #      group listed in plugins.conf (new, vintage, experimental, mastering, multieffect or drumcomputer);
 #   4. copies the signed VST3 into each folder in VST_COPY_DIRS (none by default).
-# plugins.conf: "<name> <group>" per line, stored as RL_GROUP_<name without dash, lower case>
+# plugins.conf: "<name> <group> [test]" per line, stored as RL_GROUP_<name without dash, lower case> (and RL_TEST_<...> = ON with the word test).
+# A plugin marked test is collected in TEST_DIR/<group>/{VST3,AU,Standalone} (<BUILD_OUTPUT_DIR>/test/<arch>) instead of RELEASES_DIR, so build.sh does not zip it
+# and it stays out of the releases and the website.
 file(STRINGS "${CMAKE_CURRENT_LIST_DIR}/plugins.conf" _conf_lines)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_LIST_DIR}/plugins.conf")
 foreach(_l IN LISTS _conf_lines)
-  if(_l MATCHES "^[ \t]*([A-Za-z0-9-]+)[ \t]+(new|vintage|experimental|mastering|multieffect|drumcomputer)[ \t]*$")
+  if(_l MATCHES "^[ \t]*([A-Za-z0-9-]+)[ \t]+(new|vintage|experimental|mastering|multieffect|drumcomputer)([ \t]+test)?[ \t]*(#.*)?$")
     string(TOLOWER "${CMAKE_MATCH_1}" _n)
     string(REPLACE "-" "" _n "${_n}")
     set(RL_GROUP_${_n} "${CMAKE_MATCH_2}")
+    if(CMAKE_MATCH_3)
+      set(RL_TEST_${_n} ON)
+    else()
+      unset(RL_TEST_${_n})
+    endif()
   elseif(NOT _l MATCHES "^[ \t]*(#.*)?$")
-    message(FATAL_ERROR "plugins.conf: cannot read the line '${_l}' (use '<name> <group>' with group new, vintage, experimental, mastering, multieffect or drumcomputer)")
+    message(FATAL_ERROR "plugins.conf: cannot read the line '${_l}' (use '<name> <group>' or '<name> <group> test' with group new, vintage, experimental, mastering, multieffect or drumcomputer)")
   endif()
 endforeach()
 
@@ -146,7 +155,12 @@ function(copy_vst3_after_build plugin)
     message(FATAL_ERROR "plugins.conf has no group for '${_key}' (add a line like '${_key}  new')")
   endif()
   set(_group "${RL_GROUP_${_key}}")
-  set(_rel "${RELEASES_DIR}/${_group}")
+  if(RL_TEST_${_key})                                  # marked test in plugins.conf: collected in <BUILD_OUTPUT_DIR>/test, not in the releases
+    set(_rel "${TEST_DIR}/${_group}")
+    message(STATUS "${plugin}: test build, collected in ${_rel}")
+  else()
+    set(_rel "${RELEASES_DIR}/${_group}")
+  endif()
   if(APPLE)
     foreach(fmt VST3 AU Standalone)
       if(TARGET ${plugin}_${fmt})
@@ -159,15 +173,20 @@ function(copy_vst3_after_build plugin)
       endif()
     endforeach()
 
-    # collect the signed bundles in RELEASES_DIR/<group>/<format> (runs after the signing step above)
+    # collect the signed bundles in RELEASES_DIR/<group>/<format>. This is a target of its own (always run, part of ALL and of <plugin>_All), not a POST_BUILD step of the
+    # bundle: a build that finds nothing to compile (the bundles are up to date) must still fill an empty or cleaned releases folder.
     foreach(fmt VST3 AU Standalone)
       if(TARGET ${plugin}_${fmt})
-        add_custom_command(TARGET ${plugin}_${fmt} POST_BUILD
+        add_custom_target(${plugin}_${fmt}_collect ALL
           COMMAND ${CMAKE_COMMAND} -E make_directory "${_rel}/${fmt}"
           COMMAND ${CMAKE_COMMAND} -E remove_directory "${_rel}/${fmt}/$<TARGET_BUNDLE_DIR_NAME:${plugin}_${fmt}>"
           COMMAND ${CMAKE_COMMAND} -E copy_directory "$<TARGET_BUNDLE_DIR:${plugin}_${fmt}>" "${_rel}/${fmt}/$<TARGET_BUNDLE_DIR_NAME:${plugin}_${fmt}>"
+          DEPENDS ${plugin}_${fmt}
           COMMENT "Collecting ${plugin} ${fmt} in ${_rel}/${fmt}"
           VERBATIM)
+        if(TARGET ${plugin}_All)
+          add_dependencies(${plugin}_All ${plugin}_${fmt}_collect)
+        endif()
       endif()
     endforeach()
 
@@ -202,19 +221,27 @@ function(copy_vst3_after_build plugin)
     # Windows and Linux: the VST3 is a folder (<name>.vst3/Contents/x86_64-win/<name>.vst3 on Windows, .../x86_64-linux/<name>.so on Linux) and the standalone a single .exe; both are collected in RELEASES_DIR/<group>/{VST3,Standalone}
     # (RELEASES_DIR = <BUILD_OUTPUT_DIR>/releases/win64). There is no AU on Windows or Linux. The bundles are not code-signed.
     if(TARGET ${plugin}_VST3)
-      add_custom_command(TARGET ${plugin}_VST3 POST_BUILD
+      add_custom_target(${plugin}_VST3_collect ALL
         COMMAND ${CMAKE_COMMAND} -E make_directory "${_rel}/VST3"
         COMMAND ${CMAKE_COMMAND} -E remove_directory "${_rel}/VST3/$<TARGET_FILE_NAME:${plugin}_VST3>"
         COMMAND ${CMAKE_COMMAND} -E copy_directory "$<TARGET_FILE_DIR:${plugin}_VST3>/../.." "${_rel}/VST3/$<TARGET_FILE_NAME:${plugin}_VST3>"
+        DEPENDS ${plugin}_VST3
         COMMENT "Collecting ${plugin} VST3 in ${_rel}/VST3"
         VERBATIM)
+      if(TARGET ${plugin}_All)
+        add_dependencies(${plugin}_All ${plugin}_VST3_collect)
+      endif()
     endif()
     if(TARGET ${plugin}_Standalone)
-      add_custom_command(TARGET ${plugin}_Standalone POST_BUILD
+      add_custom_target(${plugin}_Standalone_collect ALL
         COMMAND ${CMAKE_COMMAND} -E make_directory "${_rel}/Standalone"
         COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:${plugin}_Standalone>" "${_rel}/Standalone/"
+        DEPENDS ${plugin}_Standalone
         COMMENT "Collecting ${plugin} Standalone in ${_rel}/Standalone"
         VERBATIM)
+      if(TARGET ${plugin}_All)
+        add_dependencies(${plugin}_All ${plugin}_Standalone_collect)
+      endif()
     endif()
   endif()
 
@@ -238,7 +265,7 @@ endfunction()
 #   src/drumcomputer/  the TR-08 drum machine (src/drumcomputer/tr08; an instrument, not a pedal)
 add_subdirectory(${RL_ROOT}/src/common src/common)
 
-set(EFFECTS dd1 dm1 ce1 re1 re2 ds1 bf3 cs3 lm2 ph2 ge7 eh2 tr2  sl2 od2 oc5 bs1 mm1 sd1 sd3 sp1 rv1 mf1 hm2 gr1 sr1 vc1 pt1 dy1 sa1 su1 ml1 dl1 dn1 dv1 rh1 rb1 al1)
+set(EFFECTS dd1 dm1 ce1 re1 re2 ds1 bf3 cs3 lm2 ph2 ge7 eh2 tr2  sl2 od2 oc5 bs1 mm1 sd1 sd3 su1 ml1 dl1 dn1 dv1 rh1 rb1 al1 sf1 tf1 ic1)
 # AX-1 (skeuomorphic UI test, src/effects/ax1 is gitignored): add ax1 to the list above to build it
 foreach(effect IN LISTS EFFECTS)
   if(EXISTS ${RL_ROOT}/src/effects/${effect}/CMakeLists.txt)     # a pedal whose folder was removed is skipped

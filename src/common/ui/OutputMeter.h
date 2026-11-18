@@ -41,11 +41,14 @@ struct OutputMeter
     static constexpr float kLo = -48.0f;
     float bar[2] { -90.0f, -90.0f }, hold[2] { -90.0f, -90.0f }, age[2] { 0.0f, 0.0f };
 
-    void update (PeakTap& tap, float dt = 1.0f / 30.0f) noexcept
+    void update (PeakTap& tap, float dt = 1.0f / 30.0f) noexcept { update (tap.peak[0].exchange (0.0f, std::memory_order_relaxed), tap.peak[1].exchange (0.0f, std::memory_order_relaxed), dt); }
+    // the same from peaks the caller already read (linear, per channel), for an engine that keeps its own atomics
+    void update (float peakL, float peakR, float dt = 1.0f / 30.0f) noexcept
     {
+        const float peaks[2] { peakL, peakR };
         for (int c = 0; c < 2; ++c)
         {
-            const float pk = tap.peak[c].exchange (0.0f, std::memory_order_relaxed), db = pk > 1.0e-5f ? juce::Decibels::gainToDecibels (pk) : -90.0f;
+            const float pk = peaks[c], db = pk > 1.0e-5f ? juce::Decibels::gainToDecibels (pk) : -90.0f;
             bar[c] = db > bar[c] ? db : juce::jmax (db, bar[c] - 24.0f * dt);
             if (db >= hold[c]) { hold[c] = db; age[c] = 0.0f; }
             else if ((age[c] += dt) > 1.5f) hold[c] = juce::jmax (db, hold[c] - 24.0f * dt);

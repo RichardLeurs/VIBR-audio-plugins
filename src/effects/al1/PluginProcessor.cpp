@@ -1,5 +1,6 @@
 // VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
 #include "PluginProcessor.h"
+#include "plugin/ParamLayout.h"
 #include "PluginEditor.h"
 
 namespace
@@ -27,13 +28,7 @@ std::vector<vibr::PresetManager::Factory> al1FactoryPresets()
 }
 
 // host label and readable text for a float parameter
-juce::AudioParameterFloatAttributes unitAttrs (const juce::String& unit, std::function<juce::String (float)> text)
-{
-    return juce::AudioParameterFloatAttributes()
-        .withLabel (unit)
-        .withStringFromValueFunction ([text] (float v, int) { return text (v); })
-        .withValueFromStringFunction ([] (const juce::String& s) { return s.retainCharacters ("0123456789.-+").getFloatValue(); });
-}
+using vibr::unitAttrs;
 juce::String hzText (float hz) { return hz >= 1000.0f ? juce::String (hz / 1000.0f, 1) + " k" : juce::String ((int) std::lround (hz)); }
 } // namespace
 
@@ -92,11 +87,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout AL1AudioProcessor::createLay
 }
 
 AL1AudioProcessor::AL1AudioProcessor()
-    : AudioProcessor (BusesProperties()
+    : vibr::LabProcessor (BusesProperties()
                           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
-                          .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts (*this, &undoManager, "AL1", createLayout()),
-      presets (*this, apvts, undoManager, "AL-1 Presets", al1FactoryPresets(), { "power", "bypass" })
+                          .withOutput ("Output", juce::AudioChannelSet::stereo(), true),
+                          "AL1", createLayout(), "AL-1 Presets", al1FactoryPresets(),
+                          { "gain", "bass", "middle", "treble", "presence", "resonance", "sag", "master", "boostDrive", "gateThresh", "irALevel", "irBLevel", "eqMid", "ambience", "out", "inGain",
+                               "gateOn", "boostOn", "cabOn", "eqOn", "limiter" })
 {
     const auto get = [this] (const char* id) { return apvts.getRawParameterValue (id); };
     pPower = get ("power"); pInGain = get ("inGain"); pGateOn = get ("gateOn"); pGateThresh = get ("gateThresh"); pGateRelease = get ("gateRelease");
@@ -255,45 +251,38 @@ void AL1AudioProcessor::clearImpulseResponse (int slot)
 
 juce::AudioProcessorEditor* AL1AudioProcessor::createEditor() { return new AL1AudioProcessorEditor (*this); }
 
-void AL1AudioProcessor::getStateInformation (juce::MemoryBlock& dest)
+void AL1AudioProcessor::addExtraState (juce::ValueTree& state)
 {
-    auto state = apvts.copyState();
-    state.appendChild (midiMap.toTree(), nullptr);
-    {
-        const juce::ScopedLock sl (irLock);
-        for (int s = 0; s < 2; ++s)
-            if (irData[s].getSize() > 0)
-            {
-                juce::ValueTree t (s == 0 ? "IR_A" : "IR_B");
-                t.setProperty ("name", irName[s], nullptr);
-                t.setProperty ("data", irData[s].toBase64Encoding(), nullptr);
-                state.appendChild (t, nullptr);
-            }
-    }
-    if (auto xml = state.createXml())
-        copyXmlToBinary (*xml, dest);
+    const juce::ScopedLock sl (irLock);
+    for (int s = 0; s < 2; ++s)
+        if (irData[s].getSize() > 0)
+        {
+            juce::ValueTree t (s == 0 ? "IR_A" : "IR_B");
+            t.setProperty ("name", irName[s], nullptr);
+            t.setProperty ("data", irData[s].toBase64Encoding(), nullptr);
+            state.appendChild (t, nullptr);
+        }
 }
 
-void AL1AudioProcessor::setStateInformation (const void* data, int size)
+void AL1AudioProcessor::restoreExtraState (juce::ValueTree& st)
 {
-    auto xml = getXmlFromBinary (data, size);
-    if (xml == nullptr || ! xml->hasTagName (apvts.state.getType())) return;
-    auto st = juce::ValueTree::fromXml (*xml);
-    midiMap.fromTree (st.getChildWithName ("MIDIMAP"));
-    st.removeChild (st.getChildWithName ("MIDIMAP"), nullptr);
-    juce::ValueTree irTree[2] = { st.getChildWithName ("IR_A"), st.getChildWithName ("IR_B") };
-    st.removeChild (irTree[0], nullptr);
-    st.removeChild (irTree[1], nullptr);
-    vibr::BypassLink::normalise (st);
-    apvts.replaceState (st);
+    irStash[0] = st.getChildWithName ("IR_A");
+    irStash[1] = st.getChildWithName ("IR_B");
+    st.removeChild (irStash[0], nullptr);
+    st.removeChild (irStash[1], nullptr);
+}
+
+void AL1AudioProcessor::afterStateRestored()
+{
     for (int s = 0; s < 2; ++s)                                          // a state without IR children clears the slots
     {
         juce::MemoryBlock mb;
-        if (irTree[s].isValid() && mb.fromBase64Encoding (irTree[s].getProperty ("data").toString()) && mb.getSize() > 0
-            && loadIrData (s, mb, irTree[s].getProperty ("name").toString(), nullptr))
+        if (irStash[s].isValid() && mb.fromBase64Encoding (irStash[s].getProperty ("data").toString()) && mb.getSize() > 0
+            && loadIrData (s, mb, irStash[s].getProperty ("name").toString(), nullptr))
             continue;
         clearImpulseResponse (s);
     }
+    irStash[0] = irStash[1] = juce::ValueTree();
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new AL1AudioProcessor(); }

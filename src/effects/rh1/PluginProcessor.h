@@ -4,6 +4,7 @@
 #include "ui/OutputMeter.h"
 #include "BypassLink.h"
 #include "MidiMap.h"
+#include "plugin/LabProcessor.h"
 
 #include <JuceHeader.h>
 #include "RhythmEngine.h"
@@ -11,13 +12,12 @@
 
 // RH-1 Rhythm Lab: a control engine (LFO, envelope, 16 steps, sync, swing) that moves a FILTER (MF-1), a TREMOLO (TR-2) or a SLICER (SL-2) (see RhythmEngine.h and .claude/lab_specs.md).
 // Host parameters: power, mode, variant, source, sync, division, followHost, tempo, rate, shape, depth, sens, decay, swing, glide, step1 .. step16, cutoff, res (FILTER),
-// tremStereo, tremBias (TREMOLO), slAttack, slDuty, slBalance (SLICER), mix, level. There is no latency.
-class RH1AudioProcessor : public juce::AudioProcessor,
-      private juce::AsyncUpdater
+// tremStereo, tremBias (TREMOLO), slAttack, slDuty, slBalance (SLICER), mix, level; and for the destination MATRIX (the VC-1 modulation matrix): vSync, vType, vShape1, vShape2,
+// vCutoff, vRes, vEnvSens, vEnvRel, vRate1, vRate2, vRand, vXmod, vm00 .. vm43 (source x destination depth). There is no latency.
+class RH1AudioProcessor : public vibr::LabProcessor
 {
 public:
     RH1AudioProcessor();
-    ~RH1AudioProcessor() override { cancelPendingUpdate(); }
 
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
     void releaseResources() override {}
@@ -32,42 +32,11 @@ public:
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
     double getTailLengthSeconds() const override { return 0.0; }
-    juce::AudioProcessorParameter* getBypassParameter() const override { return apvts.getParameter ("bypass"); }
 
-    // the factory presets are the host's programs (the preset menu in the editor stays in step through the preset name)
-    int getNumPrograms() override { return juce::jmax (1, (int) presets.factory().size()); }
-    int getCurrentProgram() override { return currentProgram.load(); }
-    void setCurrentProgram (int index) override
-    {
-        index = juce::jlimit (0, getNumPrograms() - 1, index);
-        if (index == currentProgram.load()) return;   // a host re-sending the current program must not reset the user's edits
-        currentProgram.store (index);
-        if (juce::MessageManager::getInstance()->isThisTheMessageThread()) presets.applyFactory (index);
-        else { pendingProgram.store (index); triggerAsyncUpdate(); }
-    }
-    const juce::String getProgramName (int index) override
-    {
-        const auto& list = presets.factory();
-        return index >= 0 && index < (int) list.size() ? list[(size_t) index].name : juce::String();
-    }
-    void changeProgramName (int, const juce::String&) override {}
-
-    void getStateInformation (juce::MemoryBlock&) override;
-    void setStateInformation (const void*, int) override;
-
-    juce::UndoManager undoManager { 30000, 100 };
-    juce::AudioProcessorValueTreeState apvts;
-    vibr::BypassLink bypassLink { apvts };                // host bypass <-> OFF / ON switch
-    MidiMap midiMap { apvts, { "rate", "sens", "shape", "decay", "glide", "depth", "swing", "tempo", "cutoff", "res", "tremStereo", "slAttack", "slDuty", "slBalance", "mix", "level" } };   // CC -> knob, MIDI learn
-    vibr::PresetManager presets;
-    vibr::ui::PeakTap outMeter;                                         // sample peak of the output, read by the editor
-    std::atomic<int> currentProgram { 0 };
-    std::atomic<int> pendingProgram { -1 };
     const rh1::Engine& getEngine() const { return engine; }
     float hostBpm() const { return bpmNow.load(); }
 
 private:
-    void handleAsyncUpdate() override { const int i = pendingProgram.exchange (-1); if (i >= 0) presets.applyFactory (i); }
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
 
     rh1::Engine engine;
@@ -75,6 +44,9 @@ private:
     std::atomic<float> *pPower {}, *pMode {}, *pVariant {}, *pSource {}, *pSync {}, *pDivision {}, *pFollow {}, *pTempo {}, *pRate {}, *pShape {}, *pDepth {}, *pSens {}, *pDecay {}, *pSwing {}, *pGlide {},
                        *pCutoff {}, *pRes {}, *pTremStereo {}, *pTremBias {}, *pSlAttack {}, *pSlDuty {}, *pSlBalance {}, *pMix {}, *pLevel {};
     std::atomic<float>* pSteps[rh1::kSteps] {};
+    std::atomic<float> *pVSync {}, *pVType {}, *pVShape1 {}, *pVShape2 {}, *pVCutoff {}, *pVRes {}, *pVEnvSens {}, *pVEnvRel {}, *pVRate1 {}, *pVRate2 {}, *pVRand {}, *pVXmod {};       // MATRIX (the VC-1)
+    std::atomic<float>* pVMatrix[vc1::kNumSources][vc1::kNumDests] {};
+    float midiValue = 0.0f;                                           // the mod wheel / expression / pressure for the MATRIX source MIDI (0 .. 1)
     juce::SmoothedValue<float> powerSmooth;
     juce::AudioBuffer<float> dryBuf;
 

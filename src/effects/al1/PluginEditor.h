@@ -3,12 +3,11 @@
 
 #include "PluginProcessor.h"
 #include "MidiTarget.h"
-#include "ui/VibrUI.h"
+#include "ui/LabEditor.h"
 
 // AL-1 window (1200 x 690), on the shared UI of src/common/ui: header (name, preset chip, undo, OFF / ON), the CONTROLS panel with four tab pills on its top edge
 // (GATE / BOOST, AMP, CABINET, EQ / OUTPUT) and the DISPLAY panel with three (CURVE, CABINET, METERS). The display redraws at 30 Hz from the engine's atomics.
-class AL1AudioProcessorEditor : public juce::AudioProcessorEditor,
-                                private juce::Timer
+class AL1AudioProcessorEditor : public vibr::ui::LabEditor
 {
 public:
     explicit AL1AudioProcessorEditor (AL1AudioProcessor&);
@@ -21,15 +20,10 @@ public:
 
 private:
     void timerCallback() override;
-    float scale() const { return (float) getWidth() / 1200.0f; }
     void layoutKnobs();
-    bool isOn (const char* id) const { return proc.apvts.getRawParameterValue (id)->load() > 0.5f; }
-    float value (const char* id) const { return proc.apvts.getRawParameterValue (id)->load(); }
     int ampType() const { return juce::jlimit (0, al1::kNumTypes - 1, (int) std::lround (value ("ampType"))); }
     int tab() const { return juce::jlimit (0, 3, proc.uiTab.load()); }
     int displayTab() const { return juce::jlimit (0, 2, proc.uiDisplayTab.load()); }
-    void toggle (const char* id);
-    void setChoice (const char* id, int index);
     void showIrMenu (int slot);
     void loadIr (int slot, const juce::File& f);
     void updateDisplay();
@@ -59,21 +53,16 @@ private:
     };
 
     AL1AudioProcessor& proc;
-    vibr::ui::KnobLookAndFeel laf;
-    juce::ComponentBoundsConstrainer constrainer;
-    juce::Image grain;
     std::array<Knob, 25> knobs;
     std::array<Switch, 5> switches;                 // gate, boost, cab, EQ, limiter: drawn here, MIDI learn through MidiTarget
     std::unique_ptr<MidiLearnUI> midiUI;            // right-click a knob: MIDI learn (rebuilt when the tab changes)
     int midiTab = -1;
-    vibr::ui::PresetBarState barState;
-    juce::ParameterAttachment powerAtt;
     std::unique_ptr<juce::FileChooser> chooser;
 
     // display data, rebuilt at 30 Hz
     juce::Path curvePath, sineInPath, sineOutPath, totalPath, modelPath, irPath[2];
     float dotX = 0.0f, dotY = 0.0f;
-    float barDb[2] { -90.0f, -90.0f }, holdDb[2] { -90.0f, -90.0f }, holdAge[2] { 0.0f, 0.0f };   // output meter: bar, peak hold (dB), hold age (s)
+    vibr::ui::OutputMeter meter;                                                       // output meter: bar and peak hold (ballistics shared with the other Labs)
     float inDb = -90.0f, outDb = -90.0f, grDb = 0.0f, gateLamp = -1.0f;
     std::array<float, AL1AudioProcessor::kCurvePoints> irCurve[2] {};
     bool irPresent[2] { false, false };

@@ -100,6 +100,36 @@ int main()
         std::vector<float> silent ((int) fs, 0.0f); dv1::Params q; q.mode = dv1::Tape; const auto so = run (q, silent); double se = 0; for (float y : so) se += (double) y * y;
         check (se == 0.0, "silence in, silence out");
     }
+    std::printf ("chain (the SA-1)\n");
+    {
+        // CHAIN is the SA-1 engine at the host rate, delayed by the latency of the other modes: with AUTO LEVEL off and MIX 100 % the two must be the same signal
+        dv1::Params p; p.mode = dv1::Chain; p.autoLevel = false; p.mix = 1.0f; p.boostOn = true; p.boostDb = 8.0f; p.boostTone = 0.7f; p.tubeOn = true; p.tubeDrive = 0.5f; p.tubeBias = 0.5f;
+        p.tapeOn = true; p.tapeDrive = 0.6f; p.warmth = 0.7f; p.crushOn = true; p.bits = 10.0f; p.rate = 20000.0f; p.crushMix = 0.5f;
+        const auto in = noise ((int) fs, 0.3f, 3);
+        const auto dvOut = run (p, in);
+        sa1::Params q; q.boostOn = true; q.boostGain = 8.0f; q.boostTone = 0.7f; q.tubeOn = true; q.tubeDrive = 0.5f; q.tubeBias = 0.5f; q.tapeOn = true; q.tapeDrive = 0.6f; q.tapeWarmth = 0.7f;
+        q.crushOn = true; q.bits = 10.0f; q.rate = 20000.0f; q.crushMix = 0.5f; q.mix = 1.0f;
+        sa1::Engine e; e.prepare (fs); auto l = in, r = in;
+        for (size_t pos = 0; pos < l.size(); pos += 480) { const int n = (int) std::min<size_t> (480, l.size() - pos); e.process (l.data() + pos, r.data() + pos, n, q, 1.0f); }
+        double worst = 0.0;
+        for (int i = 4800; i < (int) l.size() - lat; ++i) worst = std::max (worst, (double) std::abs (dvOut[(size_t) (i + lat)] - l[(size_t) i]));
+        std::printf ("  CHAIN against the SA-1 engine: largest difference %.2e\n", worst);
+        check (worst < 1.0e-6, "CHAIN equals the SA-1 engine delayed by the latency (difference below 1e-6)");
+    }
+    std::printf ("harmonics (the HM-2)\n");
+    {
+        // HARMONICS is the HM-2 engine at the host rate, delayed by the latency: with AUTO LEVEL off and MIX 100 % the two must be the same signal
+        dv1::Params p; p.mode = dv1::Harmonics; p.autoLevel = false; p.mix = 1.0f; p.character = 2; p.drive = 0.6f; p.oddEven = 0.3f; p.octave = 0.4f; p.sub = 0.5f; p.focus = 0.5f; p.tilt = 0.7f; p.tone = 0.6f;
+        const auto in = noise ((int) fs, 0.3f, 4);
+        const auto dvOut = run (p, in);
+        hm2::Params q; q.character = 2; q.drive = 0.6f; q.oddEven = 0.3f; q.octave = 0.4f; q.sub = 0.5f; q.focus = 0.5f; q.tilt = 0.7f; q.tone = 0.6f;
+        hm2::Engine e; e.prepare (fs); auto l = in, r = in;
+        for (size_t pos = 0; pos < l.size(); pos += 480) { const int n = (int) std::min<size_t> (480, l.size() - pos); e.process (l.data() + pos, r.data() + pos, n, q, 1.0f, 1.0f); }
+        double worst = 0.0;
+        for (int i = 4800; i < (int) l.size() - lat; ++i) worst = std::max (worst, (double) std::abs (dvOut[(size_t) (i + lat)] - l[(size_t) i]));
+        std::printf ("  HARMONICS against the HM-2 engine: largest difference %.2e\n", worst);
+        check (worst < 1.0e-6, "HARMONICS equals the HM-2 engine delayed by the latency (difference below 1e-6)");
+    }
     {
         // AUTO LEVEL: the output stays near the input level from low to full drive
         const auto music = noise ((int) (6.0f * fs), 0.2f, 8);

@@ -2,17 +2,14 @@
 #pragma once
 
 #include "PluginProcessor.h"
+#include "ui/PedalLook.h"
+#include "ui/PedalEditor.h"
 #include "ui/VibrUI.h"
 
 // Black knurled knob with a raised cap and a white pointer (same as the DM-1), drawn over the scales printed in the background.
-class SDD1000LookAndFeel : public juce::LookAndFeel_V4
-{
-public:
-    void drawRotarySlider (juce::Graphics&, int x, int y, int w, int h, float pos,
-                           float startAngle, float endAngle, juce::Slider&) override;
-};
+using SDD1000LookAndFeel = vibr::ui::PedalKnobLookAndFeel;
 
-class SDD1000AudioProcessorEditor : public juce::AudioProcessorEditor,
+class SDD1000AudioProcessorEditor : public vibr::ui::PedalEditor,
                                     private juce::Timer
 {
 public:
@@ -36,8 +33,6 @@ private:
 
     SDD1000AudioProcessor& proc;
     SDD1000LookAndFeel laf;
-    juce::ComponentBoundsConstrainer constrainer;
-    juce::Image background;
     MidiLearnUI midiUI { proc.midiMap };       // right-click a knob: MIDI learn
     Knob knobs[9];
 

@@ -1,23 +1,11 @@
 // VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
 #include "PluginProcessor.h"
+#include "plugin/ParamLayout.h"
 #include "PluginEditor.h"
 
 namespace
 {
-// host label and readable text for a float parameter (the stored value is the shown value, the host shows the label next to it)
-juce::AudioParameterFloatAttributes unitAttrs (const juce::String& unit, int decimals)
-{
-    return juce::AudioParameterFloatAttributes()
-        .withLabel (unit)
-        .withStringFromValueFunction ([decimals] (float v, int)
-        {
-            return juce::String (v, decimals);                       // the number only: the host adds the label (unit) itself
-        })
-        .withValueFromStringFunction ([] (const juce::String& s)
-        {
-            return s.retainCharacters ("0123456789.-+").getFloatValue();
-        });
-}
+using vibr::unitAttrs;
 
 
 } // namespace
@@ -30,8 +18,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout ML1AudioProcessor::createLay
     {
         layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id, 1 }, name, NormalisableRange<float> (0.0f, 100.0f, 1.0f), def, unitAttrs ("%", 0)));
     };
-    layout.add (std::make_unique<AudioParameterBool>   (ParameterID { "power", 1 }, "Power", true, juce::AudioParameterBoolAttributes().withMeta (true)));
-    layout.add (vibr::makeBypassParam());
+    vibr::addPower (layout);
     layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "mode", 1 }, "Mode", StringArray { "Chorus", "Vibrato", "Flanger", "Phaser", "Uni-Vibe", "Rotary", "Ring Mod" }, 0));
     layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "variant", 1 }, "Type (2-4 voices, Sine / Triangle, Positive / Negative feedback, 4-8 stages, Uni-Vibe Chorus / Vibrato, Rotary Slow / Fast, Ring Mod Sine / Triangle / Square)",
                                                         StringArray { "Type 1", "Type 2", "Type 3" }, 0));
@@ -71,11 +58,11 @@ std::vector<vibr::PresetManager::Factory> ml1FactoryPresets()
 } // namespace
 
 ML1AudioProcessor::ML1AudioProcessor()
-    : AudioProcessor (BusesProperties()
+    : vibr::LabProcessor (BusesProperties()
                           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
-                          .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts (*this, &undoManager, "ML1", createLayout()),
-      presets (*this, apvts, undoManager, "ML-1 Presets", ml1FactoryPresets(), { "power", "bypass" })
+                          .withOutput ("Output", juce::AudioChannelSet::stereo(), true),
+                          "ML1", createLayout(), "ML-1 Presets", ml1FactoryPresets(),
+                          { "rate", "depth", "extra", "mix", "level" })
 {
     pPower   = apvts.getRawParameterValue ("power");
     pMode    = apvts.getRawParameterValue ("mode");
@@ -147,23 +134,5 @@ void ML1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
 
 juce::AudioProcessorEditor* ML1AudioProcessor::createEditor() { return new ML1AudioProcessorEditor (*this); }
 
-void ML1AudioProcessor::getStateInformation (juce::MemoryBlock& dest)
-{
-    auto state = apvts.copyState();
-    state.appendChild (midiMap.toTree(), nullptr);
-    if (auto xml = state.createXml()) copyXmlToBinary (*xml, dest);
-}
-
-void ML1AudioProcessor::setStateInformation (const void* data, int size)
-{
-    if (auto xml = getXmlFromBinary (data, size))
-        if (xml->hasTagName (apvts.state.getType())) {
-            auto st = juce::ValueTree::fromXml (*xml);
-            midiMap.fromTree (st.getChildWithName ("MIDIMAP"));
-            st.removeChild (st.getChildWithName ("MIDIMAP"), nullptr);
-            vibr::BypassLink::normalise (st);
-            apvts.replaceState (st);
-        }
-}
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new ML1AudioProcessor(); }

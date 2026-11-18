@@ -12,8 +12,8 @@
 #include <cmath>
 #include <vector>
 #include "../../common/ReverbEngine.h"
-#include "../sp1/SpaceEngine.h"
-#include "../sr1/ResonatorEngine.h"
+#include "SpaceEngine.h"
+#include "ResonatorEngine.h"
 
 namespace rb1
 {

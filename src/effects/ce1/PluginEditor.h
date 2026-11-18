@@ -2,15 +2,14 @@
 #pragma once
 
 #include "PluginProcessor.h"
+#include "ui/PedalLook.h"
 #include "ui/VibrUI.h"
 
 //==============================================================================
 // Black ribbed knobs on a silver skirt, drawn over the scale printed in the background.
-class CE1LookAndFeel : public juce::LookAndFeel_V4
+class CE1LookAndFeel : public vibr::ui::PedalKnobLookAndFeel
 {
 public:
-    void drawRotarySlider (juce::Graphics&, int x, int y, int w, int h, float pos,
-                           float startAngle, float endAngle, juce::Slider&) override;
 
     // switches are painted by the editor; the buttons are only click targets
     void drawToggleButton (juce::Graphics&, juce::ToggleButton&, bool, bool) override {}

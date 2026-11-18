@@ -165,14 +165,14 @@ panel(RP, "DELAY", 190)
 line([(RP[0] + 40, 930), (RP[2] - 40, 930)], INK, 2, 90)
 
 def led_bezel(lx, ly, lit=None):
-    # flat (see ../../../.claude/style.md, "Flat style"): a thin dark grey ring round a flat dark well; the editor fills the lamp
+    # flat (see ../../../.claude/style_guide.md, "Flat style"): a thin dark grey ring round a flat dark well; the editor fills the lamp
     layer = new(); dr = ImageDraw.Draw(layer)
     dr.ellipse([(lx - 17) * S, (ly - 17) * S, (lx + 17) * S, (ly + 17) * S], fill=(52, 56, 68, 255))
     dr.ellipse([(lx - 14) * S, (ly - 14) * S, (lx + 14) * S, (ly + 14) * S], fill=(12, 13, 15, 255))
     comp(layer)
 
 def pushbutton(bx, by, w=112, h=58):
-    # flat (see style.md, "Flat style"): a thin dark grey ring round a flat dark well; no bezel, no shadow
+    # flat (see style_guide.md, "Flat style"): a thin dark grey ring round a flat dark well; no bezel, no shadow
     layer = new(); dr = ImageDraw.Draw(layer)
     dr.rounded_rectangle([(bx - w / 2 - 3) * S, (by - h / 2 - 3) * S, (bx + w / 2 + 3) * S, (by + h / 2 + 3) * S], radius=14 * S, fill=(52, 56, 68, 255))
     dr.rounded_rectangle([(bx - w / 2) * S, (by - h / 2) * S, (bx + w / 2) * S, (by + h / 2) * S], radius=11 * S, fill=(12, 13, 15, 255))
@@ -191,7 +191,7 @@ def power_switch(rx, ry):
 power_switch(LED[0], LED[1])
 px, py = TAPPAD
 bw, bh = 118, 64                                          # the same outer size as the MEMORY and TAP DIVISION buttons (112 x 58 well + 3 px ring)
-# flat TAP pad (see style.md, "Flat style"): a thin dark grey ring round a flat dark well; the editor fills the pad
+# flat TAP pad (see style_guide.md, "Flat style"): a thin dark grey ring round a flat dark well; the editor fills the pad
 layer = new(); dr = ImageDraw.Draw(layer)
 dr.rounded_rectangle([(px - bw / 2) * S, (py - bh / 2) * S, (px + bw / 2) * S, (py + bh / 2) * S], radius=15 * S, fill=(52, 56, 68, 255))
 dr.rounded_rectangle([(px - bw / 2 + 3) * S, (py - bh / 2 + 3) * S, (px + bw / 2 - 3) * S, (py + bh / 2 - 3) * S], radius=12 * S, fill=(12, 13, 15, 255))

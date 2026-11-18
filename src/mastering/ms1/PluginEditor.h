@@ -2,15 +2,14 @@
 #pragma once
 
 #include "PluginProcessor.h"
-#include "ui/VibrUI.h"
+#include "ui/LabEditor.h"
 #include "ui/OutputMeter.h"
 
 // MS-1 window, drawn in code on a satin body: header (name, description, target preset, power), SPECTRUM (with the EQ: curve, 8 draggable band nodes,
 // a strip with the selected band) and LOUDNESS panels on top, and under them
 // INPUT (trim), LIMITER (six knobs, character, auto gain) and OUTPUT (gain, dither, delta), and a third row with the BUS COMPRESSOR (six knobs, BUS IN,
 // sidechain high-pass) and its GAIN REDUCTION history. See .claude/mastering_specs.md.
-class MS1AudioProcessorEditor : public juce::AudioProcessorEditor,
-                                private juce::Timer
+class MS1AudioProcessorEditor : public vibr::ui::LabEditor
 {
 public:
     explicit MS1AudioProcessorEditor (MS1AudioProcessor&);
@@ -39,13 +38,7 @@ private:
     };
     struct StageButton { juce::String label; bool on; std::function<void()> act; int steps = 0, cur = 0; };      // steps > 0: the button cycles through that many settings, a row of dots shows the current one
     void timerCallback() override;
-    float scale() const { return (float) getWidth() / 1200.0f; }
     void layoutKnobs();
-    bool isOn (const char* id) const { return proc.apvts.getRawParameterValue (id)->load() > 0.5f; }
-    float value (const char* id) const { return proc.apvts.getRawParameterValue (id)->load(); }
-    int choice (const char* id) const { return (int) std::lround (value (id)); }
-    void toggle (const char* id);
-    void setChoice (const char* id, int index);
     void setFloat (const char* id, float v);
     void showTargetMenu();
     void applyTarget (int index);
@@ -64,7 +57,7 @@ private:
     void showReferenceChooser();
     void setTab (int t);
     void selectMbBand (int b);
-    void attachKnob (Knob&);
+    void bindKnob (Knob&);
     // the workflow step: 0 EQ, 1 to 4 MULTIBAND / IMAGER / COLOUR / BUS COMP (the STAGES panel, tab = step - 1), 5 LIMITER
     bool knobVisible (const Knob& k) const
     {
@@ -99,16 +92,12 @@ private:
 
 
     MS1AudioProcessor& proc;
-    vibr::ui::KnobLookAndFeel laf;
-    juce::ComponentBoundsConstrainer constrainer;
-    juce::Image grain;
     std::array<Knob, 30> knobs;
     juce::String matchNote;                         // the answer to the MATCH EQ button, shown for a few seconds
     int matchNoteTicks = 0;
     juce::uint32 overLitUntil = 0;                                       // the OVER lamp stays lit until this time (ms counter), 1.5 s after the last overshoot
     bool specHold = false, specFreeze = false, frozenValid = false;      // spectrum: peak hold line, frozen picture
     std::array<float, ms1::kBands> holdPeak {}, frozenPre {}, frozenPost {};
-    vibr::ui::PresetBarState barState;              // the COPIED flash of the A / B copy button
     int dragField = -1;                             // the dynamic EQ field being dragged (0 threshold, 1 ratio, 2 attack, 3 release)
     float dragStartY = 0.0f, dragStartNorm = 0.0f;
     int step = 1;                                   // the workflow step shown in row 3
@@ -126,7 +115,7 @@ private:
     ms1::autom::AnalysisSnapshot autoSnap;
     ms1::autom::Proposal autoProp;
     bool autoIsLearning = false;
-    juce::ParameterAttachment powerAtt, autoAtt, deltaAtt, charAtt, shapeAtt, targetAtt;
+    juce::ParameterAttachment autoAtt, deltaAtt, charAtt, shapeAtt, targetAtt;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MS1AudioProcessorEditor)
 };

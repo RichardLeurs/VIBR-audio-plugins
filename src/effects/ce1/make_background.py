@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
 """Renders the CE-1 pedal front panel (2200 x 890) used as the plugin background: teal satin body, black panels,
-printed legends. Control positions match PluginEditor.cpp (see ../style.md). Needs numpy + Pillow.
+printed legends. Control positions match PluginEditor.cpp (see ../style_guide.md). Needs numpy + Pillow.
 Usage: make_background.py out.png"""
 import math, sys
 import numpy as np

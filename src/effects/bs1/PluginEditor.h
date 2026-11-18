@@ -2,18 +2,15 @@
 #pragma once
 
 #include "PluginProcessor.h"
+#include "ui/PedalLook.h"
+#include "ui/PedalEditor.h"
 #include "WrapSlider.h"
 
 // Black knurled knob with a raised cap and a white pointer (same as the DM-1), drawn over the scales printed in the background.
-class BigSkyLookAndFeel : public juce::LookAndFeel_V4
-{
-public:
-    void drawRotarySlider (juce::Graphics&, int x, int y, int w, int h, float pos,
-                           float startAngle, float endAngle, juce::Slider&) override;
-};
+using BigSkyLookAndFeel = vibr::ui::PedalKnobLookAndFeel;
 
 
-class BigSkyAudioProcessorEditor : public juce::AudioProcessorEditor,
+class BigSkyAudioProcessorEditor : public vibr::ui::PedalEditor,
                                    private juce::Timer
 {
 public:
@@ -36,8 +33,6 @@ private:
 
     BigSkyAudioProcessor& proc;
     BigSkyLookAndFeel laf;
-    juce::ComponentBoundsConstrainer constrainer;
-    juce::Image background;
     Knob knobs[8];
     Knob typeKnob;
 

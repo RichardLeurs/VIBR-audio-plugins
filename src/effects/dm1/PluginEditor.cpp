@@ -43,7 +43,7 @@ juce::Point<float> polar (juce::Point<float> c, float r, float a)
     return { c.x + r * std::sin (a), c.y - r * std::cos (a) };
 }
 
-// strip LED (flat, see style.md "Flat style"): a plain disc inside the dark grey ring painted in the background; red when on (green for the
+// strip LED (flat, see style_guide.md "Flat style"): a plain disc inside the dark grey ring painted in the background; red when on (green for the
 // memory strip), a dark shade of the same colour when off; no glow, no highlight
 void drawStripLed (juce::Graphics& g, juce::Point<float> d, bool on, bool green = false)
 {
@@ -78,7 +78,7 @@ void drawPowerLed (juce::Graphics& g, bool on)
     g.fillEllipse (circle (14.0f));
 }
 
-// the TAP pad is its own light (flat, see style.md "Flat style"): a flat pad inside the ring of the background, bright red on the beat and
+// the TAP pad is its own light (flat, see style_guide.md "Flat style"): a flat pad inside the ring of the background, bright red on the beat and
 // when tapped, dark red otherwise
 // `dim` (sync on): the pad still shows the beat but is faded towards the panel, TAP does nothing
 void drawTapPad (juce::Graphics& g, bool lit, bool dim = false, juce::Colour panel = juce::Colours::black)
@@ -92,54 +92,6 @@ void drawTapPad (juce::Graphics& g, bool lit, bool dim = false, juce::Colour pan
 
 //==============================================================================
 //==============================================================================
-void DM1LookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int w, int h, float,
-                                         float startAngle, float endAngle, juce::Slider& s)
-{
-    const auto b = juce::Rectangle<float> ((float) x, (float) y, (float) w, (float) h);
-    const auto c = b.getCentre();
-    const float R = juce::jmin (b.getWidth(), b.getHeight()) * 0.5f - kPad;
-    const double lo = s.getMinimum(), hi = s.getMaximum();
-    const float pos = (float) ((s.getValue() - lo) / (hi - lo));
-    const float angle = startAngle + pos * (endAngle - startAngle);
-    const auto circle = [&] (float r) { return juce::Rectangle<float> (r * 2.0f, r * 2.0f).withCentre (c); };
-
-    // soft drop shadow
-    g.setColour (juce::Colours::black.withAlpha (0.55f));
-    g.fillEllipse (circle (R).translated (R * 0.05f, R * 0.09f));
-
-    // matt black body with a knurled grip edge
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff4a4c51), c.x - R * 0.7f, c.y - R * 0.8f,
-                                             juce::Colour (0xff050506), c.x + R * 0.7f, c.y + R * 0.9f, false));
-    g.fillEllipse (circle (R));
-    constexpr int ridges = 60;
-    for (int i = 0; i < ridges; ++i)
-    {
-        const float a = juce::MathConstants<float>::twoPi * (float) i / (float) ridges;
-        g.setColour (juce::Colours::white.withAlpha (0.10f + 0.10f * std::max (0.0f, std::cos (a + 0.8f))));
-        g.drawLine (polar (c, R * 0.90f, a).x, polar (c, R * 0.90f, a).y, polar (c, R * 0.99f, a).x, polar (c, R * 0.99f, a).y, 1.0f);
-    }
-    g.setColour (juce::Colours::black);
-    g.drawEllipse (circle (R), 1.2f);
-
-    // raised cap
-    const float capR = R * 0.80f;
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff3a3b3f), c.x - capR * 0.6f, c.y - capR * 0.7f,
-                                             juce::Colour (0xff0b0b0c), c.x + capR * 0.6f, c.y + capR * 0.8f, false));
-    g.fillEllipse (circle (capR));
-    g.setGradientFill (juce::ColourGradient (juce::Colours::white.withAlpha (0.14f), c.x - capR * 0.5f, c.y - capR * 0.6f,
-                                             juce::Colours::transparentWhite, c.x + capR * 0.1f, c.y + capR * 0.1f, true));
-    g.fillEllipse (circle (capR));
-    g.setGradientFill (juce::ColourGradient (juce::Colours::white.withAlpha (0.35f), c.x - capR, c.y - capR,
-                                             juce::Colour (0xff000000), c.x + capR, c.y + capR, false));
-    g.drawEllipse (circle (capR), 1.2f);
-
-    // pointer: white bar from the rim toward the centre
-    juce::Path p;
-    p.addRoundedRectangle (-capR * 0.055f, -capR * 0.94f, capR * 0.11f, capR * 0.50f, capR * 0.05f);
-    g.setColour (juce::Colour (0xfff2f2ee));
-    g.fillPath (p, juce::AffineTransform::rotation (angle).translated (c));
-}
-
 //==============================================================================
 DM1AudioProcessorEditor::DM1AudioProcessorEditor (DM1AudioProcessor& p)
     : AudioProcessorEditor (&p), proc (p),

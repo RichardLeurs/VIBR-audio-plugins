@@ -43,6 +43,7 @@ target_compile_definitions(SL-2
 target_link_libraries(SL-2
   PRIVATE
     SL2Assets
+    rl_common
     juce::juce_audio_utils
     juce::juce_dsp
   PUBLIC

@@ -10,7 +10,6 @@ constexpr float kImgW = 1840.0f, kImgH = 968.0f;
 constexpr int kBaseW = 920;
 
 constexpr float kKnobRadius = 100.0f;                      // black knob; the printed scale sits outside it
-constexpr float kPad = 3.0f;
 constexpr float kKnobY = 532.0f;
 struct KnobSpec { const char* id; float x; float startDeg, endDeg; };
 const KnobSpec kRate { "rate", 310.0f, -154.0f, 154.0f }, kDepth { "depth", 690.0f, -154.0f, 154.0f },
@@ -25,71 +24,17 @@ const juce::Rectangle<float> kSyncPill = juce::Rectangle<float> (116.0f, 46.0f).
 const juce::Rectangle<float> kDivisionText = juce::Rectangle<float> (130.0f, 46.0f).withCentre ({ 392.0f, 776.0f });
 const juce::Colour kBody (0xff78c83c);                          // the green body colour (BODY in make_background.py)
 
-juce::Point<float> polar (juce::Point<float> c, float r, float a)
-{
-    return { c.x + r * std::sin (a), c.y - r * std::cos (a) };
-}
-
 } // namespace
 
 //==============================================================================
-void PH2LookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int w, int h, float,
-                                         float startAngle, float endAngle, juce::Slider& s)
-{
-    const auto b = juce::Rectangle<float> ((float) x, (float) y, (float) w, (float) h);
-    const auto c = b.getCentre();
-    const float R = juce::jmin (b.getWidth(), b.getHeight()) * 0.5f - kPad;
-    const double lo = s.getMinimum(), hi = s.getMaximum();
-    const float pos = (float) ((s.getValue() - lo) / (hi - lo));
-    const float angle = startAngle + pos * (endAngle - startAngle);
-    const auto circle = [&] (float r) { return juce::Rectangle<float> (r * 2.0f, r * 2.0f).withCentre (c); };
-
-    // soft drop shadow
-    g.setColour (juce::Colours::black.withAlpha (0.55f));
-    g.fillEllipse (circle (R).translated (R * 0.05f, R * 0.09f));
-
-    // matt black body with a knurled grip edge
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff4a4c51), c.x - R * 0.7f, c.y - R * 0.8f,
-                                             juce::Colour (0xff050506), c.x + R * 0.7f, c.y + R * 0.9f, false));
-    g.fillEllipse (circle (R));
-    constexpr int ridges = 60;
-    for (int i = 0; i < ridges; ++i)
-    {
-        const float a = juce::MathConstants<float>::twoPi * (float) i / (float) ridges;
-        g.setColour (juce::Colours::white.withAlpha (0.10f + 0.10f * std::max (0.0f, std::cos (a + 0.8f))));
-        g.drawLine (polar (c, R * 0.90f, a).x, polar (c, R * 0.90f, a).y, polar (c, R * 0.99f, a).x, polar (c, R * 0.99f, a).y, 1.0f);
-    }
-    g.setColour (juce::Colours::black);
-    g.drawEllipse (circle (R), 1.2f);
-
-    // raised cap
-    const float capR = R * 0.80f;
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff3a3b3f), c.x - capR * 0.6f, c.y - capR * 0.7f,
-                                             juce::Colour (0xff0b0b0c), c.x + capR * 0.6f, c.y + capR * 0.8f, false));
-    g.fillEllipse (circle (capR));
-    g.setGradientFill (juce::ColourGradient (juce::Colours::white.withAlpha (0.14f), c.x - capR * 0.5f, c.y - capR * 0.6f,
-                                             juce::Colours::transparentWhite, c.x + capR * 0.1f, c.y + capR * 0.1f, true));
-    g.fillEllipse (circle (capR));
-    g.setGradientFill (juce::ColourGradient (juce::Colours::white.withAlpha (0.35f), c.x - capR, c.y - capR,
-                                             juce::Colour (0xff000000), c.x + capR, c.y + capR, false));
-    g.drawEllipse (circle (capR), 1.2f);
-
-    // pointer: white bar from the rim toward the centre
-    juce::Path p;
-    p.addRoundedRectangle (-capR * 0.055f, -capR * 0.94f, capR * 0.11f, capR * 0.50f, capR * 0.05f);
-    g.setColour (juce::Colour (0xfff2f2ee));
-    g.fillPath (p, juce::AffineTransform::rotation (angle).translated (c));
-}
-
 //==============================================================================
 PH2AudioProcessorEditor::PH2AudioProcessorEditor (PH2AudioProcessor& p)
-    : AudioProcessorEditor (&p), proc (p),
+    : PedalEditor (p, PH2Data::background_png, (size_t) PH2Data::background_pngSize, kImgW, kImgH, kBaseW, 460), proc (p),
       syncAtt (*p.apvts.getParameter ("sync"), [this] (float v) { syncChanged (v > 0.5f); }, nullptr),
       divisionAtt (*p.apvts.getParameter ("division"), [this] (float v) { division = juce::jlimit (0, vibr::sync::kNumDivisions - 1, (int) std::lround (v)); repaint(); }, nullptr)
 {
     setLookAndFeel (&laf);
-    background = juce::ImageFileFormat::loadFrom (PH2Data::background_png, (size_t) PH2Data::background_pngSize);
-
+    
     const auto add = [this] (Knob& k, const KnobSpec& spec)
     {
         k.slider.setSliderStyle (juce::Slider::RotaryVerticalDrag);
@@ -107,13 +52,9 @@ PH2AudioProcessorEditor::PH2AudioProcessorEditor (PH2AudioProcessor& p)
     midiUI.add (res.slider, "res");  midiUI.add (depth.slider, "depth");  midiUI.add (rate.slider, "rate");  midiUI.add (mode.slider, "mode");
     mode.slider.setMouseDragSensitivity (40);      // only 2 positions: a short drag flips I / II
 
-    constrainer.setFixedAspectRatio ((double) kImgW / (double) kImgH);
-    constrainer.setSizeLimits (460, 242, 1840, 968);
-    setConstrainer (&constrainer);
-    setResizable (true, true);
-    setSize (kBaseW, (int) std::round ((float) kBaseW * kImgH / kImgW));
     syncAtt.sendInitialUpdate();
     divisionAtt.sendInitialUpdate();
+    resized();                                                       // place the knobs (the base class sized the window before they existed)
     startTimerHz (20);
 }
 
@@ -177,32 +118,11 @@ void PH2AudioProcessorEditor::timerCallback()
 
 void PH2AudioProcessorEditor::paint (juce::Graphics& g)
 {
-    g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
-    g.drawImage (background, 0, 0, getWidth(), getHeight(), 0, 0, background.getWidth(), background.getHeight());
-    g.addTransform (juce::AffineTransform::scale ((float) getWidth() / kImgW));      // image pixels from here on
+    paintBackground (g);       // the image, then image pixels
 
     // power slide switch: chrome ball left = off, right = on; the slot lights up green when on
     const bool on = proc.apvts.getRawParameterValue ("bypass")->load() < 0.5f;
-    if (on)
-    {
-        const auto slot = juce::Rectangle<float> (66.0f, 34.0f).withCentre (kLed);
-        g.setColour (juce::Colour (0xff40d070).withAlpha (0.05f));
-        g.fillRoundedRectangle (slot.expanded (16.0f), 30.0f);
-        g.setColour (juce::Colour (0xff40d070).withAlpha (0.08f));
-        g.fillRoundedRectangle (slot.expanded (8.0f), 24.0f);
-        g.setGradientFill (juce::ColourGradient (juce::Colour (0xff2f8a4c), slot.getX(), slot.getY(),
-                                                 juce::Colour (0xff17512b), slot.getX(), slot.getBottom(), false));
-        g.fillRoundedRectangle (slot, 17.0f);
-        g.setColour (juce::Colours::white.withAlpha (0.10f));
-        g.fillRoundedRectangle (slot.withHeight (slot.getHeight() * 0.40f).reduced (8.0f, 3.0f), 6.0f);
-    }
-    const juce::Point<float> c (kLed.x + (on ? 17.0f : -17.0f), kLed.y);
-    const auto circle = [&] (float r) { return juce::Rectangle<float> (r * 2.0f, r * 2.0f).withCentre (c); };
-    g.setColour (juce::Colours::black.withAlpha (0.55f));
-    g.fillEllipse (circle (15.0f).translated (2.0f, 4.0f));
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xfffafbfd), c.x - 6.0f, c.y - 8.0f,
-                                             juce::Colour (0xff6b6f7a), c.x + 9.0f, c.y + 11.0f, true));
-    g.fillEllipse (circle (14.0f));
+    vibr::ui::paintSlideSwitch (g, kLed, on);
 
     // SYNC: a flat rounded button, dark with a body-colour border when off, filled body colour when on
     const float rad = kSyncPill.getHeight() * 0.5f;

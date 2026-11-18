@@ -16,7 +16,7 @@ DARK = (244, 246, 250)                            # print on the body
 PANEL = (24, 25, 28)
 CHROME = [(0, (250, 250, 252)), (0.35, (190, 194, 202)), (0.7, (110, 114, 124)), (1, (60, 62, 70))]
 
-# ----- layout (shared with PluginEditor.cpp); same margins and gaps as the DM-1 (see ../style.md) -----
+# ----- layout (shared with PluginEditor.cpp); same margins and gaps as the DM-1 (see ../style_guide.md) -----
 PT, PB = 268, 910
 P1, P2 = (40, PT, 686, PB), (706, PT, 1746, PB)      # side margins 40, panel gap 20
 TYPE_C, TYPE_R = (363, 624), 80               # centred in the TYPE panel (40 .. 686), with a gap between the names and both panel edges               # the 12-position TYPE selector

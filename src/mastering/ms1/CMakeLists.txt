@@ -21,6 +21,8 @@ juce_generate_juce_header(MS-1)
 target_sources(MS-1
   PRIVATE
     PluginEditor.cpp
+    EditorDisplays.cpp
+    EditorAuto.cpp
     PluginEditor.h
     PluginProcessor.cpp
     PluginProcessor.h

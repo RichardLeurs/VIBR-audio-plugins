@@ -16,7 +16,7 @@ DARK = (8, 26, 33)                            # print on the body
 PANEL = (24, 25, 28)
 CHROME = [(0, (250, 250, 252)), (0.35, (190, 194, 202)), (0.7, (110, 114, 124)), (1, (60, 62, 70))]
 
-# ----- layout (shared with PluginEditor.cpp); same margins and gaps as the DM-1 (see ../style.md) -----
+# ----- layout (shared with PluginEditor.cpp); same margins and gaps as the DM-1 (see ../style_guide.md) -----
 PT, PB = 268, 822
 P1, P2 = (40, PT, 1480, PB), (1500, PT, 1800, PB)      # side margins 40, panel gap 20
 TOP, BOT = 410, 750                           # slider travel: +15 dB at the top, -15 dB at the bottom

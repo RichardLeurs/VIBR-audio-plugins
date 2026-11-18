@@ -16,7 +16,7 @@ DARK = (12, 33, 23)                            # print on the body
 PANEL = (24, 25, 28)
 CHROME = [(0, (250, 250, 252)), (0.35, (190, 194, 202)), (0.7, (110, 114, 124)), (1, (60, 62, 70))]
 
-# ----- layout (shared with PluginEditor.cpp); same margins and gaps as the DM-1 (see ../style.md) -----
+# ----- layout (shared with PluginEditor.cpp); same margins and gaps as the DM-1 (see ../style_guide.md) -----
 PT, PB = 268, 830
 P1, P2, P3 = (40, PT, 630, PB), (650, PT, 1240, PB), (1260, PT, 1800, PB)      # side margins 40, panel gaps 20; MODE is wider (more room for its legends)
 KY, KR = 532, 78                              # knob row and knob radius

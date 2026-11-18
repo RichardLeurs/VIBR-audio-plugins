@@ -1,5 +1,6 @@
 // VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
 #pragma once
+#include "dsp/DcBlocker.h"
 
 // SA-1 Lo-Fi Saturator: four colouring stages in one chain (BOOST -> TUBE -> TAPE -> CRUSH), each with its own on / off switch.
 //   BOOST  clean gain (0 .. 24 dB) with a TONE tilt (a +-8 dB high shelf at 3 kHz): it pushes the stages after it harder.
@@ -76,7 +77,7 @@ public:
         for (int c = 0; c < 2; ++c)
         {
             hsX1[c] = hsX2[c] = hsY1[c] = hsY2[c] = 0.0f;
-            dcX1[c] = dcY1[c] = 0.0f; lpT[c] = 0.0f;
+            dc1[c].reset(); lpT[c] = 0.0f;
             bX1[c] = bX2[c] = bY1[c] = bY2[c] = 0.0f; tl1[c] = tl2[c] = 0.0f; hold[c] = 0.0f;
         }
         w = 0; wow = 0.0f; counter = 1.0f;
@@ -125,7 +126,7 @@ public:
 
                 // TUBE: asymmetric saturation, DC removed, 12 kHz low pass
                 y = (std::tanh (tg * x + tb) - toff) / tg * tubeMake;
-                const float yd = y - dcX1[c] + 0.9975f * dcY1[c]; dcX1[c] = y; dcY1[c] = yd;
+                const float yd = dc1[c].process (y, 0.9975f);
                 lpT[c] = yd * (1.0f - lpA) + lpT[c] * lpA;
                 x += (lpT[c] - x) * stage[1];
 
@@ -171,7 +172,7 @@ private:
     float fs = 48000.0f;
     float hsB0 = 1, hsB1 = 0, hsB2 = 0, hsA1 = 0, hsA2 = 0, bB0 = 1, bB1 = 0, bB2 = 0, bA1 = 0, bA2 = 0;
     float hsX1[2] {}, hsX2[2] {}, hsY1[2] {}, hsY2[2] {}, bX1[2] {}, bX2[2] {}, bY1[2] {}, bY2[2] {};
-    float dcX1[2] {}, dcY1[2] {}, lpT[2] {}, tl1[2] {}, tl2[2] {}, hold[2] {};
+    vibr::dsp::DcBlocker dc1[2]; float lpT[2] {}, tl1[2] {}, tl2[2] {}, hold[2] {};
     float stage[4] { -1, -1, -1, -1 }, gBoost = -1.0f, mixS = -1.0f, levelS = -1.0f, wow = 0.0f, counter = 1.0f;
     int size = 1, mask = 0, w = 0;
     std::vector<float> line[2];

@@ -6,7 +6,7 @@
 # VST3 / AU / Standalone bundles are collected in
 #   ~/Developer/VIBR/releases/<arch>/{new,vintage,experimental,mastering,multieffect,drumcomputer}/{VST3,AU,Standalone}     (<arch> = arm64 or x86_64; on Windows win64, on Linux linux64 or linuxarm64, both without AU)
 # 
-# After each build every releases/<arch>/<group>/<format> folder is zipped to ~/Developer/VIBR/zip/VIBR-<group>-<format>-<arch>.zip (e.g. VIBR-new-AU-arm64.zip). The group of each plugin is set in config/plugins.conf.
+# After each build every releases/<arch>/<group>/<format> folder is zipped to ~/Developer/VIBR/zip/VIBR-<group>-<format>-<arch>-<version>.zip (e.g. VIBR-new-AU-arm64-0.2.0.zip). The group of each plugin is set in config/plugins.conf.
 # Linux (linux64 = x86_64): run this script on a Linux machine with a C++20 compiler, CMake and the JUCE dependencies (see INSTALL.md): VST3 and Standalone, no AU.
 # Windows (win64): run this script on a Windows machine in Git Bash with Visual Studio 2022 (C++ desktop workload) and CMake installed. A Mac cannot build the Windows plugins.
 #
@@ -14,8 +14,8 @@
 #   ./build.sh --arch x86_64      build everything for Intel (build tree ~/Developer/VIBR-x86_64)
 #   ./build.sh --arch all         arm64 and x86_64 one after the other
 #   ./build.sh --arch win64       (on Windows) build everything for 64-bit Windows: VST3 and Standalone in ~/Developer/VIBR/releases/win64 (build tree ~/Developer/VIBR-win64)
-#   ./build.sh DD-1 SD-3          build only these plugins (DD-1 DM-1 CE-1 RE-1 RE-2 DS-1 BF-3 CS-3 LM-2 PH-2 GE-7 EH-2 TR-2 ME-1 SL-2 OD-2 OC-5 BS-1 MM-1 SD-1 SD-3 SP-1 RV-1 MF-1 HM-2 GR-1 SR-1 VC-1 PT-1 DY-1 SA-1 SU-1 ML-1 DL-1 DN-1 DV-1 AL-1 RH-1 RB-1 MS-1 TR-8)
-#   ./build.sh --clean [names]    rebuild from scratch (needed to re-run the collect / copy steps when nothing changed)
+#   ./build.sh DD-1 SD-3          build only these plugins (DD-1 DM-1 CE-1 RE-1 RE-2 DS-1 BF-3 CS-3 LM-2 PH-2 GE-7 EH-2 TR-2 ME-1 SL-2 OD-2 OC-5 BS-1 MM-1 SD-1 SD-3 SU-1 ML-1 DL-1 DN-1 DV-1 AL-1 RH-1 RB-1 MS-1 TR-8)
+#   ./build.sh --clean [names]    rebuild from scratch (the bundles are collected in releases / test on every build, also when nothing was recompiled)
 #   ./build.sh --configure        only (re)configure
 #   ./build.sh --no-zip           skip the zip step
 #   ./build.sh --install          also install the VST3 / AU in ~/Library/Audio/Plug-Ins (default: only ~/Developer/VIBR/releases; auval needs the install)
@@ -28,6 +28,7 @@ set -euo pipefail
 
 SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OUT="$HOME/Developer/VIBR"
+VERSION="0.2.0"      # the release version: the end of every zip name (keep it the same as project(... VERSION) in config/CMakeLists.txt and VERSION in website/script.js)
 HOST="$(uname -m)"
 IS_WIN=0 IS_LINUX=0
 case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) IS_WIN=1; HOST="win64" ;;   Linux*) IS_LINUX=1; [ "$HOST" = x86_64 ] && HOST="linux64" || HOST="linuxarm64" ;; esac        # Git Bash on Windows / Linux (linux64 = x86_64, linuxarm64 = aarch64)
@@ -150,7 +151,7 @@ build_arch() {
     local g f d z
     for g in new vintage experimental mastering multieffect drumcomputer; do
       for f in VST3 AU Standalone; do                # (win64 has no AU folder: it is skipped)
-        d="$OUT/releases/$a/$g/$f"; z="$OUT/zip/VIBR-$g-$f-$a.zip"
+        d="$OUT/releases/$a/$g/$f"; z="$OUT/zip/VIBR-$g-$f-$a-$VERSION.zip"
         [ -d "$d" ] || continue
         cp "$SRC/INSTALL.md" "$d/INSTALL.md"; cp "$SRC/LICENSE" "$d/LICENSE"      # every zip holds the install notes and the license (INSTALL.md links to LICENSE)
         rm -f "$z"
@@ -174,7 +175,7 @@ __     _____ ____  ____
    \_/  |___|____/|_| \_\
    
 ART
-  printf '%s\n  audio plugins | Copyright (c) Richard Leurs 2026 | GPL3.0\n\n' "$C_OFF"
+  printf '%s\n VIBR Audio Plugins | Copyright (c) Richard Leurs 2026 | GPL3.0\n\n' "$C_OFF"
 }
 
 print_banner

@@ -1,5 +1,6 @@
 // VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
 #pragma once
+#include "dsp/Interp.h"
 
 // DL-1 Delay Lab: one delay engine with the voicings of the VIBR delays as modes (see .claude/lab_specs.md). Built so far:
 //   DIGITAL  the SD-1 Digital Delay: clean, exact repeats, a two-pole hi-cut in the feedback path, a soft-clipped input, DIRECT and EFFECT levels, TIME FACTOR
@@ -69,8 +70,7 @@ public:
         const int i1 = df > 0.0f ? writePos - 2 - di : writePos - 1 - di;
         const float f = df > 0.0f ? 1.0f - df : 0.0f;
         const float y0 = buffer[(size_t) ((i1 - 1) & mask)], y1 = buffer[(size_t) (i1 & mask)], y2 = buffer[(size_t) ((i1 + 1) & mask)], y3 = buffer[(size_t) ((i1 + 2) & mask)];
-        const float c1 = 0.5f * (y2 - y0), c2 = y0 - 2.5f * y1 + 2.0f * y2 - 0.5f * y3, c3 = 0.5f * (y3 - y0) + 1.5f * (y1 - y2);
-        return ((c3 * f + c2) * f + c1) * f + y1;
+        return vibr::dsp::hermite4 (y0, y1, y2, y3, f);
     }
 private:
     std::vector<float> buffer;

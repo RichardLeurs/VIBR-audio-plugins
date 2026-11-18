@@ -1,5 +1,6 @@
 // VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
 #pragma once
+#include "dsp/Interp.h"
 
 // ML-1 Modulation Lab: four classic modulation effects in one plugin, all driven by one LFO.
 //   CHORUS    2 / 3 / 4 voices of a short (11 ms +) delay, each swept by the LFO a fraction of a cycle apart; the dry sound is added.
@@ -305,8 +306,7 @@ private:
         const int i1 = (w - (int) fi) & mask;
         const auto& b = line[c];
         const float ym1 = b[(size_t) ((i1 + 1) & mask)], y0 = b[(size_t) i1], y1 = b[(size_t) ((i1 - 1) & mask)], y2 = b[(size_t) ((i1 - 2) & mask)];
-        const float c1 = 0.5f * (y1 - ym1), c2 = ym1 - 2.5f * y0 + 2.0f * y1 - 0.5f * y2, c3 = 0.5f * (y2 - ym1) + 1.5f * (y0 - y1);
-        return ((c3 * fr + c2) * fr + c1) * fr + y0;
+        return vibr::dsp::hermite4 (ym1, y0, y1, y2, fr);
     }
 
     // linear interpolation for the rotary's buffers (the line holds the input, w is the next write position)
@@ -315,7 +315,7 @@ private:
         d = std::clamp (d, 1.0f, (float) mask - 3.0f);
         const float fi = std::floor (d), fr = d - fi;
         const int i0 = (w - (int) fi) & mask, i1 = (i0 - 1) & mask;
-        return b[(size_t) i0] + (b[(size_t) i1] - b[(size_t) i0]) * fr;
+        return vibr::dsp::lerp (b[(size_t) i0], b[(size_t) i1], fr);
     }
 
     float fs = 48000.0f, phase = 0.0f, thH = 0.0f, thD = 0.0f, fH = 0.7f, fD = 0.7f, lp1 = 0.0f, lp2 = 0.0f;

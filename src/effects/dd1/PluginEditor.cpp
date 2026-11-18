@@ -86,7 +86,7 @@ constexpr float kDispY = 246.0f + kDy, kDispW = 176.0f, kDispH = 44.0f;
 // memory lamp sitting in a chrome bezel painted in the background (image pixels)
 void drawLamp (juce::Graphics& g, juce::Point<float> c, bool on, float k = 1.0f)
 {
-    // flat, the same as the DM-1 and RE-2 lamps (style.md "Flat style"): a plain 22 px disc inside the ring painted in the background,
+    // flat, the same as the DM-1 and RE-2 lamps (style_guide.md "Flat style"): a plain 22 px disc inside the ring painted in the background,
     // green when selected, a dark shade of green otherwise; no glow, no highlight
     const juce::Colour colour (0xff40d070);
     g.setColour (on ? colour : colour.interpolatedWith (juce::Colour (0xff0c0d0f), 0.78f));

@@ -4,7 +4,7 @@
 #include "PluginProcessor.h"
 #include "ui/OutputMeter.h"
 
-// Black knob of the VIBR look (see style.md): matt body with a knurled edge, raised cap, white pointer bar.
+// Black knob of the VIBR look (see style_guide.md): matt body with a knurled edge, raised cap, white pointer bar.
 // The knob is drawn 5 px inside its component so the shadow is not clipped.
 class SU1LookAndFeel : public juce::LookAndFeel_V4
 {

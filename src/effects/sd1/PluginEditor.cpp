@@ -10,7 +10,6 @@ constexpr float kImgW = 2520.0f, kImgH = 918.0f;
 constexpr int kBaseW = 1260;
 
 constexpr float kKnobRadius = 60.0f;                       // black knob; the printed scale sits outside it
-constexpr float kPad = 3.0f;
 constexpr float kKnobY = 500.0f;
 struct KnobSpec { const char* id; float x; float startDeg, endDeg; };
 const KnobSpec kKnobs[9] = {
@@ -28,11 +27,6 @@ const juce::Colour kBody { 0xff3979ef };
 
 const juce::Point<float> kLed { 2445.0f, 87.0f };          // power slide switch (top right, ball left = off) = the `power` parameter
 const juce::Rectangle<float> kMeter { 94.0f, 356.0f, 36.0f, 262.0f };      // headroom meter frame
-
-juce::Point<float> polar (juce::Point<float> c, float r, float a)
-{
-    return { c.x + r * std::sin (a), c.y - r * std::cos (a) };
-}
 
 // lamp sitting in a chrome bezel that is painted in the background (image pixels)
 void drawLamp (juce::Graphics& g, juce::Point<float> c, bool on, juce::Colour colour)
@@ -54,63 +48,14 @@ void drawLamp (juce::Graphics& g, juce::Point<float> c, bool on, juce::Colour co
 } // namespace
 
 //==============================================================================
-void SDD1000LookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int w, int h, float,
-                                         float startAngle, float endAngle, juce::Slider& s)
-{
-    const auto b = juce::Rectangle<float> ((float) x, (float) y, (float) w, (float) h);
-    const auto c = b.getCentre();
-    const float R = juce::jmin (b.getWidth(), b.getHeight()) * 0.5f - kPad;
-    const double lo = s.getMinimum(), hi = s.getMaximum();
-    const float pos = (float) ((s.getValue() - lo) / (hi - lo));
-    const float angle = startAngle + pos * (endAngle - startAngle);
-    const auto circle = [&] (float r) { return juce::Rectangle<float> (r * 2.0f, r * 2.0f).withCentre (c); };
-
-    // soft drop shadow
-    g.setColour (juce::Colours::black.withAlpha (0.55f));
-    g.fillEllipse (circle (R).translated (R * 0.05f, R * 0.09f));
-
-    // matt black body with a knurled grip edge
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff4a4c51), c.x - R * 0.7f, c.y - R * 0.8f,
-                                             juce::Colour (0xff050506), c.x + R * 0.7f, c.y + R * 0.9f, false));
-    g.fillEllipse (circle (R));
-    constexpr int ridges = 60;
-    for (int i = 0; i < ridges; ++i)
-    {
-        const float a = juce::MathConstants<float>::twoPi * (float) i / (float) ridges;
-        g.setColour (juce::Colours::white.withAlpha (0.10f + 0.10f * std::max (0.0f, std::cos (a + 0.8f))));
-        g.drawLine (polar (c, R * 0.90f, a).x, polar (c, R * 0.90f, a).y, polar (c, R * 0.99f, a).x, polar (c, R * 0.99f, a).y, 1.0f);
-    }
-    g.setColour (juce::Colours::black);
-    g.drawEllipse (circle (R), 1.2f);
-
-    // raised cap
-    const float capR = R * 0.80f;
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff3a3b3f), c.x - capR * 0.6f, c.y - capR * 0.7f,
-                                             juce::Colour (0xff0b0b0c), c.x + capR * 0.6f, c.y + capR * 0.8f, false));
-    g.fillEllipse (circle (capR));
-    g.setGradientFill (juce::ColourGradient (juce::Colours::white.withAlpha (0.14f), c.x - capR * 0.5f, c.y - capR * 0.6f,
-                                             juce::Colours::transparentWhite, c.x + capR * 0.1f, c.y + capR * 0.1f, true));
-    g.fillEllipse (circle (capR));
-    g.setGradientFill (juce::ColourGradient (juce::Colours::white.withAlpha (0.35f), c.x - capR, c.y - capR,
-                                             juce::Colour (0xff000000), c.x + capR, c.y + capR, false));
-    g.drawEllipse (circle (capR), 1.2f);
-
-    // pointer: white bar from the rim toward the centre
-    juce::Path p;
-    p.addRoundedRectangle (-capR * 0.055f, -capR * 0.94f, capR * 0.11f, capR * 0.50f, capR * 0.05f);
-    g.setColour (juce::Colour (0xfff2f2ee));
-    g.fillPath (p, juce::AffineTransform::rotation (angle).translated (c));
-}
-
 //==============================================================================
 SDD1000AudioProcessorEditor::SDD1000AudioProcessorEditor (SDD1000AudioProcessor& p)
-    : AudioProcessorEditor (&p), proc (p),
+    : PedalEditor (p, SD1Data::background_png, (size_t) SD1Data::background_pngSize, kImgW, kImgH, kBaseW, 630), proc (p),
       syncAtt (*p.apvts.getParameter ("sync"), [this] (float v) { syncOn = v > 0.5f; syncChanged(); }),
       divisionAtt (*p.apvts.getParameter ("division"), [this] (float v) { division = (int) std::lround (v); repaint(); })
 {
     setLookAndFeel (&laf);
-    background = juce::ImageFileFormat::loadFrom (SD1Data::background_png, (size_t) SD1Data::background_pngSize);
-
+    
     for (int i = 0; i < 9; ++i)
     {
         auto& k = knobs[i];
@@ -127,11 +72,7 @@ SDD1000AudioProcessorEditor::SDD1000AudioProcessorEditor (SDD1000AudioProcessor&
     syncAtt.sendInitialUpdate();
     divisionAtt.sendInitialUpdate();
 
-    constrainer.setFixedAspectRatio ((double) kImgW / (double) kImgH);
-    constrainer.setSizeLimits (630, 229, 2520, 918);
-    setConstrainer (&constrainer);
-    setResizable (true, true);
-    setSize (kBaseW, (int) std::round ((float) kBaseW * kImgH / kImgW));
+    resized();                                                       // place the knobs (the base class sized the window before they existed)
     startTimerHz (30);
 }
 
@@ -195,9 +136,7 @@ void SDD1000AudioProcessorEditor::timerCallback()
 
 void SDD1000AudioProcessorEditor::paint (juce::Graphics& g)
 {
-    g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
-    g.drawImage (background, 0, 0, getWidth(), getHeight(), 0, 0, background.getWidth(), background.getHeight());
-    g.addTransform (juce::AffineTransform::scale ((float) getWidth() / kImgW));      // image pixels from here on
+    paintBackground (g);       // the image, then image pixels
 
     // ---- headroom meter: 4 LED segments (-20, -10, 0, +6 dB), bottom to top
     {
@@ -221,26 +160,7 @@ void SDD1000AudioProcessorEditor::paint (juce::Graphics& g)
 
     // ---- power slide switch: chrome ball left = off, right = on; the slot lights up green when on
     const bool on = proc.apvts.getRawParameterValue ("power")->load() > 0.5f;
-    if (on)
-    {
-        const auto slot = juce::Rectangle<float> (66.0f, 34.0f).withCentre (kLed);
-        g.setColour (juce::Colour (0xff40d070).withAlpha (0.05f));
-        g.fillRoundedRectangle (slot.expanded (16.0f), 30.0f);
-        g.setColour (juce::Colour (0xff40d070).withAlpha (0.08f));
-        g.fillRoundedRectangle (slot.expanded (8.0f), 24.0f);
-        g.setGradientFill (juce::ColourGradient (juce::Colour (0xff2f8a4c), slot.getX(), slot.getY(),
-                                                 juce::Colour (0xff17512b), slot.getX(), slot.getBottom(), false));
-        g.fillRoundedRectangle (slot, 17.0f);
-        g.setColour (juce::Colours::white.withAlpha (0.10f));
-        g.fillRoundedRectangle (slot.withHeight (slot.getHeight() * 0.40f).reduced (8.0f, 3.0f), 6.0f);
-    }
-    const juce::Point<float> c (kLed.x + (on ? 17.0f : -17.0f), kLed.y);
-    const auto circle = [&] (float r) { return juce::Rectangle<float> (r * 2.0f, r * 2.0f).withCentre (c); };
-    g.setColour (juce::Colours::black.withAlpha (0.55f));
-    g.fillEllipse (circle (15.0f).translated (2.0f, 4.0f));
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xfffafbfd), c.x - 6.0f, c.y - 8.0f,
-                                             juce::Colour (0xff6b6f7a), c.x + 9.0f, c.y + 11.0f, true));
-    g.fillEllipse (circle (14.0f));
+    vibr::ui::paintSlideSwitch (g, kLed, on);
 
     // ---- SYNC: a flat rounded button, dark with a body-colour border when off, filled body colour when on
     const float rad = kSyncPill.getHeight() * 0.5f;

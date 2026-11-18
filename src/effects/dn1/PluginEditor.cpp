@@ -7,7 +7,7 @@ namespace
 using vibr::ui::drawText;
 namespace ui = vibr::ui;
 
-constexpr float kW = 1200.0f, kH = 690.0f, kRow1Y = 134.0f, kRow1H = 247.0f, kRow2Y = 405.0f, kRow2H = 216.0f, kKnobR = 24.0f, kPad = 5.0f, kBarY = 39.0f;
+constexpr float kW = 1200.0f, kH = 690.0f, kRow1Y = 134.0f, kRow1H = 247.0f, kRow2Y = 405.0f, kRow2H = 216.0f, kBarY = 39.0f;
 const ui::Palette kPal { juce::Colour (244, 197, 66), juce::Colour (44, 35, 12) };            // the Dynamics colour #F4C542 and its print
 
 // panels: 0 CONTROLS (with the mode tabs), 1 SIDECHAIN, 2 ACTION (display), 3 OUTPUT
@@ -32,7 +32,7 @@ constexpr float kDbTop = 0.0f, kDbBottom = -60.0f, kGainTop = 12.0f, kGainBottom
 // kinds: 0 dB threshold, 1 ms (release), 2 ratio, 3 percent, 4 +- percent, 5 level dB, 6 sidechain high-pass, 7 ms attack, 8 make-up dB, 9 ceiling dB
 //==============================================================================
 DN1AudioProcessorEditor::DN1AudioProcessorEditor (DN1AudioProcessor& p)
-    : AudioProcessorEditor (&p), proc (p),
+    : LabEditor (p, kW, kH), proc (p),
       knobs { { { "gateThresh", 0, 0, 7, "GATE", 0, 0, 7, {}, {} },        { "gateRelease", 0, 1, 7, "GATE REL.", 1, 0, 7, {}, {} },   { "expThresh", 0, 2, 7, "EXPANDER", 0, 0, 7, {}, {} },
                 { "expRatio", 0, 3, 7, "RATIO", 2, 0, 7, {}, {} },         { "expRelease", 0, 4, 7, "EXP REL.", 1, 0, 7, {}, {} },     { "attack", 0, 5, 7, "ATTACK", 4, 0, 7, {}, {} },
                 { "sustain", 0, 6, 7, "SUSTAIN", 4, 0, 7, {}, {} },
@@ -43,36 +43,17 @@ DN1AudioProcessorEditor::DN1AudioProcessorEditor (DN1AudioProcessor& p)
                 { "limThresh", 0, 0, 4, "THRESHOLD", 0, 2, 7, {}, {} },    { "limRelease", 0, 1, 4, "RELEASE", 1, 2, 7, {}, {} },      { "limCeiling", 0, 2, 4, "CEILING", 9, 2, 7, {}, {} },
                 { "tone", 0, 3, 4, "TONE", 3, 2, 7, {}, {} },
                 { "scHp", 1, 0, 2, "SC HIGH-PASS", 6, -1, 7, {}, {} },     { "link", 1, 1, 2, "STEREO LINK", 3, -1, 7, {}, {} },
-                { "mix", 3, 0, 2, "MIX", 3, -1, 7, {}, {} },               { "level", 3, 1, 2, "LEVEL", 5, -1, 7, {}, {} } } },
-      powerAtt (*p.apvts.getParameter ("power"), [this] (float) { repaint(); }, nullptr)
+                { "mix", 3, 0, 2, "MIX", 3, -1, 7, {}, {} },               { "level", 3, 1, 2, "LEVEL", 5, -1, 7, {}, {} } } }
 {
-    setLookAndFeel (&laf);
     for (auto& k : knobs)
     {
-        ui::setupKnob (k.slider, *this);
-        auto* par = proc.apvts.getParameter (k.id);
-        k.slider.setDoubleClickReturnValue (true, par->convertFrom0to1 (par->getDefaultValue()));
-        k.slider.onDragStart = [this] { proc.undoManager.beginNewTransaction(); };
-        addAndMakeVisible (k.slider);
-        k.att = std::make_unique<juce::SliderParameterAttachment> (*dynamic_cast<juce::RangedAudioParameter*> (par), k.slider, nullptr);
-        k.slider.onValueChange = [this] { repaint(); };
+        attachKnob (k.slider, k.att, k.id);
     }
-    powerAtt.sendInitialUpdate();
-    grain = ui::makeGrain();
-    constrainer.setSizeLimits (720, 414, 2400, 1380);
-    constrainer.setFixedAspectRatio ((double) kW / (double) kH);
-    setConstrainer (&constrainer);
-    setResizable (true, true);
-    setSize ((int) kW, (int) kH);
     layoutKnobs();
     startTimerHz (30);
 }
 
-DN1AudioProcessorEditor::~DN1AudioProcessorEditor()
-{
-    stopTimer();
-    setLookAndFeel (nullptr);
-}
+DN1AudioProcessorEditor::~DN1AudioProcessorEditor() = default;
 
 void DN1AudioProcessorEditor::paintOverChildren (juce::Graphics& g)
 {
@@ -83,23 +64,13 @@ void DN1AudioProcessorEditor::timerCallback()
 {
     meter.update (proc.outMeter);
     if (const int shown = mode() * 8 + variant(); shown != shownKey) { shownKey = shown; layoutKnobs(); repaint(); }       // a preset, undo, A / B or automation changed the tab
-    repaint (panelRect (3).withTrimmedLeft (panelRect (3).getWidth() - 150.0f).expanded (2.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer());
+    repaintDesign (panelRect (3).withTrimmedLeft (panelRect (3).getWidth() - 150.0f).expanded (2.0f));
     if (midiUI != nullptr && midiUI->needsRepaint()) { midiUI->tick(); repaint(); }
-    if (proc.extKey.load (std::memory_order_relaxed) != extShown) { extShown = proc.extKey.load(); repaint (panelRect (1).expanded (4.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer()); }
-    repaint (panelRect (2).expanded (4.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer());
-    if (barState.copiedAt != 0) { repaint (juce::Rectangle<float> (0.0f, 30.0f, 900.0f, 50.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer()); if (! barState.copiedRecently()) barState.copiedAt = 0; }
+    if (proc.extKey.load (std::memory_order_relaxed) != extShown) { extShown = proc.extKey.load(); repaintDesign (panelRect (1).expanded (4.0f)); }
+    repaintDesign (panelRect (2).expanded (4.0f));
+    tickPresetBar();
 }
 
-void DN1AudioProcessorEditor::toggle (const char* id)
-{
-    auto* par = proc.apvts.getParameter (id);
-    par->beginChangeGesture(); par->setValueNotifyingHost (par->getValue() > 0.5f ? 0.0f : 1.0f); par->endChangeGesture();
-}
-void DN1AudioProcessorEditor::setChoice (const char* id, int index)
-{
-    auto* par = proc.apvts.getParameter (id);
-    par->beginChangeGesture(); par->setValueNotifyingHost (par->convertTo0to1 ((float) index)); par->endChangeGesture();
-}
 
 bool DN1AudioProcessorEditor::knobShown (int i) const
 {
@@ -109,11 +80,10 @@ bool DN1AudioProcessorEditor::knobShown (int i) const
 
 void DN1AudioProcessorEditor::layoutKnobs()
 {
-    const float sc = scale(), d = 2.0f * (kKnobR + kPad) * sc;
     for (int i = 0; i < (int) knobs.size(); ++i)
     {
         auto& k = knobs[(size_t) i];
-        k.slider.setBounds (juce::Rectangle<float> (d, d).withCentre (knobCentre (k.panel, k.index, k.count) * sc).toNearestInt());
+        placeKnob (k.slider, knobCentre (k.panel, k.index, k.count));
         k.slider.setVisible (knobShown (i));
     }
 
@@ -243,7 +213,7 @@ void DN1AudioProcessorEditor::paint (juce::Graphics& g)
         if (k.kind == 0 && std::string (k.id) != "gateThresh" && std::string (k.id) != "expThresh") { l = std::string (k.id) == "limThresh" ? "-30" : "-60"; h = "0"; }
         const auto c = knobCentre (k.panel, k.index, k.count);
         ui::paintKnob (g, kPal, c, k.name, txt, l, h, panelRect (k.panel).getY() + 154.0f, panelRect (k.panel).getY() + 182.0f);
-        ui::paintValueArc (g, c, kKnobR, (float) k.slider.valueToProportionOfLength (k.slider.getValue()), kPal.body);
+        ui::paintValueArc (g, c, ui::kKnobR, (float) k.slider.valueToProportionOfLength (k.slider.getValue()), kPal.body);
     }
     meter.paint (g, meterOrigin().x, meterOrigin().y, isOn ("power"), kPal.body, kPal.ink, 110.0f, 26.0f, 13.0f);
     ui::paintFooter (g, kPal, kRow2Y + kRow2H + 35.0f);

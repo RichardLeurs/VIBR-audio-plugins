@@ -10,75 +10,21 @@ constexpr float kImgW = 1840.0f, kImgH = 890.0f;
 constexpr int kBaseW = 920;
 
 constexpr float kKnobRadius = 100.0f;                      // black knob; the printed scale sits outside it
-constexpr float kPad = 3.0f;
 constexpr float kKnobY = 532.0f;
 struct KnobSpec { const char* id; float x; float startDeg, endDeg; };
 const KnobSpec kMix { "mix", 326.0f, -154.0f, 154.0f }, kFreq { "freq", 920.0f, -154.0f, 154.0f }, kSens { "sens", 1514.0f, -154.0f, 154.0f };
 const juce::Point<float> kSensLamp { 1722.0f, 348.0f };    // SENS lamp: lit while the effect is open
 const juce::Point<float> kLed { 1765.0f, 87.0f };          // power slide switch (top right, ball left = off) = bypass
 
-juce::Point<float> polar (juce::Point<float> c, float r, float a)
-{
-    return { c.x + r * std::sin (a), c.y - r * std::cos (a) };
-}
 } // namespace
 
 //==============================================================================
-void EH2LookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int w, int h, float,
-                                         float startAngle, float endAngle, juce::Slider& s)
-{
-    const auto b = juce::Rectangle<float> ((float) x, (float) y, (float) w, (float) h);
-    const auto c = b.getCentre();
-    const float R = juce::jmin (b.getWidth(), b.getHeight()) * 0.5f - kPad;
-    const double lo = s.getMinimum(), hi = s.getMaximum();
-    const float pos = (float) ((s.getValue() - lo) / (hi - lo));
-    const float angle = startAngle + pos * (endAngle - startAngle);
-    const auto circle = [&] (float r) { return juce::Rectangle<float> (r * 2.0f, r * 2.0f).withCentre (c); };
-
-    // soft drop shadow
-    g.setColour (juce::Colours::black.withAlpha (0.55f));
-    g.fillEllipse (circle (R).translated (R * 0.05f, R * 0.09f));
-
-    // matt black body with a knurled grip edge
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff4a4c51), c.x - R * 0.7f, c.y - R * 0.8f,
-                                             juce::Colour (0xff050506), c.x + R * 0.7f, c.y + R * 0.9f, false));
-    g.fillEllipse (circle (R));
-    constexpr int ridges = 60;
-    for (int i = 0; i < ridges; ++i)
-    {
-        const float a = juce::MathConstants<float>::twoPi * (float) i / (float) ridges;
-        g.setColour (juce::Colours::white.withAlpha (0.10f + 0.10f * std::max (0.0f, std::cos (a + 0.8f))));
-        g.drawLine (polar (c, R * 0.90f, a).x, polar (c, R * 0.90f, a).y, polar (c, R * 0.99f, a).x, polar (c, R * 0.99f, a).y, 1.0f);
-    }
-    g.setColour (juce::Colours::black);
-    g.drawEllipse (circle (R), 1.2f);
-
-    // raised cap
-    const float capR = R * 0.80f;
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff3a3b3f), c.x - capR * 0.6f, c.y - capR * 0.7f,
-                                             juce::Colour (0xff0b0b0c), c.x + capR * 0.6f, c.y + capR * 0.8f, false));
-    g.fillEllipse (circle (capR));
-    g.setGradientFill (juce::ColourGradient (juce::Colours::white.withAlpha (0.14f), c.x - capR * 0.5f, c.y - capR * 0.6f,
-                                             juce::Colours::transparentWhite, c.x + capR * 0.1f, c.y + capR * 0.1f, true));
-    g.fillEllipse (circle (capR));
-    g.setGradientFill (juce::ColourGradient (juce::Colours::white.withAlpha (0.35f), c.x - capR, c.y - capR,
-                                             juce::Colour (0xff000000), c.x + capR, c.y + capR, false));
-    g.drawEllipse (circle (capR), 1.2f);
-
-    // pointer: white bar from the rim toward the centre
-    juce::Path p;
-    p.addRoundedRectangle (-capR * 0.055f, -capR * 0.94f, capR * 0.11f, capR * 0.50f, capR * 0.05f);
-    g.setColour (juce::Colour (0xfff2f2ee));
-    g.fillPath (p, juce::AffineTransform::rotation (angle).translated (c));
-}
-
 //==============================================================================
 EH2AudioProcessorEditor::EH2AudioProcessorEditor (EH2AudioProcessor& p)
-    : AudioProcessorEditor (&p), proc (p)
+    : PedalEditor (p, EH2Data::background_png, (size_t) EH2Data::background_pngSize, kImgW, kImgH, kBaseW, 460), proc (p)
 {
     setLookAndFeel (&laf);
-    background = juce::ImageFileFormat::loadFrom (EH2Data::background_png, (size_t) EH2Data::background_pngSize);
-
+    
     const auto add = [this] (Knob& k, const KnobSpec& spec)
     {
         k.slider.setSliderStyle (juce::Slider::RotaryVerticalDrag);
@@ -93,11 +39,7 @@ EH2AudioProcessorEditor::EH2AudioProcessorEditor (EH2AudioProcessor& p)
     add (freq, kFreq);
     add (sens, kSens);
 
-    constrainer.setFixedAspectRatio ((double) kImgW / (double) kImgH);
-    constrainer.setSizeLimits (460, 222, 1840, 890);
-    setConstrainer (&constrainer);
-    setResizable (true, true);
-    setSize (kBaseW, (int) std::round ((float) kBaseW * kImgH / kImgW));
+    resized();                                                       // place the knobs (the base class sized the window before they existed)
     startTimerHz (20);
 }
 
@@ -119,14 +61,7 @@ void EH2AudioProcessorEditor::resized()
 void EH2AudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 {
     // the power slide switch is the bypass switch
-    const float S = (float) getWidth() / kImgW;
-    if (juce::Rectangle<float> (110.0f * S, 70.0f * S).withCentre (kLed * S).contains (e.position))
-    {
-        auto* prm = proc.apvts.getParameter ("bypass");
-        prm->beginChangeGesture();
-        prm->setValueNotifyingHost (prm->getValue() > 0.5f ? 0.0f : 1.0f);
-        prm->endChangeGesture();
-    }
+    toggleBypassAt (e.position, kLed);
 }
 
 void EH2AudioProcessorEditor::timerCallback()
@@ -138,9 +73,7 @@ void EH2AudioProcessorEditor::timerCallback()
 
 void EH2AudioProcessorEditor::paint (juce::Graphics& g)
 {
-    g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
-    g.drawImage (background, 0, 0, getWidth(), getHeight(), 0, 0, background.getWidth(), background.getHeight());
-    g.addTransform (juce::AffineTransform::scale ((float) getWidth() / kImgW));      // image pixels from here on
+    paintBackground (g);       // the image, then image pixels
 
     // power slide switch: chrome ball left = off, right = on; the slot lights up green when on
     const bool on = proc.apvts.getRawParameterValue ("bypass")->load() < 0.5f;

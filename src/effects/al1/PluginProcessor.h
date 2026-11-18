@@ -5,6 +5,7 @@
 
 #include <JuceHeader.h>
 #include "MidiMap.h"
+#include "plugin/LabProcessor.h"
 #include "AL1Engine.h"
 #include "ui/Presets.h"
 
@@ -12,12 +13,10 @@
 // Host parameters: power, bypass, inGain, gateOn, gateThresh, gateRelease, boostOn, boostDrive, boostLevel, boostTight, ampType, gain, bass, middle, treble, presence, resonance,
 // sag, master, bright, deep, cabOn, irALevel, irBLevel, lowCut, highCut, mic, ambience, eqOn, eqLow, eqMid, eqFreq, eqHigh, out, limiter.
 // The latency (the oversampler) is reported to the host and is the same in every type. The impulse responses are part of the session state, not of the presets.
-class AL1AudioProcessor : public juce::AudioProcessor,
-      private juce::AsyncUpdater
+class AL1AudioProcessor : public vibr::LabProcessor
 {
 public:
     AL1AudioProcessor();
-    ~AL1AudioProcessor() override { cancelPendingUpdate(); }
 
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
     void releaseResources() override {}
@@ -32,28 +31,6 @@ public:
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
     double getTailLengthSeconds() const override { return 2.0 + (double) juce::jmax (irSeconds[0].load(), irSeconds[1].load()); }
-    juce::AudioProcessorParameter* getBypassParameter() const override { return apvts.getParameter ("bypass"); }
-
-    // the factory presets are the host's programs (the preset menu in the editor stays in step through the preset name)
-    int getNumPrograms() override { return juce::jmax (1, (int) presets.factory().size()); }
-    int getCurrentProgram() override { return currentProgram.load(); }
-    void setCurrentProgram (int index) override
-    {
-        index = juce::jlimit (0, getNumPrograms() - 1, index);
-        if (index == currentProgram.load()) return;   // a host re-sending the current program must not reset the user's edits
-        currentProgram.store (index);
-        if (juce::MessageManager::getInstance()->isThisTheMessageThread()) presets.applyFactory (index);
-        else { pendingProgram.store (index); triggerAsyncUpdate(); }
-    }
-    const juce::String getProgramName (int index) override
-    {
-        const auto& list = presets.factory();
-        return index >= 0 && index < (int) list.size() ? list[(size_t) index].name : juce::String();
-    }
-    void changeProgramName (int, const juce::String&) override {}
-
-    void getStateInformation (juce::MemoryBlock&) override;
-    void setStateInformation (const void*, int) override;
 
     // ---- impulse responses (message thread): slot 0 = A, 1 = B ----
     static constexpr int kCurvePoints = 160;                                       // the display curve of an IR: 20 Hz .. 20 kHz, log spaced, dB
@@ -65,22 +42,19 @@ public:
     void copyIrCurve (int slot, float* dest) const { const juce::SpinLock::ScopedLockType sl (curveLock); std::copy (irCurve[slot].begin(), irCurve[slot].end(), dest); }
     static juce::File irFolder() { return juce::File::getSpecialLocation (juce::File::userDocumentsDirectory).getChildFile ("VIBR").getChildFile ("AL-1").getChildFile ("IRs"); }
 
-    juce::UndoManager undoManager { 30000, 100 };
-    juce::AudioProcessorValueTreeState apvts;
-    MidiMap midiMap { apvts, { "gain", "bass", "middle", "treble", "presence", "resonance", "sag", "master", "boostDrive", "gateThresh", "irALevel", "irBLevel", "eqMid", "ambience", "out", "inGain",
-                               "gateOn", "boostOn", "cabOn", "eqOn", "limiter" } };   // CC -> knob / switch, MIDI learn
-    vibr::BypassLink bypassLink { apvts };                // host bypass <-> OFF / ON switch
-    vibr::PresetManager presets;
-    std::atomic<int> currentProgram { 0 };
-    std::atomic<int> pendingProgram { -1 };
     std::atomic<int> uiTab { 0 }, uiDisplayTab { 0 };    // the tabs the editor shows (kept while the window is closed)
     const al1::Engine& getEngine() const { return engine; }
     al1::Engine& getEngine() { return engine; }
     al1::Params readParams() const;                      // the current settings (the editor draws the curves from them)
     double getSampleRate() const { return sr; }
 
+protected:
+    void addExtraState (juce::ValueTree& state) override;
+    void restoreExtraState (juce::ValueTree& state) override;
+    void afterStateRestored() override;
+
 private:
-    void handleAsyncUpdate() override { const int i = pendingProgram.exchange (-1); if (i >= 0) presets.applyFactory (i); }
+    juce::ValueTree irStash[2];                                        // the IR children of a state being restored (taken out by restoreExtraState)
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
     bool loadIrData (int slot, const juce::MemoryBlock& data, const juce::String& name, juce::String* error);
 

@@ -1,5 +1,6 @@
 // VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
 #include "PluginProcessor.h"
+#include "plugin/ParamLayout.h"
 #include "PluginEditor.h"
 
 namespace
@@ -22,6 +23,13 @@ std::vector<vibr::PresetManager::Factory> rh1FactoryPresets()
         { "Stepped Filter", "A sequenced low-pass on 16ths", { { "mode", 0 }, { "variant", 0 }, { "source", 2 }, { "sync", 1 }, { "division", 4 }, { "glide", 25 }, { "depth", 70 }, { "res", 65 },
                                                               { "step1", 100 }, { "step2", 30 }, { "step3", 70 }, { "step4", 20 }, { "step5", 90 }, { "step6", 40 }, { "step7", 60 }, { "step8", 10 },
                                                               { "step9", 100 }, { "step10", 30 }, { "step11", 70 }, { "step12", 20 }, { "step13", 90 }, { "step14", 50 }, { "step15", 80 }, { "step16", 10 } } },
+        { "Slow Sweep", "A band pass drifting up and down", { { "mode", 0 }, { "variant", 1 }, { "source", 0 }, { "cutoff", 45 }, { "res", 50 }, { "depth", 70 }, { "rate", 0.2f }, { "shape", 0 }, { "mix", 100 } } },
+        { "Wobble Bass", "Low pass, fast wobble", { { "mode", 0 }, { "variant", 0 }, { "source", 0 }, { "cutoff", 30 }, { "res", 70 }, { "depth", 80 }, { "rate", 1.26f }, { "shape", 0 }, { "mix", 100 } } },
+        { "Auto Wah", "The playing opens the filter", { { "mode", 0 }, { "variant", 1 }, { "source", 1 }, { "cutoff", 25 }, { "res", 65 }, { "depth", 85 }, { "sens", 55 }, { "decay", 35 }, { "mix", 100 } } },
+        { "Envelope Pluck", "A fast decay on a low pass", { { "mode", 0 }, { "variant", 0 }, { "source", 1 }, { "cutoff", 20 }, { "res", 60 }, { "depth", 90 }, { "sens", 70 }, { "decay", 20 }, { "mix", 100 } } },
+        { "Step Groove", "Eight steps repeated twice, locked to the tempo", { { "mode", 0 }, { "variant", 0 }, { "source", 2 }, { "sync", 1 }, { "division", 6 }, { "cutoff", 35 }, { "res", 60 }, { "depth", 80 }, { "rate", 8 }, { "glide", 10 }, { "step1", 20 }, { "step2", 80 }, { "step3", 40 }, { "step4", 100 }, { "step5", 30 }, { "step6", 70 }, { "step7", 50 }, { "step8", 90 }, { "step9", 20 }, { "step10", 80 }, { "step11", 40 }, { "step12", 100 }, { "step13", 30 }, { "step14", 70 }, { "step15", 50 }, { "step16", 90 }, { "mix", 100 } } },
+        { "Vowel Talker", "Vowel shapes moved by the LFO", { { "mode", 0 }, { "variant", 4 }, { "source", 0 }, { "cutoff", 50 }, { "res", 60 }, { "depth", 75 }, { "rate", 0.32f }, { "shape", 0 }, { "mix", 100 } } },
+        { "Notch Phase", "A swirling notch, half dry", { { "mode", 0 }, { "variant", 3 }, { "source", 0 }, { "cutoff", 55 }, { "res", 55 }, { "depth", 60 }, { "rate", 0.25f }, { "shape", 0 }, { "mix", 60 } } },
         { "Vintage Tremolo", "Smooth amplitude tremolo", { { "mode", 1 }, { "variant", 0 }, { "rate", 5.0f }, { "depth", 60 }, { "shape", 0 } } },
         { "Harmonic Tremolo", "Lows and highs in opposite phase", { { "mode", 1 }, { "variant", 1 }, { "rate", 4.0f }, { "depth", 70 } } },
         { "Auto-Pan", "Left and right in opposite phase, synced to the beat", { { "mode", 1 }, { "variant", 2 }, { "sync", 1 }, { "division", 2 }, { "depth", 100 } } },
@@ -29,26 +37,21 @@ std::vector<vibr::PresetManager::Factory> rh1FactoryPresets()
         { "Syncopated Chop", "A syncopated slicer pattern", lane (6, { { "mode", 2 }, { "variant", 0 }, { "slDuty", 7 }, { "slAttack", 2 } }) },
         { "Ping-Pong Slice", "Pattern left, gaps right", lane (3, { { "mode", 2 }, { "variant", 1 }, { "slDuty", 8 } }) },
         { "Shuffle Filter Slice", "The SFX slicer with swing", lane (10, { { "mode", 2 }, { "variant", 3 }, { "swing", 40 } }) },
+        { "Tremolo Pan", "LFO 1 on the level, LFO 2 on the pan", { { "mode", 3 }, { "vCutoff", 100 }, { "vRes", 0 }, { "vRate1", 55 }, { "vRate2", 35 }, { "vm00", 50 }, { "vm10", 50 }, { "vm11", 85 }, { "vm23", 90 } } },
+        { "Vibrato Drift", "Random and LFO move the pitch", { { "mode", 3 }, { "vCutoff", 100 }, { "vRes", 0 }, { "vRate1", 60 }, { "vm00", 50 }, { "vm10", 50 }, { "vm12", 62 }, { "vm32", 58 } } },
+        { "Envelope Ducker", "Loud notes pull the level down", { { "mode", 3 }, { "vCutoff", 100 }, { "vRes", 0 }, { "vEnvSens", 55 }, { "vEnvRel", 55 }, { "vm00", 50 }, { "vm10", 50 }, { "vm01", 10 } } },
+        { "Random Filter", "Stepped random on the cutoff", { { "mode", 3 }, { "vCutoff", 45 }, { "vRes", 60 }, { "vRand", 55 }, { "vm00", 50 }, { "vm10", 50 }, { "vm30", 92 } } },
+        { "Cross-Mod Wobble", "LFO 2 bends the rate of LFO 1", { { "mode", 3 }, { "vCutoff", 40 }, { "vRes", 60 }, { "vRate1", 50 }, { "vRate2", 40 }, { "vXmod", 65 }, { "vm10", 88 }, { "vm20", 60 } } },
+        { "Wheel Filter", "The mod wheel opens the filter", { { "mode", 3 }, { "vCutoff", 20 }, { "vRes", 55 }, { "vm00", 50 }, { "vm10", 50 }, { "vm40", 100 } } },
+        { "Matrix Auto Wah", "The playing opens the filter", { { "mode", 3 }, { "vCutoff", 25 }, { "vRes", 65 }, { "vEnvSens", 60 }, { "vEnvRel", 45 }, { "vm00", 95 }, { "vm10", 50 }, { "vType", 1 } } },
+        { "Matrix Slow Sweep", "A slow LFO moves a low pass", { { "mode", 3 }, { "vCutoff", 40 }, { "vRes", 55 }, { "vRate1", 15 }, { "vm00", 50 }, { "vm10", 90 } } },
     };
 }
 } // namespace
 
 namespace
 {
-// host label and readable text for a float parameter (the stored value is the shown value, the host shows the label next to it)
-juce::AudioParameterFloatAttributes unitAttrs (const juce::String& unit, int decimals)
-{
-    return juce::AudioParameterFloatAttributes()
-        .withLabel (unit)
-        .withStringFromValueFunction ([decimals] (float v, int)
-        {
-            return juce::String (v, decimals);                       // the number only: the host adds the label (unit) itself
-        })
-        .withValueFromStringFunction ([] (const juce::String& s)
-        {
-            return s.retainCharacters ("0123456789.-+").getFloatValue();
-        });
-}
+using vibr::unitAttrs;
 
 int decimalsFor (float step) { return step >= 1.0f ? 0 : step >= 0.1f ? 1 : 2; }
 
@@ -73,7 +76,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout RH1AudioProcessor::createLay
     const auto flag = [&layout] (const char* id, const char* name, bool def) { layout.add (std::make_unique<AudioParameterBool> (ParameterID { id, 1 }, name, def, AudioParameterBoolAttributes().withMeta (juce::String (id) == "power" || juce::String (id) == "bypass"))); };
     flag ("power", "Power", true);
     flag ("bypass", "Bypass", false);
-    layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "mode", 1 }, "Destination", StringArray { "Filter", "Tremolo", "Slicer" }, 0));
+    layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "mode", 1 }, "Destination", StringArray { "Filter", "Tremolo", "Slicer", "Matrix" }, 0));
     layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "variant", 1 }, "Type (filter type, tremolo type, slicer mode)", StringArray { "Type 1", "Type 2", "Type 3", "Type 4", "Type 5" }, 0));
     layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "source", 1 }, "Source", StringArray { "LFO", "Envelope", "Steps" }, 0));
     flag ("sync", "Sync (the rate follows the tempo)", false);
@@ -101,15 +104,39 @@ juce::AudioProcessorValueTreeState::ParameterLayout RH1AudioProcessor::createLay
     flt ("slBalance", "Slicer: Balance", 0.0f, 10.0f, 0.1f, 7.0f);
     flt ("mix", "Mix", 0.0f, 100.0f, 1.0f, 100.0f);
     flt ("level", "Level", -24.0f, 12.0f, 0.1f, 0.0f);
+    // the destination MATRIX (the VC-1: envelope, two LFOs, random and MIDI sources routed to filter, amp, pitch and pan); added after the first release, version hint 2.
+    // MIX and LEVEL are the shared ones.
+    const auto pct2 = [&layout] (const juce::String& id, const juce::String& name, float def) { layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id, 2 }, name, NormalisableRange<float> (0.0f, 100.0f, 1.0f), def, unitAttrs ("%", 0))); };
+    layout.add (std::make_unique<AudioParameterBool> (ParameterID { "vSync", 2 }, "Matrix: Sync (rates follow the host tempo)", false));
+    layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "vType", 2 }, "Matrix: Filter", StringArray { "Low pass", "Band pass", "High pass" }, 0));
+    layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "vShape1", 2 }, "Matrix: LFO 1 shape", StringArray { "Sine", "Triangle", "Square", "Ramp" }, 0));
+    layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "vShape2", 2 }, "Matrix: LFO 2 shape", StringArray { "Sine", "Triangle", "Square", "Ramp" }, 1));
+    pct2 ("vCutoff", "Matrix: Cutoff", 50.0f);
+    pct2 ("vRes", "Matrix: Resonance", 40.0f);
+    pct2 ("vEnvSens", "Matrix: Envelope sensitivity", 50.0f);
+    pct2 ("vEnvRel", "Matrix: Envelope release", 40.0f);
+    pct2 ("vRate1", "Matrix: LFO 1 rate", 45.0f);
+    pct2 ("vRate2", "Matrix: LFO 2 rate", 30.0f);
+    pct2 ("vRand", "Matrix: Random rate", 40.0f);
+    pct2 ("vXmod", "Matrix: Cross-modulation", 0.0f);
+    for (int s = 0; s < vc1::kNumSources; ++s)
+        for (int d = 0; d < vc1::kNumDests; ++d)
+        {
+            float def = 50.0f;                                                  // a starting patch: LFO 1 -> filter, envelope -> filter
+            if (s == vc1::Lfo1 && d == vc1::Filter) def = 80.0f;
+            if (s == vc1::Env && d == vc1::Filter) def = 70.0f;
+            pct2 ("vm" + String (s) + String (d), "Matrix: " + String (vc1::sourceName (s)) + " > " + vc1::destName (d), def);
+        }
     return layout;
 }
 
 RH1AudioProcessor::RH1AudioProcessor()
-    : AudioProcessor (BusesProperties()
+    : vibr::LabProcessor (BusesProperties()
                           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
-                          .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts (*this, &undoManager, "RH1", createLayout()),
-      presets (*this, apvts, undoManager, "RH-1 Presets", rh1FactoryPresets(), { "power", "bypass" })
+                          .withOutput ("Output", juce::AudioChannelSet::stereo(), true),
+                          "RH1", createLayout(), "RH-1 Presets", rh1FactoryPresets(),
+                          { "rate", "sens", "shape", "decay", "glide", "depth", "swing", "tempo", "cutoff", "res", "tremStereo", "slAttack", "slDuty", "slBalance", "mix", "level",
+                            "vCutoff", "vRes", "vXmod", "vEnvSens", "vEnvRel", "vRate1", "vRate2", "vRand", "vm00", "vm01", "vm02", "vm03", "vm10", "vm11", "vm12", "vm13" })
 {
     const auto get = [this] (const char* id) { return apvts.getRawParameterValue (id); };
     pPower = get ("power"); pMode = get ("mode"); pVariant = get ("variant"); pSource = get ("source"); pSync = get ("sync"); pDivision = get ("division"); pFollow = get ("followHost"); pTempo = get ("tempo");
@@ -117,6 +144,10 @@ RH1AudioProcessor::RH1AudioProcessor()
     for (int s = 0; s < rh1::kSteps; ++s) pSteps[s] = apvts.getRawParameterValue (stepId (s));
     pCutoff = get ("cutoff"); pRes = get ("res"); pTremStereo = get ("tremStereo"); pTremBias = get ("tremBias"); pSlAttack = get ("slAttack"); pSlDuty = get ("slDuty"); pSlBalance = get ("slBalance");
     pMix = get ("mix"); pLevel = get ("level");
+    pVSync = get ("vSync"); pVType = get ("vType"); pVShape1 = get ("vShape1"); pVShape2 = get ("vShape2"); pVCutoff = get ("vCutoff"); pVRes = get ("vRes"); pVEnvSens = get ("vEnvSens");
+    pVEnvRel = get ("vEnvRel"); pVRate1 = get ("vRate1"); pVRate2 = get ("vRate2"); pVRand = get ("vRand"); pVXmod = get ("vXmod");
+    for (int s = 0; s < vc1::kNumSources; ++s)
+        for (int d = 0; d < vc1::kNumDests; ++d) pVMatrix[s][d] = apvts.getRawParameterValue ("vm" + juce::String (s) + juce::String (d));
     midiMap.setDefault ("depth", 1);
     midiMap.setDefault ("rate", 11);
     midiMap.setSyncAlias ("rate", "sync", "division");
@@ -154,7 +185,7 @@ void RH1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
 
     rh1::Params p;
     p.mode = juce::jlimit (0, rh1::kNumModes - 1, (int) std::lround (pMode->load()));
-    p.variant = juce::jlimit (0, rh1::variantCount (p.mode) - 1, (int) std::lround (pVariant->load()));
+    p.variant = p.mode == rh1::Matrix ? 0 : juce::jlimit (0, rh1::variantCount (p.mode) - 1, (int) std::lround (pVariant->load()));
     p.source = juce::jlimit (0, 2, (int) std::lround (pSource->load()));
     p.sync = pSync->load() > 0.5f; p.division = juce::jlimit (0, rh1::kNumDivisions - 1, (int) std::lround (pDivision->load()));
     p.bpm = juce::jlimit (30.0f, 300.0f, pTempo->load());
@@ -171,6 +202,21 @@ void RH1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     for (int s = 0; s < rh1::kSteps; ++s) p.steps[s] = pSteps[s]->load() * 0.01f;
     p.cutoff = pCutoff->load() * 0.01f; p.res = pRes->load() * 0.01f; p.tremStereo = pTremStereo->load() * 0.01f; p.tremBias = pTremBias->load() * 0.01f;
     p.slAttack = pSlAttack->load() * 0.1f; p.slDuty = pSlDuty->load() * 0.1f; p.slBalance = pSlBalance->load() * 0.1f; p.mix = pMix->load() * 0.01f;
+    for (const auto meta : midi)                                     // mod wheel, expression and pressure drive the MIDI source of the MATRIX
+    {
+        const auto m = meta.getMessage();
+        if (m.isController() && (m.getControllerNumber() == 1 || m.getControllerNumber() == 11)) midiValue = (float) m.getControllerValue() / 127.0f;
+        else if (m.isChannelPressure()) midiValue = (float) m.getChannelPressureValue() / 127.0f;
+    }
+    {
+        auto& v = p.matrix;
+        v.type = juce::jlimit (0, vc1::kNumTypes - 1, (int) std::lround (pVType->load())); v.shape1 = juce::jlimit (0, vc1::kNumShapes - 1, (int) std::lround (pVShape1->load()));
+        v.shape2 = juce::jlimit (0, vc1::kNumShapes - 1, (int) std::lround (pVShape2->load())); v.sync = pVSync->load() > 0.5f;
+        v.cutoff = pVCutoff->load() * 0.01f; v.res = pVRes->load() * 0.01f; v.envSens = pVEnvSens->load() * 0.01f; v.envRel = pVEnvRel->load() * 0.01f;
+        v.rate1 = pVRate1->load() * 0.01f; v.rate2 = pVRate2->load() * 0.01f; v.randRate = pVRand->load() * 0.01f; v.xmod = pVXmod->load() * 0.01f; v.midi = midiValue;
+        for (int s = 0; s < vc1::kNumSources; ++s)
+            for (int d = 0; d < vc1::kNumDests; ++d) v.matrix[s][d] = (pVMatrix[s][d]->load() - 50.0f) * 0.02f;
+    }
     engine.process (buffer.getWritePointer (0), buffer.getWritePointer (1), n, p, juce::Decibels::decibelsToGain (pLevel->load()));
 
     if (from != 1.0f || to != 1.0f)
@@ -189,23 +235,5 @@ void RH1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
 
 juce::AudioProcessorEditor* RH1AudioProcessor::createEditor() { return new RH1AudioProcessorEditor (*this); }
 
-void RH1AudioProcessor::getStateInformation (juce::MemoryBlock& dest)
-{
-    auto state = apvts.copyState();
-    state.appendChild (midiMap.toTree(), nullptr);
-    if (auto xml = state.createXml()) copyXmlToBinary (*xml, dest);
-}
-
-void RH1AudioProcessor::setStateInformation (const void* data, int size)
-{
-    if (auto xml = getXmlFromBinary (data, size))
-        if (xml->hasTagName (apvts.state.getType())) {
-            auto st = juce::ValueTree::fromXml (*xml);
-            midiMap.fromTree (st.getChildWithName ("MIDIMAP"));
-            st.removeChild (st.getChildWithName ("MIDIMAP"), nullptr);
-            vibr::BypassLink::normalise (st);
-            apvts.replaceState (st);
-        }
-}
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new RH1AudioProcessor(); }

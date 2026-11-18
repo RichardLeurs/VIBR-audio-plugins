@@ -8,7 +8,7 @@ namespace
 using vibr::ui::drawText;
 namespace ui = vibr::ui;
 
-constexpr float kW = 1200.0f, kH = 690.0f, kPanelY = 134.0f, kPanelH = 487.0f, kBarY = 39.0f, kKnobR = 24.0f, kPad = 5.0f;
+constexpr float kW = 1200.0f, kH = 690.0f, kPanelY = 134.0f, kPanelH = 487.0f, kBarY = 39.0f;
 const ui::Palette kPal { juce::Colour (240, 91, 96), juce::Colour (33, 13, 13) };              // coral #F05B60 (Amp & Cabinet, as the IR-2) and its print
 const ui::Palette kAcc = kPal;                                                                  // tabs, lit buttons, values, curves and lamps use the body colour, as in the other Labs
 
@@ -65,7 +65,7 @@ float toDb (float x) { return 20.0f * std::log10 (x + 1.0e-6f); }
 
 //==============================================================================
 AL1AudioProcessorEditor::AL1AudioProcessorEditor (AL1AudioProcessor& p)
-    : AudioProcessorEditor (&p), proc (p),
+    : LabEditor (p, kW, kH), proc (p),
       knobs { { { "inGain", 0, slotX (4), 0.5f * (kGateY + kBoostY), "INPUT", "-18", "+18", {}, {} },        { "gateThresh", 0, slotX (1), kGateY, "THRESH", "-70", "-30", {}, {} },
                 { "gateRelease", 0, slotX (2), kGateY, "RELEASE", "30", "400", {}, {} },  { "boostDrive", 0, slotX (1), kBoostY, "DRIVE", "0", "10", {}, {} },
                 { "boostLevel", 0, slotX (2), kBoostY, "LEVEL", "-12", "+12", {}, {} },    { "boostTight", 0, slotX (3), kBoostY, "TIGHT", "40", "900", {}, {} },
@@ -83,62 +83,33 @@ AL1AudioProcessorEditor::AL1AudioProcessorEditor (AL1AudioProcessor& p)
                    { "boostOn", 0, juce::Rectangle<float> (104.0f, 30.0f).withCentre ({ slotX (0), kBoostY }), "BOOST", {} },
                    { "cabOn", 2, { 34.0f, 36.0f, 130.0f, 30.0f }, "CABINET ON", {} },
                    { "eqOn", 3, juce::Rectangle<float> (104.0f, 30.0f).withCentre ({ slotX (0), kGateY }), "EQ", {} },
-                   { "limiter", 3, juce::Rectangle<float> (104.0f, 30.0f).withCentre ({ slotX (0), kBoostY + 22.0f }), "LIMITER", {} } } },
-      powerAtt (*p.apvts.getParameter ("power"), [this] (float) { repaint(); }, nullptr)
+                   { "limiter", 3, juce::Rectangle<float> (104.0f, 30.0f).withCentre ({ slotX (0), kBoostY + 22.0f }), "LIMITER", {} } } }
 {
-    setLookAndFeel (&laf);
     for (auto& k : knobs)
     {
-        ui::setupKnob (k.slider, *this);
-        auto* par = proc.apvts.getParameter (k.id);
-        k.slider.setDoubleClickReturnValue (true, par->convertFrom0to1 (par->getDefaultValue()));
-        k.slider.onDragStart = [this] { proc.undoManager.beginNewTransaction(); };
-        addAndMakeVisible (k.slider);
-        k.att = std::make_unique<juce::SliderParameterAttachment> (*dynamic_cast<juce::RangedAudioParameter*> (par), k.slider, nullptr);
-        k.slider.onValueChange = [this] { repaint(); };
+        attachKnob (k.slider, k.att, k.id);
     }
     for (auto& s : switches)
     {
         s.target.onPress = [this, id = s.id] { proc.undoManager.beginNewTransaction(); toggle (id); };
         addAndMakeVisible (s.target);
     }
-    powerAtt.sendInitialUpdate();
-    grain = ui::makeGrain();
-    constrainer.setSizeLimits (720, 414, 2400, 1380);
-    constrainer.setFixedAspectRatio ((double) kW / (double) kH);
-    setConstrainer (&constrainer);
-    setResizable (true, true);
-    setSize ((int) kW, (int) kH);
     layoutKnobs();
     updateDisplay();
     startTimerHz (30);
 }
 
-AL1AudioProcessorEditor::~AL1AudioProcessorEditor()
-{
-    stopTimer();
-    setLookAndFeel (nullptr);
-}
+AL1AudioProcessorEditor::~AL1AudioProcessorEditor() = default;
 
 void AL1AudioProcessorEditor::paintOverChildren (juce::Graphics& g)
 {
     if (midiUI != nullptr) midiUI->paintMarks (g, kAcc.body);
 }
 
-void AL1AudioProcessorEditor::toggle (const char* id)
-{
-    auto* par = proc.apvts.getParameter (id);
-    par->beginChangeGesture(); par->setValueNotifyingHost (par->getValue() > 0.5f ? 0.0f : 1.0f); par->endChangeGesture();
-}
-void AL1AudioProcessorEditor::setChoice (const char* id, int index)
-{
-    auto* par = proc.apvts.getParameter (id);
-    par->beginChangeGesture(); par->setValueNotifyingHost (par->convertTo0to1 ((float) index)); par->endChangeGesture();
-}
 
 void AL1AudioProcessorEditor::layoutKnobs()
 {
-    const float sc = scale(), d = 2.0f * (kKnobR + kPad) * sc;
+    const float sc = scale(), d = 2.0f * (ui::kKnobR + 5.0f) * sc;
     const int t = tab();
     for (auto& k : knobs)
     {
@@ -224,13 +195,7 @@ void AL1AudioProcessorEditor::updateDisplay()
     outDb = juce::jmax (toDb (outPk), outDb - 1.5f);
     grDb = juce::jmax (0.0f, juce::jmax (-toDb (lim), grDb - 0.6f));
     gateLamp = eng.gateLamp.load();
-    for (int c = 0; c < 2; ++c)                                                  // output meter: instant attack, 24 dB / s release, 1.5 s peak hold
-    {
-        const float pk = eng.outPeakCh[c].exchange (0.0f), db = pk > 1.0e-5f ? juce::Decibels::gainToDecibels (pk) : -90.0f;
-        barDb[c] = db > barDb[c] ? db : juce::jmax (db, barDb[c] - 24.0f / 30.0f);
-        if (db >= holdDb[c]) { holdDb[c] = db; holdAge[c] = 0.0f; }
-        else if ((holdAge[c] += 1.0f / 30.0f) > 1.5f) holdDb[c] = juce::jmax (db, holdDb[c] - 24.0f / 30.0f);
-    }
+    meter.update (eng.outPeakCh[0].exchange (0.0f), eng.outPeakCh[1].exchange (0.0f));       // output meter: instant attack, 24 dB / s release, 1.5 s peak hold
 
     for (int s = 0; s < 2; ++s)
     {
@@ -370,15 +335,15 @@ void AL1AudioProcessorEditor::drawMeters (juce::Graphics& g)
     {
         const auto b = bar (ch);
         g.setColour (juce::Colours::black.withAlpha (0.5f)); g.fillRoundedRectangle (b, 2.0f);
-        const float db = power ? barDb[ch] : -90.0f;
+        const float db = power ? meter.bar[ch] : -90.0f;
         if (db > lo)
         {
             g.setColour (db > -1.0f ? red : kAcc.body);
             g.fillRect (b.withTop (yOf (b, db)).reduced (2.0f, 0.0f).withBottom (b.getBottom() - 2.0f));
         }
-        if (power && holdDb[ch] > lo) { g.setColour (holdDb[ch] > -1.0f ? red : kAcc.ink.withAlpha (0.9f)); g.fillRect (b.getX() + 1.0f, yOf (b, holdDb[ch]) - 1.0f, b.getWidth() - 2.0f, 2.0f); }
+        if (power && meter.hold[ch] > lo) { g.setColour (meter.hold[ch] > -1.0f ? red : kAcc.ink.withAlpha (0.9f)); g.fillRect (b.getX() + 1.0f, yOf (b, meter.hold[ch]) - 1.0f, b.getWidth() - 2.0f, 2.0f); }
         drawText (g, ch == 0 ? "L" : "R", b.getCentreX(), b.getY() - 14.0f, 13.0f, kAcc.ink.withAlpha (0.85f), true, 0.1f);
-        drawText (g, power && holdDb[ch] > -60.0f ? juce::String (holdDb[ch], 1) : juce::String ("-inf"), b.getCentreX(), b.getBottom() + 20.0f, 13.0f, power && holdDb[ch] > -1.0f ? red : kAcc.body, true, 0.02f);
+        drawText (g, power && meter.hold[ch] > -60.0f ? juce::String (meter.hold[ch], 1) : juce::String ("-inf"), b.getCentreX(), b.getBottom() + 20.0f, 13.0f, power && meter.hold[ch] > -1.0f ? red : kAcc.body, true, 0.02f);
     }
     const auto b1 = bar (1);
     for (const float t : { 0.0f, -6.0f, -12.0f, -24.0f, -48.0f })
@@ -478,7 +443,7 @@ void AL1AudioProcessorEditor::paint (juce::Graphics& g)
         if (k.tab != t) continue;
         const auto c = origin + juce::Point<float> (k.x, k.y);
         ui::paintKnob (g, kAcc, c, k.name, knobText (k.id, (float) k.slider.getValue()), k.lo, k.hi, c.y + 62.0f, c.y + 90.0f);
-        ui::paintValueArc (g, c, kKnobR, (float) k.slider.valueToProportionOfLength (k.slider.getValue()), kAcc.body);
+        ui::paintValueArc (g, c, ui::kKnobR, (float) k.slider.valueToProportionOfLength (k.slider.getValue()), kAcc.body);
     }
     ui::paintFooter (g, kPal, kPanelY + kPanelH + 35.0f);
 }

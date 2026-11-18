@@ -2,17 +2,16 @@
 #pragma once
 
 #include "PluginProcessor.h"
+#include "ui/PedalLook.h"
 #include "ClickZone.h"
 #include "ParamMemory.h"
 #include "ui/VibrUI.h"
 
 //==============================================================================
 // Black knobs drawn over the scales printed in the background.
-class RE2LookAndFeel : public juce::LookAndFeel_V4
+class RE2LookAndFeel : public vibr::ui::PedalKnobLookAndFeel
 {
 public:
-    void drawRotarySlider (juce::Graphics&, int x, int y, int w, int h, float pos,
-                           float startAngle, float endAngle, juce::Slider&) override;
 
     // switches are click targets only; their LEDs are painted by the editor
     void drawToggleButton (juce::Graphics&, juce::ToggleButton&, bool, bool) override {}

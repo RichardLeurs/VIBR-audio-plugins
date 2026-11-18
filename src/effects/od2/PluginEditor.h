@@ -2,23 +2,20 @@
 #pragma once
 
 #include "PluginProcessor.h"
+#include "ui/PedalLook.h"
+#include "ui/PedalEditor.h"
 #include "ClickZone.h"
 #include "MidiTarget.h"
 #include "WrapSlider.h"
 #include "ParamMemory.h"
 
 // Black knurled knob with a raised cap and a white pointer (same as the DM-1), drawn over the scales printed in the background.
-class OD2LookAndFeel : public juce::LookAndFeel_V4
-{
-public:
-    void drawRotarySlider (juce::Graphics&, int x, int y, int w, int h, float pos,
-                           float startAngle, float endAngle, juce::Slider&) override;
-};
+using OD2LookAndFeel = vibr::ui::PedalKnobLookAndFeel;
 
 
 
 
-class OD2AudioProcessorEditor : public juce::AudioProcessorEditor,
+class OD2AudioProcessorEditor : public vibr::ui::PedalEditor,
                                 private juce::Timer
 {
 public:
@@ -42,8 +39,6 @@ private:
 
     OD2AudioProcessor& proc;
     OD2LookAndFeel laf;
-    juce::ComponentBoundsConstrainer constrainer;
-    juce::Image background;
     MidiLearnUI midiUI { proc.midiMap };       // right-click a knob: MIDI learn
     Knob type, param, level, drive, low, middle, high;
     MidiTarget boostTarget;                        // over the BOOST slide switch (MIDI learn target)

@@ -1,5 +1,6 @@
 // VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
 #include "PluginProcessor.h"
+#include "plugin/ParamLayout.h"
 #include "PluginEditor.h"
 
 namespace
@@ -10,6 +11,11 @@ std::vector<vibr::PresetManager::Factory> dn1FactoryPresets()
         { "Init", "The shaper with the gate and the transient shaper on, nothing moved", {} },
         { "Tight Drums", "Gate and transient shaper: more attack, less ring", { { "mode", 0 }, { "gateOn", 1 }, { "gateThresh", -42 }, { "gateRelease", 90 }, { "transOn", 1 }, { "attack", 45 }, { "sustain", -35 } } },
         { "Noise Gate", "A gate for a noisy amp", { { "mode", 0 }, { "gateOn", 1 }, { "gateThresh", -55 }, { "gateRelease", 180 }, { "transOn", 0 } } },
+        { "Snare Snap", "Sharp attack, short tail", { { "mode", 0 }, { "gateThresh", -46 }, { "gateRelease", 60 }, { "attack", 65 }, { "sustain", -45 } } },
+        { "Room Tamer", "Expand the room away", { { "mode", 0 }, { "gateOn", 0 }, { "expOn", 1 }, { "expThresh", -38 }, { "expRatio", 3 }, { "expRelease", 220 }, { "sustain", -35 } } },
+        { "Sustain Boost", "Longer notes, softer attack", { { "mode", 0 }, { "gateOn", 0 }, { "attack", -15 }, { "sustain", 60 } } },
+        { "Gentle Gate", "A slow gate for noisy takes", { { "mode", 0 }, { "gateThresh", -56 }, { "gateRelease", 300 }, { "transOn", 0 } } },
+        { "Soft Pad", "Rounded attacks, an open tail", { { "mode", 0 }, { "gateOn", 0 }, { "attack", -60 }, { "sustain", 25 } } },
         { "Guitar Sustain", "The CS-3 compression sustainer", { { "mode", 1 }, { "variant", 0 }, { "compSustain", 65 }, { "compAttack", 45 }, { "tone", 55 } } },
         { "Glue", "A gentle VCA compressor for a bus", { { "mode", 1 }, { "variant", 1 }, { "compThresh", -16 }, { "compRatio", 2.5f }, { "compAttackMs", 20 }, { "compRelease", 250 }, { "compMakeup", 3 } } },
         { "Vocal Opto", "Slow, smooth, program-dependent", { { "mode", 1 }, { "variant", 2 }, { "compThresh", -22 }, { "compRatio", 4 }, { "compAttackMs", 10 }, { "compRelease", 300 }, { "compMakeup", 5 } } },
@@ -22,20 +28,7 @@ std::vector<vibr::PresetManager::Factory> dn1FactoryPresets()
 
 namespace
 {
-// host label and readable text for a float parameter (the stored value is the shown value, the host shows the label next to it)
-juce::AudioParameterFloatAttributes unitAttrs (const juce::String& unit, int decimals)
-{
-    return juce::AudioParameterFloatAttributes()
-        .withLabel (unit)
-        .withStringFromValueFunction ([decimals] (float v, int)
-        {
-            return juce::String (v, decimals);                       // the number only: the host adds the label (unit) itself
-        })
-        .withValueFromStringFunction ([] (const juce::String& s)
-        {
-            return s.retainCharacters ("0123456789.-+").getFloatValue();
-        });
-}
+using vibr::unitAttrs;
 
 int decimalsFor (float step) { return step >= 1.0f ? 0 : step >= 0.1f ? 1 : 2; }
 
@@ -93,12 +86,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout DN1AudioProcessor::createLay
 }
 
 DN1AudioProcessor::DN1AudioProcessor()
-    : AudioProcessor (BusesProperties()
+    : vibr::LabProcessor (BusesProperties()
                           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)
-                          .withInput  ("Sidechain", juce::AudioChannelSet::stereo(), false)),
-      apvts (*this, &undoManager, "DN1", createLayout()),
-      presets (*this, apvts, undoManager, "DN-1 Presets", dn1FactoryPresets(), { "power", "bypass" })
+                          .withInput  ("Sidechain", juce::AudioChannelSet::stereo(), false),
+                          "DN1", createLayout(), "DN-1 Presets", dn1FactoryPresets(),
+                          { "gateThresh", "expThresh", "compThresh", "limThresh", "attack", "sustain", "compSustain", "compRatio", "compMakeup", "compMix", "tone", "limCeiling", "scHp", "link", "mix", "level" })
 {
     const auto get = [this] (const char* id) { return apvts.getRawParameterValue (id); };
     pPower = get ("power"); pMode = get ("mode"); pVariant = get ("variant"); pGateOn = get ("gateOn"); pGateThresh = get ("gateThresh"); pGateRelease = get ("gateRelease");
@@ -204,25 +197,5 @@ void DN1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
 
 juce::AudioProcessorEditor* DN1AudioProcessor::createEditor() { return new DN1AudioProcessorEditor (*this); }
 
-void DN1AudioProcessor::getStateInformation (juce::MemoryBlock& dest)
-{
-    auto state = apvts.copyState();
-    state.appendChild (midiMap.toTree(), nullptr);
-    if (auto xml = state.createXml())
-        copyXmlToBinary (*xml, dest);
-}
-
-void DN1AudioProcessor::setStateInformation (const void* data, int size)
-{
-    if (auto xml = getXmlFromBinary (data, size))
-        if (xml->hasTagName (apvts.state.getType()))
-        {
-            auto st = juce::ValueTree::fromXml (*xml);
-            midiMap.fromTree (st.getChildWithName ("MIDIMAP"));
-            st.removeChild (st.getChildWithName ("MIDIMAP"), nullptr);
-            vibr::BypassLink::normalise (st);
-            apvts.replaceState (st);
-        }
-}
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new DN1AudioProcessor(); }

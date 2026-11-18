@@ -14,8 +14,8 @@ juce::Point<float> img (float x, float y) { return { x * S, y * S }; }
 const juce::Point<float> kSaturation { 250.0f, 790.0f }, kWow { 690.0f, 790.0f }, kMode { 1240.0f, 700.0f },
                          kBass { 1775.0f, 458.0f }, kTreble { 2075.0f, 458.0f }, kReverb { 2375.0f, 458.0f },
                          kRate { 1775.0f, 790.0f }, kIntensity { 2075.0f, 790.0f }, kEcho { 2375.0f, 790.0f };
-constexpr float kKnobRadius = 72.0f, kModeRadius = 100.0f;
 constexpr float kPad = 3.0f;
+constexpr float kKnobRadius = 72.0f, kModeRadius = 100.0f;
 
 const float kHeadLedX[4] = { 1075.0f, 1185.0f, 1295.0f, 1405.0f };
 constexpr float kHeadLedY = 422.0f;
@@ -31,12 +31,7 @@ const juce::Rectangle<float> kSyncPill = juce::Rectangle<float> (116.0f, 46.0f).
 const juce::Rectangle<float> kDivisionText = juce::Rectangle<float> (200.0f, 46.0f).withCentre ({ 1860.0f, 1070.0f });
 const juce::Colour kBody (0xff3155b5);      // the plugin's body colour (make_background.py BODY)
 
-juce::Point<float> polar (juce::Point<float> c, float r, float a)
-{
-    return { c.x + r * std::sin (a), c.y - r * std::cos (a) };
-}
-
-// lamp (flat, see style.md "Flat style"): a plain disc inside the dark grey ring painted in the background; the colour when on (red by default,
+// lamp (flat, see style_guide.md "Flat style"): a plain disc inside the dark grey ring painted in the background; the colour when on (red by default,
 // green for the memory strip), a dark shade of it when off; no glow, no highlight
 void drawLamp (juce::Graphics& g, juce::Point<float> c, bool on, juce::Colour colour = juce::Colour (0xffe5432c))
 {
@@ -47,54 +42,6 @@ void drawLamp (juce::Graphics& g, juce::Point<float> c, bool on, juce::Colour co
 } // namespace
 
 //==============================================================================
-void RE2LookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int w, int h, float,
-                                         float startAngle, float endAngle, juce::Slider& s)
-{
-    const auto b = juce::Rectangle<float> ((float) x, (float) y, (float) w, (float) h);
-    const auto c = b.getCentre();
-    const float R = juce::jmin (b.getWidth(), b.getHeight()) * 0.5f - kPad;
-    const double lo = s.getMinimum(), hi = s.getMaximum();
-    const float pos = (float) ((s.getValue() - lo) / (hi - lo));
-    const float angle = startAngle + pos * (endAngle - startAngle);
-    const auto circle = [&] (float r) { return juce::Rectangle<float> (r * 2.0f, r * 2.0f).withCentre (c); };
-
-    // soft drop shadow
-    g.setColour (juce::Colours::black.withAlpha (0.55f));
-    g.fillEllipse (circle (R).translated (R * 0.05f, R * 0.09f));
-
-    // matt black body with a knurled grip edge
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff4a4c51), c.x - R * 0.7f, c.y - R * 0.8f,
-                                             juce::Colour (0xff050506), c.x + R * 0.7f, c.y + R * 0.9f, false));
-    g.fillEllipse (circle (R));
-    constexpr int ridges = 60;
-    for (int i = 0; i < ridges; ++i)
-    {
-        const float a = juce::MathConstants<float>::twoPi * (float) i / (float) ridges;
-        g.setColour (juce::Colours::white.withAlpha (0.10f + 0.10f * std::max (0.0f, std::cos (a + 0.8f))));
-        g.drawLine (polar (c, R * 0.90f, a).x, polar (c, R * 0.90f, a).y, polar (c, R * 0.99f, a).x, polar (c, R * 0.99f, a).y, 1.0f);
-    }
-    g.setColour (juce::Colours::black);
-    g.drawEllipse (circle (R), 1.2f);
-
-    // raised cap
-    const float capR = R * 0.80f;
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff3a3b3f), c.x - capR * 0.6f, c.y - capR * 0.7f,
-                                             juce::Colour (0xff0b0b0c), c.x + capR * 0.6f, c.y + capR * 0.8f, false));
-    g.fillEllipse (circle (capR));
-    g.setGradientFill (juce::ColourGradient (juce::Colours::white.withAlpha (0.14f), c.x - capR * 0.5f, c.y - capR * 0.6f,
-                                             juce::Colours::transparentWhite, c.x + capR * 0.1f, c.y + capR * 0.1f, true));
-    g.fillEllipse (circle (capR));
-    g.setGradientFill (juce::ColourGradient (juce::Colours::white.withAlpha (0.35f), c.x - capR, c.y - capR,
-                                             juce::Colour (0xff000000), c.x + capR, c.y + capR, false));
-    g.drawEllipse (circle (capR), 1.2f);
-
-    // pointer: white bar from the rim toward the centre
-    juce::Path p;
-    p.addRoundedRectangle (-capR * 0.055f, -capR * 0.94f, capR * 0.11f, capR * 0.50f, capR * 0.05f);
-    g.setColour (juce::Colour (0xfff2f2ee));
-    g.fillPath (p, juce::AffineTransform::rotation (angle).translated (c));
-}
-
 //==============================================================================
 RE2AudioProcessorEditor::RE2AudioProcessorEditor (RE2AudioProcessor& p)
     : AudioProcessorEditor (&p), proc (p),

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
 """Renders the RE-2 front panel (2610 x 1260) used as the plugin background: turquoise satin body, black panels,
-printed legends. Control positions match PluginEditor.cpp (see ../style.md). Needs numpy + Pillow.
+printed legends. Control positions match PluginEditor.cpp (see ../style_guide.md). Needs numpy + Pillow.
 Usage: make_background.py out.png"""
 import math, sys
 import numpy as np
@@ -16,7 +16,7 @@ DARK = (244, 246, 250)                            # print on the body
 PANEL = (24, 25, 28)
 CHROME = [(0, (250, 250, 252)), (0.35, (190, 194, 202)), (0.7, (110, 114, 124)), (1, (60, 62, 70))]
 
-# ----- layout (shared with PluginEditor.cpp): side margins 40, panel gaps 20, see ../style.md -----
+# ----- layout (shared with PluginEditor.cpp): side margins 40, panel gaps 20, see ../style_guide.md -----
 PT, PB = 268, 1122
 P1, P2, P3 = (40, PT, 900, PB), (920, PT, 1560, PB), (1580, PT, 2570, PB)
 ROW1, ROW2, KR = 458, 790, 72                 # knob rows, knob radius
@@ -173,14 +173,14 @@ line([(P3[0] + 34, (ROW1 + ROW2) / 2 + 28), (P3[2] - 34, (ROW1 + ROW2) / 2 + 28)
 line([(P3[0] + 34, 1012), (P3[2] - 34, 1012)], INK, 1.5, 70)       # divider above the SYNC button (drawn in the editor, centre y 1070)
 
 def led_bezel(lx, ly, lit=None):
-    # flat (see ../../../.claude/style.md, "Flat style"): a thin dark grey ring round a flat dark well; the editor fills the lamp
+    # flat (see ../../../.claude/style_guide.md, "Flat style"): a thin dark grey ring round a flat dark well; the editor fills the lamp
     layer = new(); dr = ImageDraw.Draw(layer)
     dr.ellipse([(lx - 17) * S, (ly - 17) * S, (lx + 17) * S, (ly + 17) * S], fill=(52, 56, 68, 255))
     dr.ellipse([(lx - 14) * S, (ly - 14) * S, (lx + 14) * S, (ly + 14) * S], fill=(12, 13, 15, 255))
     comp(layer)
 
 def pushbutton(bx, by, w=112, h=58):
-    # flat (see style.md, "Flat style"): a thin dark grey ring round a flat dark well; no bezel, no shadow
+    # flat (see style_guide.md, "Flat style"): a thin dark grey ring round a flat dark well; no bezel, no shadow
     layer = new(); dr = ImageDraw.Draw(layer)
     dr.rounded_rectangle([(bx - w / 2 - 3) * S, (by - h / 2 - 3) * S, (bx + w / 2 + 3) * S, (by + h / 2 + 3) * S], radius=14 * S, fill=(52, 56, 68, 255))
     dr.rounded_rectangle([(bx - w / 2) * S, (by - h / 2) * S, (bx + w / 2) * S, (by + h / 2) * S], radius=11 * S, fill=(12, 13, 15, 255))

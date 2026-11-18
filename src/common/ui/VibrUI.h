@@ -3,7 +3,7 @@
 #include <JuceHeader.h>
 #include "../VibrLogo.h"
 
-// The shared look of the code-drawn VIBR windows (SA-1, SU-1, MS-1, DL-1 ...), see "Interface" in .claude/lab_specs.md and style.md:
+// The shared look of the code-drawn VIBR windows (SA-1, SU-1, MS-1, DL-1 ...), see "Interface" in .claude/lab_specs.md and style_guide.md:
 // fonts, the black knob, the satin body with its rim, the header (name, two description lines, rule, power switch), panels with a pill on the top edge, tab
 // pills, flat buttons, value cards and the knob decoration (ring, ticks, legends, name, value). Everything draws in the 1200-unit design space: the editor
 // scales the Graphics once (`g.addTransform (AffineTransform::scale (width / 1200))`) and passes layout units.
@@ -154,7 +154,7 @@ inline void paintHeader (juce::Graphics& g, const Palette& pal, const juce::Stri
 }
 
 //==============================================================================
-// The look of a pill (a panel title or a tab), from style.md "Panel title as a button":
+// The look of a pill (a panel title or a tab), from style_guide.md "Panel title as a button":
 //   Plain  a panel without a switch: a charcoal pill cutting the outline, the title in the body colour
 //   On     a switch that is on (a stage, the selected tab): filled with the body colour, the title in the dark print colour, and a dark border: the print colour,
 //          1.8 units, drawn 0.9 inside the pill edge

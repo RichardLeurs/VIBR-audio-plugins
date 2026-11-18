@@ -43,6 +43,7 @@ target_compile_definitions(EH-2
 target_link_libraries(EH-2
   PRIVATE
     EH2Assets
+    rl_common
     juce::juce_audio_utils
     juce::juce_dsp
   PUBLIC

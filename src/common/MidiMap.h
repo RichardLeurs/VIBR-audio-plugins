@@ -14,9 +14,9 @@
 class MidiMap : private juce::Timer
 {
 public:
-    static constexpr int kMaxSlots = 24;
+    static constexpr int kMaxSlots = 32;
 
-    // ids: the parameters that can be bound (one slot each, at most 16)
+    // ids: the parameters that can be bound (one slot each, at most kMaxSlots)
     MidiMap (juce::AudioProcessorValueTreeState& s, std::vector<juce::String> ids) : apvts (s), paramIds (std::move (ids))
     {
         jassert ((int) paramIds.size() <= kMaxSlots);

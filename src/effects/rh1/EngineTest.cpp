@@ -6,7 +6,7 @@
 #include <random>
 #include <vector>
 #include "RhythmEngine.h"
-#include "../mf1/MotionEngine.h"
+#include "MotionEngine.h"
 #include "../tr2/TR2DSP.h"
 #include "../sl2/SL2DSP.h"
 
@@ -160,6 +160,36 @@ int main()
         check (o == in, "MIX 0 passes the input bit-exact");
         std::vector<float> silent ((int) fs, 0.0f); const auto so = run (p, silent, silent); double e = 0; for (float y : so) e += (double) y * y;
         check (e == 0.0, "silence in, silence out");
+    }
+    std::printf ("the destination MATRIX (the VC-1 engine)\n");
+    {
+        rh1::Params p; p.mode = rh1::Matrix; p.mix = 0.8f; p.bpm = 140.0f;
+        auto& v = p.matrix; v.type = 1; v.shape1 = 2; v.shape2 = 3; v.cutoff = 0.3f; v.res = 0.6f; v.envSens = 0.7f; v.envRel = 0.5f; v.rate1 = 0.5f; v.rate2 = 0.35f; v.randRate = 0.45f; v.xmod = 0.4f; v.midi = 0.6f;
+        for (int s = 0; s < vc1::kNumSources; ++s) for (int d = 0; d < vc1::kNumDests; ++d) v.matrix[s][d] = 0.3f * (float) (((s * 4 + d) % 5) - 2) * 0.5f;
+        const auto x = noise ((int) (2.0f * fs), 0.3f, 21);
+        std::vector<float> r;
+        const auto o = run (p, x, x, &r, 1.0f);
+        vc1::Engine ref; ref.prepare (fs); auto l = x, rr = x;
+        auto q = v; q.bpm = 140.0f; q.mix = 0.8f;
+        for (size_t pos = 0; pos < l.size(); pos += 480) { const int n = (int) std::min<size_t> (480, l.size() - pos); ref.process (l.data() + pos, rr.data() + pos, n, q, 1.0f); }
+        double worst = 0.0; for (size_t i = 0; i < l.size(); ++i) worst = std::max (worst, (double) std::fabs (o[i] - l[i]));
+        std::printf ("  MATRIX against the VC-1 engine: largest difference %.2e\n", worst);
+        check (worst < 1.0e-7, "MATRIX is the VC-1 engine: the output equals it (MIX 80 %, all five sources routed)");
+        // back to FILTER and again: no stale state, MIX 0 still bit exact
+        rh1::Params f; f.mode = rh1::Filter; f.mix = 0.0f;
+        rh1::Engine e; e.prepare (fs); auto a1 = x, a2 = x;
+        e.process (a1.data(), a2.data(), 1000, p, 1.0f); a1 = x; a2 = x; e.process (a1.data(), a2.data(), (int) x.size(), f, 1.0f);
+        double back = 0.0; for (size_t i = 0; i < x.size(); ++i) back = std::max (back, (double) std::fabs (a1[i] - x[i]));
+        check (back < 1.0e-6, "back from MATRIX to FILTER (a mode change fades in from the dry sound): MIX 0 passes the input within 1e-6");
+        bool ok = true;
+        for (int s = 0; s < 3; ++s)
+        {
+            rh1::Params w; w.mode = rh1::Matrix; w.mix = 1.0f; auto& u = w.matrix; u.res = 1.0f; u.cutoff = s == 0 ? 0.0f : 1.0f; u.envSens = 1.0f; u.envRel = s == 2 ? 0.0f : 1.0f; u.rate1 = s == 2 ? 1.0f : 0.0f; u.rate2 = 1.0f; u.randRate = 1.0f; u.xmod = 1.0f; u.midi = 1.0f; u.sync = s == 1;
+            for (int a = 0; a < vc1::kNumSources; ++a) for (int b = 0; b < vc1::kNumDests; ++b) u.matrix[a][b] = s == 1 ? -1.0f : 1.0f;
+            const auto y = noise ((int) fs, 0.8f, 5); const auto out = run (w, y, y, nullptr, 4.0f);
+            for (float t : out) if (! std::isfinite (t) || std::abs (t) > 40.0f) ok = false;
+        }
+        check (ok, "MATRIX at its extreme settings stays finite and bounded");
     }
     std::printf ("%d problems\n", problems);
     return problems == 0 ? 0 : 1;

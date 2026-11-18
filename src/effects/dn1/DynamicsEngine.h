@@ -12,7 +12,7 @@
 #include <atomic>
 #include <cmath>
 #include <vector>
-#include "../dy1/DynamicEngine.h"
+#include "DynamicEngine.h"
 #include "../../mastering/ms1/MasteringEngine.h"
 
 namespace dn1

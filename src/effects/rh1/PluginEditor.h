@@ -3,13 +3,12 @@
 
 #include "ui/OutputMeter.h"
 #include "PluginProcessor.h"
-#include "ui/VibrUI.h"
+#include "ui/LabEditor.h"
 
 // RH-1 window (1200 x 690), on the shared UI of src/common/ui: header (name, preset chip, A / B, undo), the CONTROL panel with the source tab pills (LFO, ENVELOPE,
 // STEPS) on its top edge, the DESTINATION panel with the destination tab pills (FILTER, TREMOLO, SLICER) and the types of the destination, the PATTERN display (the
 // 16-step lane to click and paint, the control signal and the destination over five seconds, the 11 patterns of the SL-2) and OUTPUT (MIX, LEVEL).
-class RH1AudioProcessorEditor : public juce::AudioProcessorEditor,
-                                private juce::Timer
+class RH1AudioProcessorEditor : public vibr::ui::LabEditor
 {
 public:
     explicit RH1AudioProcessorEditor (RH1AudioProcessor&);
@@ -24,18 +23,15 @@ public:
 
 private:
     void timerCallback() override;
-    float scale() const { return (float) getWidth() / 1200.0f; }
     void layoutKnobs();
-    bool isOn (const char* id) const { return proc.apvts.getRawParameterValue (id)->load() > 0.5f; }
-    float value (const char* id) const { return proc.apvts.getRawParameterValue (id)->load(); }
-    int choice (const char* id) const { return (int) std::lround (value (id)); }
     int mode() const { return juce::jlimit (0, rh1::kNumModes - 1, choice ("mode")); }
     int source() const { return juce::jlimit (0, 2, choice ("source")); }
-    int variant() const { return juce::jlimit (0, rh1::variantCount (mode()) - 1, choice ("variant")); }
-    void toggle (const char* id);
+    int variant() const { const int n = rh1::variantCount (mode()); return n > 0 ? juce::jlimit (0, n - 1, choice ("variant")) : 0; }
     void setChoice (const char* id, int index);
     void setValue (const juce::String& id, float v, bool gesture);
     void drawPattern (juce::Graphics&);
+    void drawMatrix (juce::Graphics&);                                 // the destination MATRIX (the VC-1 window)
+    juce::String matrixText (int kind, double v) const;
     bool knobShown (int i) const;
     int stepAt (juce::Point<float> p) const;                          // the step under a point of the lane, or -1
     void paintStep (juce::Point<float> p);
@@ -52,15 +48,21 @@ private:
         std::unique_ptr<juce::SliderParameterAttachment> att;
     };
 
+    struct MKnob                                                        // a knob of the MATRIX layout (free positions, small or big)
+    {
+        juce::String id;
+        int kind;                     // 0 percent, 1 cutoff, 2 LFO rate, 3 random rate, 4 release, 5 matrix depth, 6 dB, 7 sensitivity
+        float cx, cy, r;
+        const char* name;
+        juce::Slider slider;
+        std::unique_ptr<juce::SliderParameterAttachment> att;
+    };
+
     RH1AudioProcessor& proc;
-    vibr::ui::KnobLookAndFeel laf;
-    juce::ComponentBoundsConstrainer constrainer;
-    juce::Image grain;
+    std::vector<std::unique_ptr<MKnob>> matrixKnobs;
     std::array<Knob, 17> knobs;
     MidiLearnUI midiUI { proc.midiMap };       // right-click a knob: MIDI learn
-    vibr::ui::PresetBarState barState;
     int shownKey = -1;
-    juce::ParameterAttachment powerAtt;
     bool painting = false;
     vibr::ui::OutputMeter meter;                                                                       // output dB meters
     float paintValue = 1.0f;

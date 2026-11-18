@@ -1,5 +1,6 @@
 // VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
 #pragma once
+#include "dsp/DcBlocker.h"
 
 // SP-1 Space Engine: an experimental spatial processor on one engine with five modes.
 //   Core: input diffusion (4 all-passes) -> 8-line feedback delay network (Householder mix, modulated lines, damping) -> stereo taps.
@@ -62,7 +63,7 @@ public:
         for (int k = 0; k < N; ++k) { lp[k] = 0.0f; ph[k] = (float) k * 0.7f; len[k] = 1000.0f; }
         for (auto& c : combLen) c = 100.0f;
         wetPrev = 0.0f; shLp[0] = shLp[1] = 0.0f; env = 0.0f; gain = 0.0f; silent = 0; frz = 0.0f; duck = 1.0f;
-        dcX = dcY = 0.0f; snap = true; mode = 0;
+        dcb.reset(); snap = true; mode = 0;
     }
 
     // Processes l / r in place (dry / wet included).  mix 0..1, levelGain linear for the wet signal.
@@ -146,8 +147,7 @@ private:
     {
         using namespace bigsky;
         frz += ((p.freeze ? 1.0f : 0.0f) - frz) * (1.0f / (0.03f * fs));
-        const float dcy = xin - dcX + 0.9975f * dcY;                 // DC blocker
-        dcX = xin; dcY = dcy;
+        const float dcy = dcb.process (xin, 0.9975f);                 // DC blocker
         float x = dcy * (1.0f - frz);
         env = std::max (std::fabs (dcy), env * 0.9997f);
 
@@ -240,7 +240,7 @@ private:
     float combLen[kCombs] {}, combT[kCombs] {};
     float tapL[12] {}, tapR[12] {}, tapA[12] {};
     float dampT = 0.5f, modDepth = 0.0f, rateMul = 1.0f, octAmt = 0.0f, fifAmt = 0.0f;
-    float wetPrev = 0.0f, shLp[2] {}, env = 0.0f, gain = 0.0f, dcX = 0.0f, dcY = 0.0f;
+    float wetPrev = 0.0f, shLp[2] {}, env = 0.0f, gain = 0.0f; vibr::dsp::DcBlocker dcb;
     int silent = 0;
 };
 } // namespace sp1

@@ -7,7 +7,7 @@ namespace
 using vibr::ui::drawText;
 namespace ui = vibr::ui;
 
-constexpr float kW = 1200.0f, kH = 690.0f, kRow1Y = 134.0f, kRow1H = 247.0f, kRow2Y = 405.0f, kRow2H = 216.0f, kKnobR = 24.0f, kPad = 5.0f, kBarY = 39.0f;
+constexpr float kW = 1200.0f, kH = 690.0f, kRow1Y = 134.0f, kRow1H = 247.0f, kRow2Y = 405.0f, kRow2H = 216.0f, kBarY = 39.0f;
 const ui::Palette kPal { juce::Colour (53, 184, 232), juce::Colour (10, 33, 42) };            // the Delay & Echo colour #35B8E8 and its print
 
 // panels: 0 TIME (with the mode tabs), 1 VOICING, 2 ECHOES (display), 3 OUTPUT
@@ -37,7 +37,7 @@ juce::Rectangle<float> pingRect (int i) { const auto r = panelRect (1); return {
 
 //==============================================================================
 DL1AudioProcessorEditor::DL1AudioProcessorEditor (DL1AudioProcessor& p)
-    : AudioProcessorEditor (&p), proc (p),
+    : LabEditor (p, kW, kH), proc (p),
       knobs { { { "time", 0, 0, 7, "TIME", 0, -1, {}, {} },        { "feedback", 0, 1, 7, "FEEDBACK", 1, -1, {}, {} }, { "low", 0, 2, 7, "LOW CUT", 2, -1, {}, {} },
                 { "high", 0, 3, 7, "HI CUT", 3, -1, {}, {} },      { "modRate", 0, 4, 7, "MOD RATE", 4, -1, {}, {} },  { "modDepth", 0, 5, 7, "MOD DEPTH", 1, -1, {}, {} },
                 { "spread", 0, 6, 7, "PING-PONG", 1, -1, {}, {} },
@@ -49,53 +49,29 @@ DL1AudioProcessorEditor::DL1AudioProcessorEditor (DL1AudioProcessor& p)
                 { "dualTimeB", 1, 0, 5, "TIME B", 6, 3, {}, {} },  { "dualFbB", 1, 1, 5, "FEEDBACK B", 1, 3, {}, {} }, { "dualLevelA", 1, 2, 5, "LEVEL A", 1, 3, {}, {} },
                 { "dualLevelB", 1, 3, 5, "LEVEL B", 1, 3, {}, {} }, { "dualHighB", 1, 4, 5, "HI CUT B", 3, 3, {}, {} },
                 { "modVariation", 1, 0, 2, "VARIATION", 1, 4, {}, {} }, { "modVolume", 1, 1, 2, "VOLUME", 1, 4, {}, {} },
-                { "mix", 3, 0, 2, "MIX", 1, -1, {}, {} },          { "level", 3, 1, 2, "LEVEL", 5, -1, {}, {} } } },
-      powerAtt (*p.apvts.getParameter ("power"), [this] (float) { repaint(); }, nullptr)
+                { "mix", 3, 0, 2, "MIX", 1, -1, {}, {} },          { "level", 3, 1, 2, "LEVEL", 5, -1, {}, {} } } }
 {
-    setLookAndFeel (&laf);
     for (auto& k : knobs)
     {
-        ui::setupKnob (k.slider, *this);
-        auto* par = proc.apvts.getParameter (k.id);
-        k.slider.setDoubleClickReturnValue (true, par->convertFrom0to1 (par->getDefaultValue()));
-        k.slider.onDragStart = [this] { proc.undoManager.beginNewTransaction(); };
-        addAndMakeVisible (k.slider);
-        k.att = std::make_unique<juce::SliderParameterAttachment> (*dynamic_cast<juce::RangedAudioParameter*> (par), k.slider, nullptr);
+        attachKnob (k.slider, k.att, k.id);
         midiUI.add (k.slider, k.id);
-        k.slider.onValueChange = [this] { repaint(); };
     }
-    powerAtt.sendInitialUpdate();
-    grain = ui::makeGrain();
-    constrainer.setSizeLimits (720, 414, 2400, 1380);
-    constrainer.setFixedAspectRatio ((double) kW / (double) kH);
-    setConstrainer (&constrainer);
-    setResizable (true, true);
-    setSize ((int) kW, (int) kH);
     layoutKnobs();
     startTimerHz (30);
 }
 
-DL1AudioProcessorEditor::~DL1AudioProcessorEditor()
-{
-    stopTimer();
-    setLookAndFeel (nullptr);
-}
+DL1AudioProcessorEditor::~DL1AudioProcessorEditor() = default;
 
 void DL1AudioProcessorEditor::timerCallback()
 {
     meter.update (proc.outMeter);
     if (const int shown = mode() * 8 + choice ("variant"); shown != shownKey) { shownKey = shown; layoutKnobs(); repaint(); }       // a preset, undo, A / B or automation changed the tab
-    repaint (panelRect (3).withTrimmedLeft (panelRect (3).getWidth() - 150.0f).expanded (2.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer());
+    repaintDesign (panelRect (3).withTrimmedLeft (panelRect (3).getWidth() - 150.0f).expanded (2.0f));
     if (midiUI.needsRepaint()) { midiUI.tick(); repaint(); }
-    repaint (panelRect (2).expanded (4.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer());
-    if (barState.copiedAt != 0) { repaint (juce::Rectangle<float> (0.0f, 30.0f, 900.0f, 50.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer()); if (! barState.copiedRecently()) barState.copiedAt = 0; }
+    repaintDesign (panelRect (2).expanded (4.0f));
+    tickPresetBar();
 }
 
-void DL1AudioProcessorEditor::toggle (const char* id)
-{
-    auto* par = proc.apvts.getParameter (id);
-    par->beginChangeGesture(); par->setValueNotifyingHost (par->getValue() > 0.5f ? 0.0f : 1.0f); par->endChangeGesture();
-}
 void DL1AudioProcessorEditor::setChoice (const char* id, int index) { setFloat (id, (float) index); }
 void DL1AudioProcessorEditor::setFloat (const char* id, float v)
 {
@@ -105,10 +81,9 @@ void DL1AudioProcessorEditor::setFloat (const char* id, float v)
 
 void DL1AudioProcessorEditor::layoutKnobs()
 {
-    const float sc = scale(), d = 2.0f * (kKnobR + kPad) * sc;
     for (auto& k : knobs)
     {
-        k.slider.setBounds (juce::Rectangle<float> (d, d).withCentre (knobCentre (k.panel, k.index, k.count) * sc).toNearestInt());
+        placeKnob (k.slider, knobCentre (k.panel, k.index, k.count));
         k.slider.setVisible (k.onlyMode < 0 || k.onlyMode == mode());
     }
 }
@@ -260,7 +235,7 @@ void DL1AudioProcessorEditor::paint (juce::Graphics& g)
         }
         const auto c = knobCentre (k.panel, k.index, k.count);
         ui::paintKnob (g, kPal, c, k.name, txt, lo, hi, panelRect (k.panel).getY() + 154.0f, panelRect (k.panel).getY() + 182.0f);
-        ui::paintValueArc (g, c, kKnobR, (float) k.slider.valueToProportionOfLength (k.slider.getValue()), kPal.body);
+        ui::paintValueArc (g, c, ui::kKnobR, (float) k.slider.valueToProportionOfLength (k.slider.getValue()), kPal.body);
     }
     meter.paint (g, meterOrigin().x, meterOrigin().y, isOn ("power"), kPal.body, kPal.ink, 110.0f, 26.0f, 13.0f);
     ui::paintFooter (g, kPal, kRow2Y + kRow2H + 35.0f);

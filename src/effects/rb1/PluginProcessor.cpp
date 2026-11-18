@@ -1,5 +1,6 @@
 // VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
 #include "PluginProcessor.h"
+#include "plugin/ParamLayout.h"
 #include "PluginEditor.h"
 
 namespace
@@ -17,28 +18,26 @@ std::vector<vibr::PresetManager::Factory> rb1FactoryPresets()
         { "Shimmer Space", "An octave-up tail", { { "mode", 1 }, { "variant", 0 }, { "decay", 65 }, { "size", 65 }, { "mix", 40 } } },
         { "Infinite", "A tail that never ends", { { "mode", 1 }, { "variant", 1 }, { "decay", 90 }, { "mix", 45 } } },
         { "Frozen Moment", "Freeze the tail and play over it", { { "mode", 1 }, { "variant", 1 }, { "decay", 80 }, { "freeze", 1 }, { "mix", 50 } } },
+        { "Angel Shimmer", "Octave-up bloom", { { "mode", 1 }, { "variant", 0 }, { "size", 70 }, { "decay", 75 }, { "texture", 60 }, { "mix", 45 }, { "diffusion", 70 } } },
+        { "Endless Hall", "A tail that never ends", { { "mode", 1 }, { "variant", 1 }, { "size", 80 }, { "decay", 90 }, { "diffusion", 80 }, { "mix", 50 } } },
+        { "Spectral Cloud", "Smeared, glassy spectrum", { { "mode", 1 }, { "variant", 2 }, { "size", 65 }, { "decay", 70 }, { "motion", 50 }, { "texture", 65 }, { "mix", 55 }, { "diffusion", 70 } } },
+        { "Slow Drift", "A chorused, moving space", { { "mode", 1 }, { "variant", 3 }, { "decay", 65 }, { "motion", 60 }, { "texture", 55 }, { "mix", 40 }, { "diffusion", 70 } } },
+        { "Frozen Chord", "Freeze what just played", { { "mode", 1 }, { "variant", 1 }, { "freeze", 1 }, { "size", 75 }, { "decay", 85 }, { "mix", 70 }, { "diffusion", 70 } } },
         { "Glass Strings", "Sympathetic strings in C major pentatonic", { { "mode", 2 }, { "variant", 2 }, { "scale", 2 }, { "decay", 60 }, { "size", 60 }, { "blend", 70 }, { "mix", 50 } } },
         { "Metal Drone", "Stiff, bright strings in D dorian", { { "mode", 2 }, { "variant", 1 }, { "root", 2 }, { "scale", 4 }, { "tension", 50 }, { "decay", 70 }, { "mix", 50 } } },
+        { "Pentatonic Haze", "A soft major-pentatonic wash", { { "mode", 2 }, { "variant", 2 }, { "scale", 2 }, { "size", 70 }, { "decay", 70 }, { "damping", 35 }, { "mix", 45 }, { "motion", 30 } } },
+        { "Wooden Harp", "Warm, short-lived wooden strings", { { "mode", 2 }, { "variant", 0 }, { "scale", 0 }, { "size", 55 }, { "decay", 40 }, { "damping", 60 }, { "tension", 20 }, { "mix", 50 }, { "motion", 30 } } },
+        { "Glass Bells", "Bright, long ringing glass", { { "mode", 2 }, { "variant", 2 }, { "scale", 3 }, { "size", 80 }, { "decay", 85 }, { "damping", 15 }, { "motion", 45 }, { "mix", 55 } } },
+        { "Dorian Shimmer", "Moving strings in Dorian", { { "mode", 2 }, { "variant", 2 }, { "root", 2 }, { "scale", 4 }, { "size", 75 }, { "decay", 65 }, { "motion", 70 }, { "fine", 55 }, { "mix", 50 } } },
+        { "Whole-Tone Dream", "Floating, unresolved colour", { { "mode", 2 }, { "variant", 1 }, { "scale", 5 }, { "size", 65 }, { "decay", 75 }, { "damping", 30 }, { "motion", 55 }, { "mix", 55 } } },
+        { "Subtle Body", "Just a little sympathy", { { "mode", 2 }, { "variant", 0 }, { "size", 40 }, { "decay", 35 }, { "damping", 55 }, { "mix", 25 }, { "motion", 30 } } },
     };
 }
 } // namespace
 
 namespace
 {
-// host label and readable text for a float parameter (the stored value is the shown value, the host shows the label next to it)
-juce::AudioParameterFloatAttributes unitAttrs (const juce::String& unit, int decimals)
-{
-    return juce::AudioParameterFloatAttributes()
-        .withLabel (unit)
-        .withStringFromValueFunction ([decimals] (float v, int)
-        {
-            return juce::String (v, decimals);                       // the number only: the host adds the label (unit) itself
-        })
-        .withValueFromStringFunction ([] (const juce::String& s)
-        {
-            return s.retainCharacters ("0123456789.-+").getFloatValue();
-        });
-}
+using vibr::unitAttrs;
 
 int decimalsFor (float step) { return step >= 1.0f ? 0 : step >= 0.1f ? 1 : 2; }
 
@@ -98,12 +97,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout RB1AudioProcessor::createLay
 }
 
 RB1AudioProcessor::RB1AudioProcessor()
-    : AudioProcessor (BusesProperties()
+    : vibr::LabProcessor (BusesProperties()
                           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)
-                          .withInput  ("Sidechain", juce::AudioChannelSet::stereo(), false)),
-      apvts (*this, &undoManager, "RB1", createLayout()),
-      presets (*this, apvts, undoManager, "RB-1 Presets", rb1FactoryPresets(), { "power", "bypass" })
+                          .withInput  ("Sidechain", juce::AudioChannelSet::stereo(), false),
+                          "RB1", createLayout(), "RB-1 Presets", rb1FactoryPresets(),
+                          { "decay", "size", "tone", "motion", "preDelay", "duck", "mix", "level", "freeze", "param2", "value", "diffusion", "texture", "damping", "tension", "blend" })
 {
     const auto get = [this] (const char* id) { return apvts.getRawParameterValue (id); };
     pPower = get ("power"); pMode = get ("mode"); pVariant = get ("variant"); pDecay = get ("decay"); pSize = get ("size"); pTone = get ("tone"); pMotion = get ("motion"); pPreDelay = get ("preDelay");
@@ -193,24 +192,5 @@ void RB1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
 
 juce::AudioProcessorEditor* RB1AudioProcessor::createEditor() { return new RB1AudioProcessorEditor (*this); }
 
-void RB1AudioProcessor::getStateInformation (juce::MemoryBlock& dest)
-{
-    auto state = apvts.copyState();
-    state.appendChild (midiMap.toTree(), nullptr);
-    if (auto xml = state.createXml()) copyXmlToBinary (*xml, dest);
-}
-
-void RB1AudioProcessor::setStateInformation (const void* data, int size)
-{
-    if (auto xml = getXmlFromBinary (data, size))
-        if (xml->hasTagName (apvts.state.getType())) 
-        {
-            auto st = juce::ValueTree::fromXml (*xml);
-            midiMap.fromTree (st.getChildWithName ("MIDIMAP"));
-            st.removeChild (st.getChildWithName ("MIDIMAP"), nullptr);
-            vibr::BypassLink::normalise (st);
-            apvts.replaceState (st);
-        }
-}
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new RB1AudioProcessor(); }

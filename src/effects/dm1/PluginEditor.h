@@ -2,18 +2,14 @@
 #pragma once
 
 #include "PluginProcessor.h"
+#include "ui/PedalLook.h"
 #include "ClickZone.h"
 #include "ParamMemory.h"
 #include "ui/VibrUI.h"
 
 //==============================================================================
 // Chrome knobs drawn over the knobs printed in the background photo.
-class DM1LookAndFeel : public juce::LookAndFeel_V4
-{
-public:
-    void drawRotarySlider (juce::Graphics&, int x, int y, int w, int h, float pos,
-                           float startAngle, float endAngle, juce::Slider&) override;
-};
+using DM1LookAndFeel = vibr::ui::PedalKnobLookAndFeel;
 
 //==============================================================================
 class DM1AudioProcessorEditor : public juce::AudioProcessorEditor,

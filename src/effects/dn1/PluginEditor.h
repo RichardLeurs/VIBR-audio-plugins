@@ -3,13 +3,12 @@
 
 #include "PluginProcessor.h"
 #include "ui/OutputMeter.h"
-#include "ui/VibrUI.h"
+#include "ui/LabEditor.h"
 
 // DN-1 window (1200 x 690), on the shared UI of src/common/ui: header (name, preset chip, A / B, undo), the CONTROLS panel with the mode tab pills on its top edge
 // (the knobs of the mode, and the flat buttons: the stage switches of the shaper, or the types), the SIDECHAIN panel (high-pass, stereo link), the ACTION display
 // (the input level and the gain of the chain over five seconds, with the thresholds) and OUTPUT (MIX, LEVEL, AUTO LEVEL).
-class DN1AudioProcessorEditor : public juce::AudioProcessorEditor,
-                                private juce::Timer
+class DN1AudioProcessorEditor : public vibr::ui::LabEditor
 {
 public:
     explicit DN1AudioProcessorEditor (DN1AudioProcessor&);
@@ -22,15 +21,9 @@ public:
 
 private:
     void timerCallback() override;
-    float scale() const { return (float) getWidth() / 1200.0f; }
     void layoutKnobs();
-    bool isOn (const char* id) const { return proc.apvts.getRawParameterValue (id)->load() > 0.5f; }
-    float value (const char* id) const { return proc.apvts.getRawParameterValue (id)->load(); }
-    int choice (const char* id) const { return (int) std::lround (value (id)); }
     int mode() const { return juce::jlimit (0, dn1::kNumModes - 1, choice ("mode")); }
     int variant() const { return juce::jlimit (0, juce::jmax (0, dn1::variantCount (mode()) - 1), choice ("variant")); }
-    void toggle (const char* id);
-    void setChoice (const char* id, int index);
     void drawAction (juce::Graphics&);
     bool knobShown (int i) const;
 
@@ -47,17 +40,12 @@ private:
     };
 
     DN1AudioProcessor& proc;
-    vibr::ui::KnobLookAndFeel laf;
-    juce::ComponentBoundsConstrainer constrainer;
-    juce::Image grain;
     std::array<Knob, 25> knobs;
     std::unique_ptr<MidiLearnUI> midiUI;       // right-click a knob: MIDI learn (rebuilt when the shown knobs change)
     bool extShown = false;
     vibr::ui::OutputMeter meter;                                           // output dB meters
     juce::uint64 midiShown = 0;
-    vibr::ui::PresetBarState barState;
     int shownKey = -1;
-    juce::ParameterAttachment powerAtt;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DN1AudioProcessorEditor)
 };

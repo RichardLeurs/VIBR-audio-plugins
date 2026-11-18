@@ -1,5 +1,6 @@
 // VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
 #pragma once
+#include "dsp/DcBlocker.h"
 
 // HM-2 Harmonic Machine: adds and reshapes harmonics.
 //   The signal is split at FOCUS into a low and a high band; each band is driven into the saturator (TILT moves the drive between
@@ -99,7 +100,7 @@ public:
                 svf (s.s1, s.s2, x[c], gf, 1.4142f, lo, bp, hp);                // low band; the high band is the rest
                 const float high = x[c] - lo;
                 float v = saturateBiased (lo * gl, p.character, bias) + saturateBiased (high * gh, p.character, bias);
-                const float dc = v - s.dcX + 0.995f * s.dcY; s.dcX = v; s.dcY = dc; v = dc;        // DC blocker
+                v = s.dc.process (v, 0.995f);        // DC blocker
                 v += extra;
                 s.tone += (v - s.tone) * toneA;                                  // tone: one-pole low pass
                 y[c] = s.tone;
@@ -110,7 +111,7 @@ public:
     }
 
 private:
-    struct Chan { float s1 = 0, s2 = 0, dcX = 0, dcY = 0, tone = 0; };
+    struct Chan { float s1 = 0, s2 = 0, tone = 0; vibr::dsp::DcBlocker dc; };
 
     static void svf (float& s1, float& s2, float x, float g, float k, float& lo, float& bp, float& hp)
     {

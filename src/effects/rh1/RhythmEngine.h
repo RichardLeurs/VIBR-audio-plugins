@@ -13,24 +13,26 @@
 #include <atomic>
 #include <cmath>
 #include <cstdint>
+#include "MatrixEngine.h"
 
 namespace rh1
 {
 constexpr float kPi = 3.14159265358979f, kTwoPi = 6.28318530717959f;
-constexpr int kNumModes = 3, kSteps = 16, kNumDivisions = 9, kNumPatterns = 11, kHistory = 256;
-enum Mode { Filter, Tremolo, Slicer };
+constexpr int kNumModes = 4, kSteps = 16, kNumDivisions = 9, kNumPatterns = 11, kHistory = 256;
+enum Mode { Filter, Tremolo, Slicer, Matrix };            // Matrix: the VC-1 modulation matrix (the engine in MatrixEngine.h, unchanged)
 enum Source { Lfo, Envelope, Steps };
 enum FilterType { LowPass, BandPass, HighPass, Notch, Vowel };
 enum TremType { Smooth, Harmonic, Panner };
 enum SlicerMode { Single, Dual, SlTremolo, Sfx, SlHarmonic };
 
 inline int clampMode (int m) { return std::clamp (m, 0, kNumModes - 1); }
-inline const char* modeName (int m) { static const char* n[kNumModes] = { "FILTER", "TREMOLO", "SLICER" }; return n[clampMode (m)]; }
+inline const char* modeName (int m) { static const char* n[kNumModes] = { "FILTER", "TREMOLO", "SLICER", "MATRIX" }; return n[clampMode (m)]; }
 inline const char* sourceName (int s) { static const char* n[3] = { "LFO", "ENVELOPE", "STEPS" }; return n[std::clamp (s, 0, 2)]; }
-inline int variantCount (int mode) { return mode == Filter ? 5 : mode == Tremolo ? 3 : 5; }
+inline int variantCount (int mode) { return mode == Filter ? 5 : mode == Tremolo ? 3 : mode == Slicer ? 5 : 0; }
 inline const char* variantName (int mode, int v)
 {
     static const char* f[5] = { "LOW PASS", "BAND PASS", "HIGH PASS", "NOTCH", "VOWEL" }, *t[3] = { "SMOOTH", "HARMONIC", "PANNER" }, *s[5] = { "SINGLE", "DUAL", "TREMOLO", "SFX", "HARMONIC" };
+    if (mode == Matrix) return "";
     v = std::clamp (v, 0, variantCount (mode) - 1);
     return mode == Filter ? f[v] : mode == Tremolo ? t[v] : s[v];
 }
@@ -78,6 +80,7 @@ struct Params
     float tremStereo = 0.0f, tremBias = 0.0f;                         // TREMOLO
     float slAttack = 0.3f, slDuty = 1.0f, slBalance = 0.7f;           // SLICER (0 .. 1)
     float mix = 1.0f;
+    vc1::Params matrix;                                               // MATRIX (mix and bpm are taken from the fields above)
 };
 
 class Engine
@@ -86,10 +89,11 @@ public:
     std::atomic<float> histCtl[kHistory], histDest[kHistory];         // one entry per 20 ms: the control signal (0 .. 1) and the destination (cutoff / gain / gate, 0 .. 1)
     std::atomic<int> histPos { 0 }, currentStep { 0 };
 
-    void prepare (float sampleRate) { fs = sampleRate; histWindow = std::max (1, (int) (0.02f * fs)); reset(); }
+    void prepare (float sampleRate) { fs = sampleRate; matrixEng.prepare (sampleRate); histWindow = std::max (1, (int) (0.02f * fs)); reset(); }
 
     void reset()
     {
+        matrixEng.reset();
         for (auto& c : ch) c = Chan();
         pos = 0.0; env = 0.0f; stepVal = 0.0f; shRand = shSm = 0.0f; shPrev = 0; mod = 0.0f; uni = 0.0f; stepIdx = 0; stepFrac = 0.0f;
         rng = 0x2468ace1u; envA = envB = 0.0f; envTa = envTb = 0.15f; balS = -1.0f; lastMode = -1; fade = 1.0f; dryG = 0.0f; wetG = 1.0f;
@@ -100,8 +104,19 @@ public:
 
     float lastModulation() const { return mod; }
 
+    const vc1::Engine& matrixEngine() const noexcept { return matrixEng; }                       // the editor's source lamps
+
     void process (float* l, float* r, int n, const Params& p, float levelGain)
     {
+        const int previous = lastMode;
+        if (p.mode == Matrix)                                                                    // the VC-1 engine, unchanged (it runs at the host rate, no latency)
+        {
+            if (previous != Matrix) matrixEng.reset();
+            lastMode = Matrix;
+            auto q = p.matrix; q.bpm = p.bpm; q.mix = p.mix;
+            matrixEng.process (l, r, n, q, levelGain);
+            return;
+        }
         if (p.mode != lastMode) { if (lastMode >= 0) { for (auto& c : ch) c = Chan(); envA = envB = 0.0f; envTa = envTb = 0.15f; fade = 0.0f; } lastMode = p.mode; }
         const bool slicer = p.mode == Slicer, clockTempo = p.sync || slicer;
         const float divBeats = divisionBeats (p.division);
@@ -310,6 +325,7 @@ private:
         }
     }
 
+    vc1::Engine matrixEng;
     float fs = 48000.0f, phase = 0.0f, env = 0.0f, stepVal = 0.0f, shRand = 0.0f, shSm = 0.0f, mod = 0.0f, uni = 0.0f, stepFrac = 0.0f, fade = 1.0f, dryG = 0.0f, wetG = 1.0f;
     float g = 0.1f, k = 1.0f, gv1 = 0.1f, gv2 = 0.1f, gv3 = 0.1f, kv = 0.2f, cutHz = 1000.0f, envA = 0.0f, envB = 0.0f, envTa = 0.15f, envTb = 0.15f, balS = -1.0f, winCtl = 0.0f, winDest = 0.0f;
     double pos = 0.0;

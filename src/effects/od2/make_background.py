@@ -16,7 +16,7 @@ DARK = (33, 18, 9)                            # print on the body
 PANEL = (24, 25, 28)
 CHROME = [(0, (250, 250, 252)), (0.35, (190, 194, 202)), (0.7, (110, 114, 124)), (1, (60, 62, 70))]
 
-# ----- layout (shared with PluginEditor.cpp); same margins and gaps as the DM-1 (see ../style.md) -----
+# ----- layout (shared with PluginEditor.cpp); same margins and gaps as the DM-1 (see ../style_guide.md) -----
 PT, PB = 268, 840
 P1, P2, P3 = (40, PT, 740, PB), (760, PT, 1580, PB), (1600, PT, 2420, PB)      # side margins 40, panel gaps 20
 KR = 80                                       # knob radius (all knobs)
@@ -349,7 +349,7 @@ for k, name in enumerate(TYPES):
 
 # ----- lower strips: PARAM / BOOST / GATE (DRIVE panel) and MEMORY (TONE panel) -----
 def led_bezel(lx, ly):
-    # flat (see style.md, "Flat style"): a thin dark grey ring round a flat dark well; the editor fills the lamp
+    # flat (see style_guide.md, "Flat style"): a thin dark grey ring round a flat dark well; the editor fills the lamp
     layer = new(); dr = ImageDraw.Draw(layer)
     dr.ellipse([(lx - 17) * S, (ly - 17) * S, (lx + 17) * S, (ly + 17) * S], fill=(52, 56, 68, 255))
     dr.ellipse([(lx - 14) * S, (ly - 14) * S, (lx + 14) * S, (ly + 14) * S], fill=(12, 13, 15, 255))

@@ -10,7 +10,6 @@ constexpr float kImgW = 2460.0f, kImgH = 978.0f;
 constexpr int kBaseW = 1230;
 
 constexpr float kKnobRadius = 80.0f;                       // black knob; the printed scale sits outside it
-constexpr float kPad = 3.0f;
 constexpr float kRowY = 490.0f;
 struct KnobSpec { const char* id; float x, y; float startDeg, endDeg; };
 const KnobSpec kType { "type", 390.0f, 584.0f, 0.0f, 330.0f };            // 12 positions, 30 degrees apart, OVERDRIVE at the top
@@ -28,12 +27,7 @@ const juce::Point<float> kParamButton { 860.0f, 760.0f }, kMemoryButton { 2250.0
 constexpr juce::uint32 kHoldMs = 800;
 const char* const kSlotId[5] = { "param", "boostPost", "boostPre", "gateDecay", "gateThresh" };      // what the PARAM knob edits
 
-juce::Point<float> polar (juce::Point<float> c, float r, float a)
-{
-    return { c.x + r * std::sin (a), c.y - r * std::cos (a) };
-}
-
-// lamp (flat, see style.md "Flat style"): a plain 22 px disc inside the dark grey ring painted in the background, the colour when on, a dark
+// lamp (flat, see style_guide.md "Flat style"): a plain 22 px disc inside the dark grey ring painted in the background, the colour when on, a dark
 // shade of it when off; no glow, no highlight
 void drawLamp (juce::Graphics& g, juce::Point<float> c, bool on, juce::Colour colour)
 {
@@ -52,61 +46,12 @@ void drawBall (juce::Graphics& g, juce::Point<float> c)
 } // namespace
 
 //==============================================================================
-void OD2LookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int w, int h, float,
-                                         float startAngle, float endAngle, juce::Slider& s)
-{
-    const auto b = juce::Rectangle<float> ((float) x, (float) y, (float) w, (float) h);
-    const auto c = b.getCentre();
-    const float R = juce::jmin (b.getWidth(), b.getHeight()) * 0.5f - kPad;
-    const double lo = s.getMinimum(), hi = s.getMaximum();
-    const float pos = (float) ((s.getValue() - lo) / (hi - lo));
-    const float angle = startAngle + pos * (endAngle - startAngle);
-    const auto circle = [&] (float r) { return juce::Rectangle<float> (r * 2.0f, r * 2.0f).withCentre (c); };
-
-    // soft drop shadow
-    g.setColour (juce::Colours::black.withAlpha (0.55f));
-    g.fillEllipse (circle (R).translated (R * 0.05f, R * 0.09f));
-
-    // matt black body with a knurled grip edge
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff4a4c51), c.x - R * 0.7f, c.y - R * 0.8f,
-                                             juce::Colour (0xff050506), c.x + R * 0.7f, c.y + R * 0.9f, false));
-    g.fillEllipse (circle (R));
-    constexpr int ridges = 60;
-    for (int i = 0; i < ridges; ++i)
-    {
-        const float a = juce::MathConstants<float>::twoPi * (float) i / (float) ridges;
-        g.setColour (juce::Colours::white.withAlpha (0.10f + 0.10f * std::max (0.0f, std::cos (a + 0.8f))));
-        g.drawLine (polar (c, R * 0.90f, a).x, polar (c, R * 0.90f, a).y, polar (c, R * 0.99f, a).x, polar (c, R * 0.99f, a).y, 1.0f);
-    }
-    g.setColour (juce::Colours::black);
-    g.drawEllipse (circle (R), 1.2f);
-
-    // raised cap
-    const float capR = R * 0.80f;
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff3a3b3f), c.x - capR * 0.6f, c.y - capR * 0.7f,
-                                             juce::Colour (0xff0b0b0c), c.x + capR * 0.6f, c.y + capR * 0.8f, false));
-    g.fillEllipse (circle (capR));
-    g.setGradientFill (juce::ColourGradient (juce::Colours::white.withAlpha (0.14f), c.x - capR * 0.5f, c.y - capR * 0.6f,
-                                             juce::Colours::transparentWhite, c.x + capR * 0.1f, c.y + capR * 0.1f, true));
-    g.fillEllipse (circle (capR));
-    g.setGradientFill (juce::ColourGradient (juce::Colours::white.withAlpha (0.35f), c.x - capR, c.y - capR,
-                                             juce::Colour (0xff000000), c.x + capR, c.y + capR, false));
-    g.drawEllipse (circle (capR), 1.2f);
-
-    // pointer: white bar from the rim toward the centre
-    juce::Path p;
-    p.addRoundedRectangle (-capR * 0.055f, -capR * 0.94f, capR * 0.11f, capR * 0.50f, capR * 0.05f);
-    g.setColour (juce::Colour (0xfff2f2ee));
-    g.fillPath (p, juce::AffineTransform::rotation (angle).translated (c));
-}
-
 //==============================================================================
 OD2AudioProcessorEditor::OD2AudioProcessorEditor (OD2AudioProcessor& p)
-    : AudioProcessorEditor (&p), proc (p)
+    : PedalEditor (p, OD2Data::background_png, (size_t) OD2Data::background_pngSize, kImgW, kImgH, kBaseW, 615), proc (p)
 {
     setLookAndFeel (&laf);
-    background = juce::ImageFileFormat::loadFrom (OD2Data::background_png, (size_t) OD2Data::background_pngSize);
-
+    
     const auto add = [this] (Knob& k, const KnobSpec& spec)
     {
         k.slider.setSliderStyle (juce::Slider::RotaryVerticalDrag);
@@ -145,11 +90,7 @@ OD2AudioProcessorEditor::OD2AudioProcessorEditor (OD2AudioProcessor& p)
     addAndMakeVisible (paramZone);
     addAndMakeVisible (memoryZone);
 
-    constrainer.setFixedAspectRatio ((double) kImgW / (double) kImgH);
-    constrainer.setSizeLimits (615, 244, 2460, 978);
-    setConstrainer (&constrainer);
-    setResizable (true, true);
-    setSize (kBaseW, (int) std::round ((float) kBaseW * kImgH / kImgW));
+    resized();                                                       // place the knobs (the base class sized the window before they existed)
     startTimerHz (30);
 }
 
@@ -229,9 +170,7 @@ void OD2AudioProcessorEditor::timerCallback()
 
 void OD2AudioProcessorEditor::paint (juce::Graphics& g)
 {
-    g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
-    g.drawImage (background, 0, 0, getWidth(), getHeight(), 0, 0, background.getWidth(), background.getHeight());
-    g.addTransform (juce::AffineTransform::scale ((float) getWidth() / kImgW));      // image pixels from here on
+    paintBackground (g);       // the image, then image pixels
 
     // red LED display: the drive type, or the PARAM value while the PARAM knob is being turned
     {
@@ -264,24 +203,5 @@ void OD2AudioProcessorEditor::paint (juce::Graphics& g)
 
     // power slide switch: chrome ball left = off, right = on; the slot lights up green when on
     const bool on = proc.apvts.getRawParameterValue ("bypass")->load() < 0.5f;
-    if (on)
-    {
-        const auto slot = juce::Rectangle<float> (66.0f, 34.0f).withCentre (kLed);
-        g.setColour (juce::Colour (0xff40d070).withAlpha (0.05f));
-        g.fillRoundedRectangle (slot.expanded (16.0f), 30.0f);
-        g.setColour (juce::Colour (0xff40d070).withAlpha (0.08f));
-        g.fillRoundedRectangle (slot.expanded (8.0f), 24.0f);
-        g.setGradientFill (juce::ColourGradient (juce::Colour (0xff2f8a4c), slot.getX(), slot.getY(),
-                                                 juce::Colour (0xff17512b), slot.getX(), slot.getBottom(), false));
-        g.fillRoundedRectangle (slot, 17.0f);
-        g.setColour (juce::Colours::white.withAlpha (0.10f));
-        g.fillRoundedRectangle (slot.withHeight (slot.getHeight() * 0.40f).reduced (8.0f, 3.0f), 6.0f);
-    }
-    const juce::Point<float> c (kLed.x + (on ? 17.0f : -17.0f), kLed.y);
-    const auto circle = [&] (float r) { return juce::Rectangle<float> (r * 2.0f, r * 2.0f).withCentre (c); };
-    g.setColour (juce::Colours::black.withAlpha (0.55f));
-    g.fillEllipse (circle (15.0f).translated (2.0f, 4.0f));
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xfffafbfd), c.x - 6.0f, c.y - 8.0f,
-                                             juce::Colour (0xff6b6f7a), c.x + 9.0f, c.y + 11.0f, true));
-    g.fillEllipse (circle (14.0f));
+    vibr::ui::paintSlideSwitch (g, kLed, on);
 }

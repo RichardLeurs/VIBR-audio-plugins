@@ -7,7 +7,7 @@ namespace
 using vibr::ui::drawText;
 namespace ui = vibr::ui;
 
-constexpr float kW = 1200.0f, kH = 690.0f, kRow1Y = 134.0f, kRow1H = 252.0f, kRow2Y = 410.0f, kRow2H = 211.0f, kKnobR = 24.0f, kPad = 5.0f, kBarY = 39.0f;
+constexpr float kW = 1200.0f, kH = 690.0f, kRow1Y = 134.0f, kRow1H = 252.0f, kRow2Y = 410.0f, kRow2H = 211.0f, kBarY = 39.0f;
 const ui::Palette kPal { juce::Colour (186, 105, 232), juce::Colour (37, 21, 46) };            // the Reverb & Space colour #BA69E8 and its print
 
 // panels: 0 CONTROLS (mode tabs), 1 OUTPUT, 2 TAIL (display)
@@ -35,7 +35,7 @@ const std::vector<juce::String> kModeTabs { "CLASSIC", "SPACE", "RESONATE" };
 // kinds: 0 percent, 1 ms, 2 level dB, 3 cents, 4 strings
 //==============================================================================
 RB1AudioProcessorEditor::RB1AudioProcessorEditor (RB1AudioProcessor& p)
-    : AudioProcessorEditor (&p), proc (p),
+    : LabEditor (p, kW, kH), proc (p),
       knobs { { { "decay", 0, 0, 6, "DECAY", 0, 0, {}, {} },        { "size", 0, 1, 6, "PARAM 1", 0, 0, {}, {} },       { "param2", 0, 2, 6, "PARAM 2", 0, 0, {}, {} },
                 { "tone", 0, 3, 6, "TONE", 0, 0, {}, {} },          { "motion", 0, 4, 6, "MOTION", 0, 0, {}, {} },      { "value", 0, 5, 6, "VALUE", 0, 0, {}, {} },
                 { "decay", 0, 0, 6, "DECAY", 0, 1, {}, {} },        { "size", 0, 1, 6, "SIZE", 0, 1, {}, {} },          { "diffusion", 0, 2, 6, "DIFFUSION", 0, 1, {}, {} },
@@ -44,67 +44,37 @@ RB1AudioProcessorEditor::RB1AudioProcessorEditor (RB1AudioProcessor& p)
                 { "tension", 0, 3, 7, "TENSION", 0, 2, {}, {} },    { "motion", 0, 4, 7, "MOTION", 0, 2, {}, {} },      { "fine", 0, 5, 7, "FINE", 3, 2, {}, {} },
                 { "blend", 0, 6, 7, "BLEND", 0, 2, {}, {} },
                 { "preDelay", 1, 0, 4, "PRE-DELAY", 1, -1, {}, {} },{ "duck", 1, 1, 4, "DUCK", 0, -1, {}, {} },        { "mix", 1, 2, 4, "MIX", 0, -1, {}, {} },
-                { "level", 1, 3, 4, "LEVEL", 2, -1, {}, {} } } },
-      powerAtt (*p.apvts.getParameter ("power"), [this] (float) { repaint(); }, nullptr)
+                { "level", 1, 3, 4, "LEVEL", 2, -1, {}, {} } } }
 {
-    setLookAndFeel (&laf);
     for (auto& k : knobs)
     {
-        ui::setupKnob (k.slider, *this);
-        auto* par = proc.apvts.getParameter (k.id);
-        k.slider.setDoubleClickReturnValue (true, par->convertFrom0to1 (par->getDefaultValue()));
-        k.slider.onDragStart = [this] { proc.undoManager.beginNewTransaction(); };
-        addAndMakeVisible (k.slider);
-        k.att = std::make_unique<juce::SliderParameterAttachment> (*dynamic_cast<juce::RangedAudioParameter*> (par), k.slider, nullptr);
+        attachKnob (k.slider, k.att, k.id);
         midiUI.add (k.slider, k.id);
-        k.slider.onValueChange = [this] { repaint(); };
     }
-    powerAtt.sendInitialUpdate();
-    grain = ui::makeGrain();
-    constrainer.setSizeLimits (720, 414, 2400, 1380);
-    constrainer.setFixedAspectRatio ((double) kW / (double) kH);
-    setConstrainer (&constrainer);
-    setResizable (true, true);
-    setSize ((int) kW, (int) kH);
     layoutKnobs();
     startTimerHz (30);
 }
 
-RB1AudioProcessorEditor::~RB1AudioProcessorEditor()
-{
-    stopTimer();
-    setLookAndFeel (nullptr);
-}
+RB1AudioProcessorEditor::~RB1AudioProcessorEditor() = default;
 
 void RB1AudioProcessorEditor::timerCallback()
 {
     meter.update (proc.outMeter);
     if (const int shown = mode() * 8 + variant(); shown != shownKey) { shownKey = shown; layoutKnobs(); repaint(); }       // a preset, undo, A / B or automation changed the tab
-    repaint (panelRect (1).withTrimmedLeft (panelRect (1).getWidth() - 150.0f).expanded (2.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer());
+    repaintDesign (panelRect (1).withTrimmedLeft (panelRect (1).getWidth() - 150.0f).expanded (2.0f));
     if (midiUI.needsRepaint()) { midiUI.tick(); repaint(); }
-    if (proc.extKey.load (std::memory_order_relaxed) != extShown) { extShown = proc.extKey.load(); repaint (panelRect (1).expanded (4.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer()); }
-    repaint (panelRect (2).expanded (4.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer());
-    if (barState.copiedAt != 0) { repaint (juce::Rectangle<float> (0.0f, 30.0f, 900.0f, 50.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer()); if (! barState.copiedRecently()) barState.copiedAt = 0; }
+    if (proc.extKey.load (std::memory_order_relaxed) != extShown) { extShown = proc.extKey.load(); repaintDesign (panelRect (1).expanded (4.0f)); }
+    repaintDesign (panelRect (2).expanded (4.0f));
+    tickPresetBar();
 }
 
-void RB1AudioProcessorEditor::toggle (const char* id)
-{
-    auto* par = proc.apvts.getParameter (id);
-    par->beginChangeGesture(); par->setValueNotifyingHost (par->getValue() > 0.5f ? 0.0f : 1.0f); par->endChangeGesture();
-}
-void RB1AudioProcessorEditor::setChoice (const char* id, int index)
-{
-    auto* par = proc.apvts.getParameter (id);
-    par->beginChangeGesture(); par->setValueNotifyingHost (par->convertTo0to1 ((float) index)); par->endChangeGesture();
-}
 
 void RB1AudioProcessorEditor::layoutKnobs()
 {
-    const float sc = scale(), d = 2.0f * (kKnobR + kPad) * sc;
     for (int i = 0; i < (int) knobs.size(); ++i)
     {
         auto& k = knobs[(size_t) i];
-        k.slider.setBounds (juce::Rectangle<float> (d, d).withCentre (knobCentre (k.panel, k.index, k.count) * sc).toNearestInt());
+        placeKnob (k.slider, knobCentre (k.panel, k.index, k.count));
         k.slider.setVisible (knobShown (i));
     }
 }
@@ -227,7 +197,7 @@ void RB1AudioProcessorEditor::paint (juce::Graphics& g)
             default: txt = juce::String ((int) std::lround (v)) + " %"; break;
         }
         ui::paintKnob (g, kPal, knobCentre (k.panel, k.index, k.count), (k.onlyMode == 1 && juce::String (k.id) == "texture") ? sp1::textureName (variant()) : k.name, txt, lo[k.kind], hi[k.kind], panelRect (k.panel).getY() + 154.0f, panelRect (k.panel).getY() + 182.0f);
-        ui::paintValueArc (g, knobCentre (k.panel, k.index, k.count), kKnobR, (float) k.slider.valueToProportionOfLength (k.slider.getValue()), kPal.body);
+        ui::paintValueArc (g, knobCentre (k.panel, k.index, k.count), ui::kKnobR, (float) k.slider.valueToProportionOfLength (k.slider.getValue()), kPal.body);
     }
     meter.paint (g, meterOrigin().x, meterOrigin().y, isOn ("power"), kPal.body, kPal.ink, 110.0f, 26.0f, 13.0f);
     ui::paintFooter (g, kPal, kRow2Y + kRow2H + 35.0f);

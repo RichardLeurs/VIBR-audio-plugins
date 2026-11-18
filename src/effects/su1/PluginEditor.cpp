@@ -5,7 +5,7 @@
 
 namespace
 {
-// layout units: the design is 1200 x 690 (style.md: 20 side margin, 10 gap, name centre 55, rule 104, panels 30 below the rule, 24 between the rows)
+// layout units: the design is 1200 x 690 (style_guide.md: 20 side margin, 10 gap, name centre 55, rule 104, panels 30 below the rule, 24 between the rows)
 constexpr float kW = 1200.0f, kH = 690.0f, kMargin = 20.0f, kRuleY = 104.0f;
 constexpr float kPanelY = 134.0f, kPanelH = 236.0f, kKnobR = 23.0f, kPad = 5.0f, kRow2Y = 394.0f, kRow2H = 227.0f, kKnobPitch = 110.0f;
 constexpr float kPanelX[3] = { 20.0f, 410.0f, 800.0f }, kPanelW[3] = { 380.0f, 380.0f, 380.0f };       // three panels of 380 with 10 px between them (the GAIN knob lives in the OUTPUT panel below)

@@ -1,5 +1,6 @@
 // VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
 #include "PluginProcessor.h"
+#include "plugin/ParamLayout.h"
 #include "PluginEditor.h"
 
 namespace
@@ -35,20 +36,7 @@ std::vector<vibr::PresetManager::Factory> dl1FactoryPresets()
 
 namespace
 {
-// host label and readable text for a float parameter (the stored value is the shown value, the host shows the label next to it)
-juce::AudioParameterFloatAttributes unitAttrs (const juce::String& unit, int decimals)
-{
-    return juce::AudioParameterFloatAttributes()
-        .withLabel (unit)
-        .withStringFromValueFunction ([decimals] (float v, int)
-        {
-            return juce::String (v, decimals);                       // the number only: the host adds the label (unit) itself
-        })
-        .withValueFromStringFunction ([] (const juce::String& s)
-        {
-            return s.retainCharacters ("0123456789.-+").getFloatValue();
-        });
-}
+using vibr::unitAttrs;
 
 int decimalsFor (float step) { return step >= 1.0f ? 0 : step >= 0.1f ? 1 : 2; }
 
@@ -120,11 +108,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout DL1AudioProcessor::createLay
 }
 
 DL1AudioProcessor::DL1AudioProcessor()
-    : AudioProcessor (BusesProperties()
+    : vibr::LabProcessor (BusesProperties()
                           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
-                          .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts (*this, &undoManager, "DL1", createLayout()),
-      presets (*this, apvts, undoManager, "DL-1 Presets", dl1FactoryPresets(), { "power", "bypass" })
+                          .withOutput ("Output", juce::AudioChannelSet::stereo(), true),
+                          "DL1", createLayout(), "DL-1 Presets", dl1FactoryPresets(),
+                          { "time", "feedback", "low", "high", "modRate", "modDepth", "spread", "mix", "level", "digFactor", "digDirect", "digEffect", "anaBlend", "anaDepth", "tapeWow", "hold" })
 {
     const auto get = [this] (const char* id) { return apvts.getRawParameterValue (id); };
     pPower = get ("power"); pMode = get ("mode"); pVariant = get ("variant"); pSync = get ("sync"); pDivision = get ("division"); pTime = get ("time"); pFeedback = get ("feedback");
@@ -225,24 +213,5 @@ void DL1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
 
 juce::AudioProcessorEditor* DL1AudioProcessor::createEditor() { return new DL1AudioProcessorEditor (*this); }
 
-void DL1AudioProcessor::getStateInformation (juce::MemoryBlock& dest)
-{
-    auto state = apvts.copyState();
-    state.appendChild (midiMap.toTree(), nullptr);
-    if (auto xml = state.createXml()) copyXmlToBinary (*xml, dest);
-}
-
-void DL1AudioProcessor::setStateInformation (const void* data, int size)
-{
-    if (auto xml = getXmlFromBinary (data, size))
-        if (xml->hasTagName (apvts.state.getType())) 
-        {
-            auto st = juce::ValueTree::fromXml (*xml);
-            midiMap.fromTree (st.getChildWithName ("MIDIMAP"));
-            st.removeChild (st.getChildWithName ("MIDIMAP"), nullptr);
-            vibr::BypassLink::normalise (st);
-            apvts.replaceState (st);
-        }
-}
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new DL1AudioProcessor(); }

@@ -335,14 +335,14 @@ if TAB == 0:
         text(x, MEM_Y - 34, lab, font(15, 2), INK, spacing=1)
         flat_lamp(x, MEM_Y)                            # a flat ring; the editor fills it
     text(MEM_BTN[0], MEM_Y - 34, "MEMORY", font(15, 2), INK, spacing=1)
-    layer = new(); dr = ImageDraw.Draw(layer)                       # flat button (see style.md, "Flat style")
+    layer = new(); dr = ImageDraw.Draw(layer)                       # flat button (see style_guide.md, "Flat style")
     dr.rounded_rectangle([(MEM_BTN[0] - 38) * S, (MEM_BTN[1] - 24) * S, (MEM_BTN[0] + 38) * S, (MEM_BTN[1] + 24) * S], radius=12 * S, fill=(52, 56, 68, 255))
     dr.rounded_rectangle([(MEM_BTN[0] - 35) * S, (MEM_BTN[1] - 21) * S, (MEM_BTN[0] + 35) * S, (MEM_BTN[1] + 21) * S], radius=9 * S, fill=(12, 13, 15, 255))
     comp(layer)
     text(MEM_BTN[0], MEM_Y + 38, "WRITE: HOLD", font(12, 2), INK, spacing=1)
     line([(TEMPO_BOX[0] + 22, MEM_LINE_Y), (TEMPO_BOX[1] - 22, MEM_LINE_Y)], INK, 1.2, 120)
 
-# ----- standard margins (see ../style.md): more room under the rule and under the panels -----
+# ----- standard margins (see ../style_guide.md): more room under the rule and under the panels -----
 # body texture rows are mirror-tiled and inserted in two places that only contain plain body; everything below the
 # rule moves down by GAP_TOP (PluginEditor.cpp adds the same offset).
 GAP_TOP, GAP_BOT, CUT_TOP, CUT_BOT = 79, 46, 168, 720
