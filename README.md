@@ -1,6 +1,7 @@
 [![Windows build](https://github.com/RichardLeurs/VIBR-audio-plugins/actions/workflows/windows.yml/badge.svg)](https://github.com/RichardLeurs/VIBR-audio-plugins/actions/workflows/windows.yml)
 [![macOS build](https://github.com/RichardLeurs/VIBR-audio-plugins/actions/workflows/macos.yml/badge.svg)](https://github.com/RichardLeurs/VIBR-audio-plugins/actions/workflows/macos.yml)
 [![Linux build](https://github.com/RichardLeurs/VIBR-audio-plugins/actions/workflows/linux.yml/badge.svg)](https://github.com/RichardLeurs/VIBR-audio-plugins/actions/workflows/linux.yml)
+[![Linux build](https://github.com/RichardLeurs/VIBR-audio-plugins/actions/workflows/linux.yml/badge.svg)](https://github.com/RichardLeurs/VIBR-audio-plugins/actions/workflows/linux.yml)
 
 Are you interested in audio plugins and want to help improving and expanding the plugins then send me a message.
 You can find the web page for the project on this [`website`](https://vibr.richardleurs.nl).
