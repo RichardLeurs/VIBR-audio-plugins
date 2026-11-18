@@ -4,16 +4,18 @@
 #
 # Builds the plugins, one CPU architecture per build (smaller bundles than a universal binary). After each build the signed
 # VST3 / AU / Standalone bundles are collected in
-#   ~/Developer/VIBR/releases/<arch>/{new,vintage,experimental,mastering,multieffect,drumcomputer}/{VST3,AU,Standalone}     (<arch> = arm64 or x86_64; on Windows win64, on Linux linux64 or linuxarm64, both without AU)
+#   ~/Developer/VIBR/releases/<arch>/{new,vintage,experimental,mastering,multieffect,drumcomputer}/{VST3,AU,Standalone}     (<arch> = arm64 or x86_64; on Windows win64 or winarm64, on Linux linux64 or linuxarm64, both without AU)
 # 
 # After each build every releases/<arch>/<group>/<format> folder is zipped to ~/Developer/VIBR/zip/VIBR-<group>-<format>-<arch>-<version>.zip (e.g. VIBR-new-AU-arm64-0.2.0.zip). The group of each plugin is set in config/plugins.conf.
 # Linux (linux64 = x86_64): run this script on a Linux machine with a C++20 compiler, CMake and the JUCE dependencies (see INSTALL.md): VST3 and Standalone, no AU.
-# Windows (win64): run this script on a Windows machine in Git Bash with Visual Studio 2022 (C++ desktop workload) and CMake installed. A Mac cannot build the Windows plugins.
+# Windows (win64 = x64, winarm64 = ARM64): run this script on a Windows machine in Git Bash with Visual Studio 2022 (C++ desktop workload; for ARM64 also the "MSVC ARM64 build tools" component) and CMake installed. A Mac cannot build the Windows plugins.
+#   winarm64 can be cross-compiled on an x64 PC (the result runs on Windows on ARM only) or built natively on a Windows ARM PC.
 #
 #   ./build.sh                    build everything for this ARM architecture (build tree ~/Developer/VIBR)
 #   ./build.sh --arch x86_64      build everything for Intel (build tree ~/Developer/VIBR-x86_64)
 #   ./build.sh --arch all         arm64 and x86_64 one after the other
 #   ./build.sh --arch win64       (on Windows) build everything for 64-bit Windows: VST3 and Standalone in ~/Developer/VIBR/releases/win64 (build tree ~/Developer/VIBR-win64)
+#   ./build.sh --arch winarm64    (on Windows) the same for Windows on ARM: releases/winarm64 (build tree ~/Developer/VIBR-winarm64 when cross-compiling on an x64 PC)
 #   ./build.sh DD-1 SD-3          build only these plugins (DD-1 DM-1 CE-1 RE-1 RE-2 DS-1 BF-3 CS-3 LM-2 PH-2 GE-7 EH-2 TR-2 ME-1 SL-2 OD-2 OC-5 BS-1 MM-1 SD-1 SD-3 SU-1 ML-1 DL-1 DN-1 DV-1 AL-1 RH-1 RB-1 MS-1 TR-8)
 #   ./build.sh --clean [names]    rebuild from scratch (the bundles are collected in releases / test on every build, also when nothing was recompiled)
 #   ./build.sh --configure        only (re)configure
@@ -31,7 +33,7 @@ OUT="$HOME/Developer/VIBR"
 VERSION="0.2.0"      # the release version: the end of every zip name (keep it the same as project(... VERSION) in config/CMakeLists.txt and VERSION in website/script.js)
 HOST="$(uname -m)"
 IS_WIN=0 IS_LINUX=0
-case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) IS_WIN=1; HOST="win64" ;;   Linux*) IS_LINUX=1; [ "$HOST" = x86_64 ] && HOST="linux64" || HOST="linuxarm64" ;; esac        # Git Bash on Windows / Linux (linux64 = x86_64, linuxarm64 = aarch64)
+case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) IS_WIN=1; case "$HOST" in aarch64|arm64) HOST="winarm64" ;; *) HOST="win64" ;; esac ;;   Linux*) IS_LINUX=1; [ "$HOST" = x86_64 ] && HOST="linux64" || HOST="linuxarm64" ;; esac        # Git Bash on Windows / Linux (linux64 = x86_64, linuxarm64 = aarch64)
 JOBS="${JOBS:-8}"
 
 clean=0 configure_only=0 zip=1 install=OFF arch="$HOST" targets=()
@@ -42,15 +44,15 @@ while [ $# -gt 0 ]; do
     --no-zip)    zip=0 ;;
     --install)   install=ON ;;
     --arch)      shift; arch="${1:-}" ;;
-    -h|--help)   sed -n '3,19p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help)   sed -n '3,25p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*)          echo "unknown option: $1" >&2; exit 2 ;;
     *)           targets+=("${1%_All}_All") ;;      # DD-1 or DD-1_All
   esac
   shift
 done
-case "$arch" in arm64|x86_64|all|win64|linux64|linuxarm64) ;; *) echo "--arch must be arm64, x86_64, all, win64, linux64 or linuxarm64" >&2; exit 2 ;; esac
-if [ "$arch" = win64 ] && [ "$IS_WIN" = 0 ]; then echo "--arch win64 must be run on Windows (Git Bash with Visual Studio 2022 and CMake): a Mac cannot build the Windows plugins" >&2; exit 2; fi
-if [ "$arch" != win64 ] && [ "$IS_WIN" = 1 ]; then echo "on Windows only --arch win64 works" >&2; exit 2; fi
+case "$arch" in arm64|x86_64|all|win64|winarm64|linux64|linuxarm64) ;; *) echo "--arch must be arm64, x86_64, all, win64, winarm64, linux64 or linuxarm64" >&2; exit 2 ;; esac
+if [[ "$arch" == win* ]] && [ "$IS_WIN" = 0 ]; then echo "--arch $arch must be run on Windows (Git Bash with Visual Studio 2022 and CMake): a Mac cannot build the Windows plugins" >&2; exit 2; fi
+if [[ "$arch" != win* ]] && [ "$IS_WIN" = 1 ]; then echo "on Windows only --arch win64 or winarm64 works" >&2; exit 2; fi
 if [ "$IS_LINUX" = 1 ] && [ "$arch" != "$HOST" ]; then echo "on Linux only --arch $HOST works" >&2; exit 2; fi
 if [ "$IS_LINUX" = 0 ] && [[ "$arch" == linux* ]]; then echo "--arch $arch must be run on Linux" >&2; exit 2; fi
 
@@ -122,7 +124,7 @@ build_arch() {
   if [ -f "$tree/CMakeCache.txt" ] && ! grep -qx "CMAKE_HOME_DIRECTORY:INTERNAL=$SRC/config" "$tree/CMakeCache.txt"; then rm -f "$tree/CMakeCache.txt"; fi      # the tree was configured from another source folder (the repository root): configure again
   echo "==> configure  ($a: $SRC -> $tree)"
   local gen=()
-  if [ "$IS_WIN" = 1 ] && [ -z "${CMAKE_GENERATOR:-}" ]; then gen=(-A x64); fi      # no -G: CMake picks the newest Visual Studio it finds (2022, 2026 ...); set CMAKE_GENERATOR to use another (e.g. Ninja)
+  if [ "$IS_WIN" = 1 ] && [ -z "${CMAKE_GENERATOR:-}" ]; then case "$a" in winarm64) gen=(-A ARM64) ;; *) gen=(-A x64) ;; esac; fi      # no -G: CMake picks the newest Visual Studio it finds (2022, 2026 ...); set CMAKE_GENERATOR to use another (e.g. Ninja)
   if ! cmake -S "$SRC/config" -B "$tree" ${gen[@]+"${gen[@]}"} -DRL_ARCH="$a" -DRL_INSTALL_PLUGINS="$install" -DRELEASES_DIR="$OUT/releases/$a" > "$tree/configure.log" 2>&1; then
     echo "${C_RED}Configure failed${C_OFF} (log: $tree/configure.log):"; grep -E "CMake Error|error" "$tree/configure.log" | head -20; exit 1
   fi

@@ -4,7 +4,7 @@ VIBR plugins come as **VST3**, **AU** (macOS only) and **Standalone** apps. The 
 
 - `<group>`: `vintage`, `new`, `experimental`, `mastering`.
 - `<format>`: `VST3`, `AU` or `Standalone`.
-- `<arch>`: `arm64` (Apple silicon), `x86_64` (Intel Mac) or `win64` (Windows).
+- `<arch>`: `arm64` (Apple silicon), `x86_64` (Intel Mac), `win64` (Windows x64), `winarm64` (Windows on ARM), `linux64` (Linux x86_64) or `linuxarm64` (Linux arm64 / aarch64).
 
 Pick the plugins that match your DAW: use the **AU** build in Logic Pro and GarageBand, and the **VST3** build in most other hosts (Ableton Live, Reaper, Cubase, Bitwig, Studio One, FL Studio ...).
 
@@ -29,7 +29,7 @@ Pick the plugins that match your DAW: use the **AU** build in Logic Pro and Gara
 
 ## Windows (10 or 11, 64-bit)
 
-There is no AU on Windows. Use `VIBR-<group>-VST3-win64-<version>.zip` (and `Standalone` if you want the stand-alone apps).
+There is no AU on Windows. Use `VIBR-<group>-VST3-win64-<version>.zip` (and `Standalone` if you want the stand-alone apps). On a Windows on ARM PC use the `winarm64` zips: they are native ARM64 plugins and load in ARM64 hosts only (an x64 DAW, running under emulation, needs the `win64` plugins).
 
 | Format | Copy to |
 |---|---|

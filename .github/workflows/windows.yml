@@ -2,8 +2,8 @@ name: Windows build
 
 # VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
 
-# Builds all VIBR plugins (VST3 + Standalone) for 64-bit Windows with ./build.sh --arch win64, using the groups in config/plugins.conf,
-# and attaches the zips (VIBR-<group>-<format>-win64.zip) to the workflow run. Start it from the Actions tab, or push a tag like v1.0.
+# Builds all VIBR plugins (VST3 + Standalone) for 64-bit Windows, x64 (--arch win64) and ARM64 (--arch winarm64, on a native GitHub Windows ARM runner), with ./build.sh, using the groups in config/plugins.conf,
+# and attaches the zips (VIBR-<group>-<format>-<arch>.zip) to the workflow run. Start it from the Actions tab, or push a tag like v1.0.
 # A tag push also uploads the zips to the GitHub release of that tag (the website download links use the latest release).
 
 on:
@@ -40,6 +40,39 @@ jobs:
       - uses: actions/upload-artifact@v5
         with:
           name: vibr-win64
+          path: dist/*.zip
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.zip
+
+  winarm64:
+    runs-on: windows-11-arm    # native Windows on ARM runner (free for public repositories)
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build (VST3 + Standalone)
+        shell: bash
+        env:
+          JOBS: 4
+        run: ./build.sh --arch winarm64
+
+      - name: List zips
+        shell: bash
+        run: ls -l ~/Developer/VIBR/zip
+
+      - name: Collect zips
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp ~/Developer/VIBR/zip/*.zip dist/
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: vibr-winarm64
           path: dist/*.zip
 
       - name: Attach to release

@@ -22,10 +22,14 @@ endif()
 
 # One CPU architecture per build (smaller bundles than a universal binary): arm64 (Apple Silicon) or x86_64 (Intel).
 # Default: the architecture of this Mac. Configure a second build tree for the other one, see build.sh (--arch).
-# On Windows the architecture is win64 (64-bit Intel / AMD); build.sh --arch win64 runs on a Windows machine (Git Bash with Visual Studio 2022 and CMake).
-set(RL_ARCH "" CACHE STRING "CPU architecture of this build: arm64 or x86_64 on a Mac, win64 on Windows (empty = this machine's)")
+# On Windows the architecture is win64 (64-bit Intel / AMD) or winarm64 (Windows on ARM); build.sh --arch win64 runs on a Windows machine (Git Bash with Visual Studio 2022 and CMake).
+set(RL_ARCH "" CACHE STRING "CPU architecture of this build: arm64 or x86_64 on a Mac, win64 or winarm64 on Windows (empty = this machine's)")
 if(CMAKE_HOST_WIN32)
-  set(_host_arch "win64")
+  if(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "ARM64|arm64|aarch64")
+    set(_host_arch "winarm64")
+  else()
+    set(_host_arch "win64")
+  endif()
 elseif(CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux")        # linux64 (x86_64) or linuxarm64 (aarch64); build.sh --arch linux64 runs on a Linux machine
   execute_process(COMMAND uname -m OUTPUT_VARIABLE _uname_m OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
   if(_uname_m STREQUAL "x86_64")

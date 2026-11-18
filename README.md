@@ -1,5 +1,6 @@
 [![Windows build](https://github.com/RichardLeurs/VIBR-audio-plugins/actions/workflows/windows.yml/badge.svg)](https://github.com/RichardLeurs/VIBR-audio-plugins/actions/workflows/windows.yml)
 [![macOS build](https://github.com/RichardLeurs/VIBR-audio-plugins/actions/workflows/macos.yml/badge.svg)](https://github.com/RichardLeurs/VIBR-audio-plugins/actions/workflows/macos.yml)
+[![Linux build](https://github.com/RichardLeurs/VIBR-audio-plugins/actions/workflows/linux.yml/badge.svg)](https://github.com/RichardLeurs/VIBR-audio-plugins/actions/workflows/linux.yml)
 
 Are you interested in audio plugins and want to help improving and expanding the plugins then send me a message.
 You can find the web page for the project on this [`website`](https://vibr.richardleurs.nl).
@@ -158,7 +159,7 @@ The shared code is `src/common/MidiMap.h` (CC map, learn, soft takeover, tap fla
 
 ### What you need
 
-The build is set up for macOS (the signing step uses `codesign`). `build.sh` also builds on Windows (`--arch win64`, Git Bash and Visual Studio 2022) and on Linux (`linux64` / `linuxarm64`, VST3 and Standalone only, see [INSTALL.md](INSTALL.md)). Nothing is installed by the build: the bundles are only collected in `~/Developer/VIBR/releases` (see below).
+The build is set up for macOS (the signing step uses `codesign`). `build.sh` also builds on Windows (`--arch win64` or `--arch winarm64`, Git Bash and Visual Studio 2022) and on Linux (`linux64` / `linuxarm64`, VST3 and Standalone only, see [INSTALL.md](INSTALL.md)). Nothing is installed by the build: the bundles are only collected in `~/Developer/VIBR/releases` (see below).
 
 | Tool | Version | How to get it |
 |---|---|---|
@@ -185,14 +186,17 @@ The build on macOS is placed outside the iCloud synced folders in `~/Developer/V
 ./build.sh                  # everything for arm64 architecture
 ./build.sh --arch x86_64    # everything for Intel Macs (arm64 and x86_64 are separate builds, so each bundle stays small)
 ./build.sh --arch win64     # on Windows (Git Bash, Visual Studio 2022, CMake): VST3 and Standalone in ~/Developer/VIBR/releases/win64 and zips in ~/Developer/VIBR/zip (no AU on Windows)
+./build.sh --arch winarm64  # on Windows: for Windows on ARM (cross-compiled on an x64 PC needs the "MSVC ARM64 build tools" component of Visual Studio 2022; builds natively on a Windows ARM PC): releases/winarm64
 ./build.sh --arch all       # both, one after the other
+./build.sh --arch linux64     # on Linux x86_64: VST3 and Standalone in ~/Developer/VIBR/releases/linux64 (no AU on Linux)
+./build.sh --arch linuxarm64  # on Linux arm64 / aarch64 (e.g. Raspberry Pi 5, ARM servers): VST3 and Standalone in ~/Developer/VIBR/releases/linuxarm64 (no AU on Linux)
 ./build.sh DD-1 SD-1        # only these plugins
 ./build.sh --clean          # rebuild from scratch
 ./build.sh --no-zip         # skip the zip step
 ./build.sh --install        # also install this Mac's VST3 / AU in ~/Library/Audio/Plug-Ins (needed for auval or to try them in a DAW)
 ```
 
-The signed bundles of each architecture are collected in `~/Developer/VIBR/releases/<arch>/{new,vintage,experimental,mastering,multieffect,drumcomputer}/{VST3,AU,Standalone}`, with `<arch>` = `arm64`, `x86_64` or `win64` (on Linux `linux64` or `linuxarm64`). The group of every plugin is set in `config/plugins.conf`. After each build every `releases/<arch>/<group>/<format>` folder is zipped to `~/Developer/VIBR/zip/VIBR-<group>-<format>-<arch>.zip`, the files that are uploaded to the GitHub release.
+The signed bundles of each architecture are collected in `~/Developer/VIBR/releases/<arch>/{new,vintage,experimental,mastering,multieffect,drumcomputer}/{VST3,AU,Standalone}`, with `<arch>` = `arm64`, `x86_64`, `win64` or `winarm64` (on Linux `linux64` or `linuxarm64`). The group of every plugin is set in `config/plugins.conf`. After each build every `releases/<arch>/<group>/<format>` folder is zipped to `~/Developer/VIBR/zip/VIBR-<group>-<format>-<arch>.zip`, the files that are uploaded to the GitHub release.
 
 By default **nothing is installed**: the build only collects the bundles in `releases` and the zips, and it does not touch `~/Library/Audio/Plug-Ins` or `/Library/Audio/Plug-Ins`. Only with `./build.sh --install` (`-DRL_INSTALL_PLUGINS=ON`) is the VST3 / AU of this Mac's own architecture copied to `~/Library/Audio/Plug-Ins/VST3` and `~/Library/Audio/Plug-Ins/Components` (the other architecture is never installed; copy it to a Mac of that type). To install by hand, see [INSTALL.md](INSTALL.md).
 
