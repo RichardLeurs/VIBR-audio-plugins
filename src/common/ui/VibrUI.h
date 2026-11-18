@@ -21,9 +21,15 @@ struct Palette
 //==============================================================================
 inline juce::Font font (float h, bool bold = false, bool italic = false)
 {
+#if JUCE_LINUX
+    // no Avenir on Linux and no Medium / Heavy Italic styles in the common fonts: a missing typeface crashes JUCE's text shaping
+    int style = (bold ? juce::Font::bold : juce::Font::plain) | (italic ? juce::Font::italic : juce::Font::plain);
+    return juce::Font (juce::FontOptions (juce::Font::getDefaultSansSerifFontName(), h, style));
+#else
     if (italic) return juce::Font (juce::FontOptions ("Avenir Next", "Heavy Italic", h));
     if (! bold) return juce::Font (juce::FontOptions ("Avenir Next", "Medium", h));
     return juce::Font (juce::FontOptions ("Avenir Next", h, bold ? juce::Font::bold : juce::Font::plain));
+#endif
 }
 
 inline float textWidth (const juce::Font& f, const juce::String& s)
