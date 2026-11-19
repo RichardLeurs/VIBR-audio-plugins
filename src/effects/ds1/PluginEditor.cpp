@@ -1,88 +1,84 @@
 // VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
 #include "PluginEditor.h"
-#include "DS1Data.h"
+
+namespace ui = vibr::ui::vintage;
 
 namespace
 {
-// Positions are in the 1560 x 890 coordinates of the rendered background (make_background.py). The editor is resizable at a
-// fixed aspect ratio; paint() scales image pixels to the window.
-constexpr float kImgW = 1560.0f, kImgH = 890.0f;
-constexpr int kBaseW = 780;
+const ui::Palette kPal { juce::Colour (230, 83, 60) };
 
-constexpr float kKnobRadius = 100.0f;                      // black knob; the printed scale sits outside it
-constexpr float kKnobY = 532.0f;
-struct KnobSpec { const char* id; float x; };
-const KnobSpec kTone { "tone", 280.0f }, kLevel { "level", 780.0f }, kDist { "dist", 1280.0f };
-constexpr float kStartDeg = -154.0f, kEndDeg = 154.0f;     // 11 ticks over 308 degrees
+// Design space: 1120 wide (margin 28, gap 18), one row of three equal panels, y 114 to 344, footer centre 15 above the bottom.
+constexpr float kDesignW = 1120.0f, kDesignH = 374.0f;
+constexpr float kPanelY = 114.0f, kPanelH = 230.0f, kKnobDy = 86.0f;
+constexpr float kPanelW = (kDesignW - 2.0f * ui::kMargin - 2.0f * 18.0f) / 3.0f;
 
-const juce::Point<float> kLed { 1485.0f, 87.0f };          // power slide switch (top right, ball left = off) = bypass
+juce::Rectangle<float> panelRect (int i) { return { ui::kMargin + (float) i * (kPanelW + 18.0f), kPanelY, kPanelW, kPanelH }; }
+juce::Point<float> knobCentre (int i) { return { panelRect (i).getCentreX(), kPanelY + kKnobDy }; }
+}
 
-} // namespace
-
-//==============================================================================
-//==============================================================================
 DS1AudioProcessorEditor::DS1AudioProcessorEditor (DS1AudioProcessor& p)
-    : PedalEditor (p, DS1Data::background_png, (size_t) DS1Data::background_pngSize, kImgW, kImgH, kBaseW, 390), proc (p)
+    : PedalEditor (p, kDesignW, kDesignH), proc (p)
 {
-    setLookAndFeel (&laf);
-    
-    const auto add = [this] (Knob& k, const KnobSpec& spec)
+    for (auto* k : { &tone, &level, &dist })
     {
-        k.slider.setSliderStyle (juce::Slider::RotaryVerticalDrag);
-        k.slider.setTextBoxStyle (juce::Slider::NoTextBox, true, 0, 0);
-        k.slider.setRotaryParameters (juce::degreesToRadians (kStartDeg), juce::degreesToRadians (kEndDeg), true);
-        k.slider.setMouseDragSensitivity (180);
-        k.slider.setScrollWheelEnabled (false);
-        addAndMakeVisible (k.slider);
-        midiUI.add (k.slider, spec.id);
-        k.attachment = std::make_unique<juce::SliderParameterAttachment> (*proc.apvts.getParameter (spec.id), k.slider, nullptr);
-    };
-    add (tone, kTone);
-    add (level, kLevel);
-    add (dist, kDist);
+        auto& s = k->slider;
+        s.setSliderStyle (juce::Slider::RotaryVerticalDrag);
+        s.setTextBoxStyle (juce::Slider::NoTextBox, true, 0, 0);
+        s.setRotaryParameters (juce::degreesToRadians (-135.0f), juce::degreesToRadians (135.0f), true);
+        s.setMouseDragSensitivity (180);
+        s.setScrollWheelEnabled (false);
+        s.setPopupDisplayEnabled (true, true, this);
+        s.onValueChange = [this] { repaint(); };
+        addAndMakeVisible (s);
+        midiUI.add (s, k->id);
+        k->attachment = std::make_unique<juce::SliderParameterAttachment> (*proc.apvts.getParameter (k->id), s, nullptr);
+    }
 
-    resized();                                                       // place the knobs (the base class sized the window before they existed)
+    resized();
     startTimerHz (20);
 }
 
-DS1AudioProcessorEditor::~DS1AudioProcessorEditor() { setLookAndFeel (nullptr); }
+DS1AudioProcessorEditor::~DS1AudioProcessorEditor() = default;
 
 void DS1AudioProcessorEditor::resized()
 {
-    const float S = (float) getWidth() / kImgW;
-    const auto place = [S] (Knob& k, const KnobSpec& spec)
-    {
-        k.slider.setBounds (juce::Rectangle<float> (2.0f * kKnobRadius * S, 2.0f * kKnobRadius * S)
-                                .withCentre ({ spec.x * S, kKnobY * S }).toNearestInt());
-    };
-    place (tone, kTone);
-    place (level, kLevel);
-    place (dist, kDist);
+    placeKnob (tone.slider, knobCentre (0));
+    placeKnob (level.slider, knobCentre (1));
+    placeKnob (dist.slider, knobCentre (2));
 }
 
 void DS1AudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 {
-    // the power slide switch is the bypass switch
-    toggleBypassAt (e.position, kLed);
+    if (toggleBypassAt (e.position)) repaint();                       // the power switch is the bypass switch
 }
 
 void DS1AudioProcessorEditor::paintOverChildren (juce::Graphics& g)
 {
-    midiUI.paintMarks (g, juce::Colour(230, 83, 60));
+    g.addTransform (juce::AffineTransform::scale (scale()));
+    midiUI.paintMarks (g, kPal.accent);
 }
 
 void DS1AudioProcessorEditor::timerCallback()
 {
     if (midiUI.needsRepaint()) { midiUI.tick(); repaint(); }
-    const bool on = proc.apvts.getRawParameterValue ("bypass")->load() < 0.5f;
+    const bool on = powerOn();
     if (on != lastOn) { lastOn = on; repaint(); }
 }
 
 void DS1AudioProcessorEditor::paint (juce::Graphics& g)
 {
-    paintBackground (g);       // the image, then image pixels
+    g.addTransform (juce::AffineTransform::scale (scale()));
+    ui::paintBody (g, kPal, kDesignW, kDesignH);
+    ui::paintHeaderNoPresets (g, kPal, "DS-1", "DISTORTION", "SONIC GRIT", powerOn());
 
-    // power slide switch: chrome ball left = off, right = on; the slot lights up green when on
-    const bool on = proc.apvts.getRawParameterValue ("bypass")->load() < 0.5f;
-    vibr::ui::paintSlideSwitch (g, kLed, on);
+    const char* titles[] = { "FILTER", "OUTPUT", "DRIVE" };
+    Knob* knobs[] = { &tone, &level, &dist };
+    for (int i = 0; i < 3; ++i)
+    {
+        ui::paintPanel (g, kPal, panelRect (i), titles[i]);
+        auto& s = knobs[i]->slider;
+        ui::paintKnob (g, kPal, knobCentre (i), knobs[i]->name, juce::String (s.getValue(), 1), "0", "10",
+                       (float) s.valueToProportionOfLength (s.getValue()));
+    }
+    ui::paintFooter (g, kPal, kDesignH - 15.0f);
 }

@@ -2,13 +2,11 @@
 #pragma once
 
 #include "PluginProcessor.h"
-#include "ui/PedalLook.h"
-#include "ui/PedalEditor.h"
+#include "ui/VintagePedalEditor.h"
 
-// Black knurled knob with a raised cap and a white pointer (same as the DM-1), drawn over the scales printed in the background.
-using LM2LookAndFeel = vibr::ui::PedalKnobLookAndFeel;
+// LM-2 in the default (Vintage Hardware) look: panels OUTPUT (LEVEL, TONE) and LIMITER (RELEASE, THRESHOLD), drawn in code.
 
-class LM2AudioProcessorEditor : public vibr::ui::PedalEditor,
+class LM2AudioProcessorEditor : public vibr::ui::vintage::PedalEditor,
                                 private juce::Timer
 {
 public:
@@ -25,14 +23,16 @@ private:
 
     struct Knob
     {
+        const char* id;
+        const char* name;
         juce::Slider slider;
         std::unique_ptr<juce::SliderParameterAttachment> attachment;
     };
 
     LM2AudioProcessor& proc;
-    LM2LookAndFeel laf;
     MidiLearnUI midiUI { proc.midiMap };       // right-click a knob: MIDI learn
-    Knob level, tone, release, threshold;
+    Knob level { "level", "LEVEL", {}, {} }, tone { "tone", "TONE", {}, {} },
+         release { "release", "RELEASE", {}, {} }, threshold { "threshold", "THRESHOLD", {}, {} };
     bool lastOn = true;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LM2AudioProcessorEditor)

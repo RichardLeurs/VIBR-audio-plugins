@@ -2,13 +2,10 @@
 #pragma once
 
 #include "PluginProcessor.h"
-#include "ui/PedalLook.h"
-#include "ui/PedalEditor.h"
+#include "ui/VintagePedalEditor.h"
 
-// Black knurled knob with a raised cap and a white pointer (same as the DM-1), drawn over the scales printed in the background.
-using EH2LookAndFeel = vibr::ui::PedalKnobLookAndFeel;
-
-class EH2AudioProcessorEditor : public vibr::ui::PedalEditor,
+// EH-2 in the default (Vintage Hardware) look: three one-knob panels ENHANCE / FREQUENCY / SENSITIVITY, drawn in code (no background image).
+class EH2AudioProcessorEditor : public vibr::ui::vintage::PedalEditor,
                                 private juce::Timer
 {
 public:
@@ -24,13 +21,14 @@ private:
 
     struct Knob
     {
+        const char* id;
+        const char* name;
         juce::Slider slider;
         std::unique_ptr<juce::SliderParameterAttachment> attachment;
     };
 
     EH2AudioProcessor& proc;
-    EH2LookAndFeel laf;
-    Knob mix, freq, sens;
+    Knob mix { "mix", "MIX", {}, {} }, freq { "freq", "FREQ", {}, {} }, sens { "sens", "SENS", {}, {} };
     bool lastOn = true;
     bool lastSens = false;
 

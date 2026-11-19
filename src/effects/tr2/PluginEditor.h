@@ -2,13 +2,11 @@
 #pragma once
 
 #include "PluginProcessor.h"
-#include "ui/PedalLook.h"
-#include "ui/PedalEditor.h"
+#include "ui/VintagePedalEditor.h"
 
-// Black knurled knob with a raised cap and a white pointer (same as the DM-1), drawn over the scales printed in the background.
-using TR2LookAndFeel = vibr::ui::PedalKnobLookAndFeel;
+// TR-2 in the default (Vintage Hardware) look: SPEED (RATE + SYNC) / SHAPE (WAVE) / AMOUNT (DEPTH), drawn in code (no background image).
 
-class TR2AudioProcessorEditor : public vibr::ui::PedalEditor,
+class TR2AudioProcessorEditor : public vibr::ui::vintage::PedalEditor,
                                 private juce::Timer
 {
 public:
@@ -31,7 +29,6 @@ private:
     };
 
     TR2AudioProcessor& proc;
-    TR2LookAndFeel laf;
     MidiLearnUI midiUI { proc.midiMap };       // right-click a knob: MIDI learn
     Knob rate, wave, depth;
     bool lastOn = true;

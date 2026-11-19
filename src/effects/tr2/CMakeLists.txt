@@ -1,11 +1,4 @@
 # VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
-juce_add_binary_data(TR2Assets
-  HEADER_NAME TR2Data.h
-  NAMESPACE TR2Data
-  SOURCES
-    assets/background.png
-)
-
 juce_add_plugin(TR-2
   COMPANY_NAME "VIBR"
   ICON_BIG "${RL_ICON}"
@@ -42,7 +35,6 @@ target_compile_definitions(TR-2
 
 target_link_libraries(TR-2
   PRIVATE
-    TR2Assets
     rl_common
     juce::juce_audio_utils
     juce::juce_dsp

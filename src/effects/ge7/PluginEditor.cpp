@@ -1,131 +1,133 @@
 // VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
 #include "PluginEditor.h"
-#include "GE7Data.h"
+
+namespace ui = vibr::ui::vintage;
 
 namespace
 {
-// Positions are in the 1840 x 960 coordinates of the rendered background (make_background.py). The editor is resizable at a
-// fixed aspect ratio; paint() scales image pixels to the window.
-constexpr float kImgW = 1840.0f, kImgH = 960.0f;
-constexpr int kBaseW = 920;
+const ui::Palette kPal { juce::Colour (40, 169, 213) };
 
-constexpr float kTop = 410.0f, kBottom = 750.0f;           // slider travel (+15 dB at the top, -15 dB at the bottom), cap centre
-constexpr float kCap = 30.0f;                              // half the cap height = padding of the slider component
-constexpr float kBandX0 = 250.0f, kBandDx = 190.0f, kLevelX = 1640.0f;
+// Design space: 1120 wide (margin 28, gap 18), one row of two panels (EQUALIZER 846 wide, LEVEL 200), y 114 to 472, footer centre 15 above the bottom.
+constexpr float kDesignW = 1120.0f, kDesignH = 502.0f;
+constexpr float kPanelY = 114.0f, kPanelH = 358.0f;
+constexpr float kLevelW = 200.0f, kEqW = kDesignW - 2.0f * ui::kMargin - 18.0f - kLevelW;
+constexpr float kTrackTop = 48.0f, kTravel = 200.0f;          // fader travel (+15 dB top, -15 dB bottom) from the panel top: the cap centre
+constexpr float kCapW = 46.0f, kCapH = 26.0f;
+constexpr float kNameDy = 284.0f, kValueDy = 305.0f;          // name and value rows from the panel top (40 under the cap, 40 above ... equal to the panel's top gap)
+constexpr float kEqPad = 24.0f;                               // panel edge to the scale labels (left) and to the last ticks (right)
 const char* const kIds[7] = { "f100", "f200", "f400", "f800", "f1k6", "f3k2", "f6k4" };
+const char* const kNames[7] = { "100 HZ", "200 HZ", "400 HZ", "800 HZ", "1.6 KHZ", "3.2 KHZ", "6.4 KHZ" };
 
-const juce::Point<float> kLed { 1765.0f, 87.0f };          // power slide switch (top right, ball left = off) = bypass
+juce::Rectangle<float> eqRect()    { return { ui::kMargin, kPanelY, kEqW, kPanelH }; }
+juce::Rectangle<float> levelRect() { return { ui::kMargin + kEqW + 18.0f, kPanelY, kLevelW, kPanelH }; }
+float bandX (int b) { const float x0 = eqRect().getX() + kEqPad + 60.0f, x1 = eqRect().getRight() - kEqPad - 38.0f; return x0 + (x1 - x0) / 6.0f * (float) b; }
+float levelX() { return levelRect().getCentreX(); }
+float trackTop() { return kPanelY + kTrackTop; }
 
+juce::String dbText (double v) { return (v > 0.04 ? "+" : "") + juce::String (v, 1) + " dB"; }
 } // namespace
 
 //==============================================================================
-void GE7LookAndFeel::drawLinearSlider (juce::Graphics& g, int x, int y, int w, int h, float sliderPos, float, float,
-                                       juce::Slider::SliderStyle, juce::Slider&)
+void GE7FaderLookAndFeel::drawLinearSlider (juce::Graphics& g, int x, int, int w, int, float sliderPos, float, float,
+                                            juce::Slider::SliderStyle, juce::Slider&)
 {
     const float cx = (float) x + (float) w * 0.5f;
-    const juce::Rectangle<float> cap (74.0f * scale, 52.0f * scale);
-    const auto r = cap.withCentre ({ cx, sliderPos });
-    juce::ignoreUnused (y, h);
-    g.setColour (juce::Colours::black.withAlpha (0.55f));
-    g.fillRoundedRectangle (r.translated (3.0f * scale, 6.0f * scale), 16.0f * scale);
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xfffbf8ee), r.getX(), r.getY(), juce::Colour (0xffc9c4b4), r.getX(), r.getBottom(), false));
-    g.fillRoundedRectangle (r, 16.0f * scale);
-    g.setColour (juce::Colours::white.withAlpha (0.55f));
-    g.fillRoundedRectangle (r.reduced (6.0f * scale, 5.0f * scale).withHeight (r.getHeight() * 0.35f), 8.0f * scale);
-    g.setColour (juce::Colour (0xff5a574c));
-    g.drawRoundedRectangle (r, 16.0f * scale, 1.5f * scale);
-    g.setColour (juce::Colour (0xff3a382f));                                    // centre line
-    g.fillRect (juce::Rectangle<float> (r.getWidth() - 20.0f * scale, 3.0f * scale).withCentre (r.getCentre()));
+    const auto r = juce::Rectangle<float> (kCapW * scale, kCapH * scale).withCentre ({ cx, sliderPos });
+    g.setColour (juce::Colour (0xff8F846F));                                         // the lower rim, as under the knobs
+    g.fillRoundedRectangle (r.translated (0.0f, 3.0f * scale), 4.0f * scale);
+    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff4A443D), r.getX(), r.getY(), juce::Colour (0xff15120F), r.getX(), r.getBottom(), false));
+    g.fillRoundedRectangle (r, 4.0f * scale);
+    g.setColour (juce::Colour (0xffF3ECDC));                                         // the cream pointer line
+    g.fillRect (juce::Rectangle<float> (r.getWidth() - 14.0f * scale, 3.0f * scale).withCentre (r.getCentre()));
 }
 
 //==============================================================================
 GE7AudioProcessorEditor::GE7AudioProcessorEditor (GE7AudioProcessor& p)
-    : AudioProcessorEditor (&p), proc (p)
+    : PedalEditor (p, kDesignW, kDesignH), proc (p)
 {
-    setLookAndFeel (&laf);
-    background = juce::ImageFileFormat::loadFrom (GE7Data::background_png, (size_t) GE7Data::background_pngSize);
-
-    const auto add = [this] (Knob& k, const char* id)
+    const auto add = [this] (Fader& k, const char* id)
     {
-        k.slider.setSliderStyle (juce::Slider::LinearVertical);
-        k.slider.setTextBoxStyle (juce::Slider::NoTextBox, true, 0, 0);
-        k.slider.setSliderSnapsToMousePosition (false);
-        k.slider.setDoubleClickReturnValue (true, 0.0);
-        k.slider.setScrollWheelEnabled (false);
-        addAndMakeVisible (k.slider);
-        k.attachment = std::make_unique<juce::SliderParameterAttachment> (*proc.apvts.getParameter (id), k.slider, nullptr);
+        auto& s = k.slider;
+        s.setLookAndFeel (&faderLaf);
+        s.setSliderStyle (juce::Slider::LinearVertical);
+        s.setTextBoxStyle (juce::Slider::NoTextBox, true, 0, 0);
+        s.setSliderSnapsToMousePosition (false);
+        s.setDoubleClickReturnValue (true, 0.0);
+        s.setScrollWheelEnabled (false);
+        s.setPopupDisplayEnabled (true, true, this);
+        s.onValueChange = [this] { repaint(); };
+        addAndMakeVisible (s);
+        k.attachment = std::make_unique<juce::SliderParameterAttachment> (*proc.apvts.getParameter (id), s, nullptr);
     };
     for (int b = 0; b < ge7::kBands; ++b) add (band[b], kIds[b]);
     add (level, "level");
 
-    constrainer.setFixedAspectRatio ((double) kImgW / (double) kImgH);
-    constrainer.setSizeLimits (460, 240, 1840, 960);
-    setConstrainer (&constrainer);
-    setResizable (true, true);
-    setSize (kBaseW, (int) std::round ((float) kBaseW * kImgH / kImgW));
+    resized();
     startTimerHz (20);
 }
 
-GE7AudioProcessorEditor::~GE7AudioProcessorEditor() { setLookAndFeel (nullptr); }
+GE7AudioProcessorEditor::~GE7AudioProcessorEditor()
+{
+    for (auto& b : band) b.slider.setLookAndFeel (nullptr);
+    level.slider.setLookAndFeel (nullptr);
+}
 
 void GE7AudioProcessorEditor::resized()
 {
-    const float S = (float) getWidth() / kImgW;
-    laf.scale = S;
-    const auto place = [S] (Knob& k, float x)
+    const float S = scale();
+    faderLaf.scale = S;
+    const auto place = [S] (Fader& k, float x)
     {
-        k.slider.setBounds (juce::Rectangle<float> (100.0f * S, (kBottom - kTop + 2.0f * kCap) * S)
-                                .withCentre ({ x * S, 0.5f * (kTop + kBottom) * S }).toNearestInt());
+        k.slider.setBounds (juce::Rectangle<float> (60.0f * S, (kTravel + kCapH) * S)
+                                .withCentre ({ x * S, (trackTop() + kTravel * 0.5f) * S }).toNearestInt());
     };
-    for (int b = 0; b < ge7::kBands; ++b) place (band[b], kBandX0 + kBandDx * (float) b);
-    place (level, kLevelX);
+    for (int b = 0; b < ge7::kBands; ++b) place (band[b], bandX (b));
+    place (level, levelX());
 }
 
 void GE7AudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 {
-    // the power slide switch is the bypass switch
-    const float S = (float) getWidth() / kImgW;
-    if (juce::Rectangle<float> (110.0f * S, 70.0f * S).withCentre (kLed * S).contains (e.position))
-    {
-        auto* prm = proc.apvts.getParameter ("bypass");
-        prm->beginChangeGesture();
-        prm->setValueNotifyingHost (prm->getValue() > 0.5f ? 0.0f : 1.0f);
-        prm->endChangeGesture();
-    }
+    if (toggleBypassAt (e.position)) repaint();                       // the power switch is the bypass switch
 }
 
 void GE7AudioProcessorEditor::timerCallback()
 {
-    const bool on = proc.apvts.getRawParameterValue ("bypass")->load() < 0.5f;
+    const bool on = powerOn();
     if (on != lastOn) { lastOn = on; repaint(); }
 }
 
 void GE7AudioProcessorEditor::paint (juce::Graphics& g)
 {
-    g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
-    g.drawImage (background, 0, 0, getWidth(), getHeight(), 0, 0, background.getWidth(), background.getHeight());
-    g.addTransform (juce::AffineTransform::scale ((float) getWidth() / kImgW));      // image pixels from here on
+    g.addTransform (juce::AffineTransform::scale (scale()));
+    ui::paintBody (g, kPal, kDesignW, kDesignH);
+    ui::paintHeaderNoPresets (g, kPal, "GE-7", "GRAPHIC EQUALIZER", "TONE SHAPING", powerOn());
+    ui::paintPanel (g, kPal, eqRect(), "EQUALIZER");
+    ui::paintPanel (g, kPal, levelRect(), "LEVEL");
 
-    // power slide switch: chrome ball left = off, right = on; the slot lights up green when on
-    const bool on = proc.apvts.getRawParameterValue ("bypass")->load() < 0.5f;
-    if (on)
+    const auto fader = [&] (Fader& f, float x, const juce::String& name, bool scaleLabels)
     {
-        const auto slot = juce::Rectangle<float> (66.0f, 34.0f).withCentre (kLed);
-        g.setColour (juce::Colour (0xff40d070).withAlpha (0.05f));
-        g.fillRoundedRectangle (slot.expanded (16.0f), 30.0f);
-        g.setColour (juce::Colour (0xff40d070).withAlpha (0.08f));
-        g.fillRoundedRectangle (slot.expanded (8.0f), 24.0f);
-        g.setGradientFill (juce::ColourGradient (juce::Colour (0xff2f8a4c), slot.getX(), slot.getY(),
-                                                 juce::Colour (0xff17512b), slot.getX(), slot.getBottom(), false));
-        g.fillRoundedRectangle (slot, 17.0f);
-        g.setColour (juce::Colours::white.withAlpha (0.10f));
-        g.fillRoundedRectangle (slot.withHeight (slot.getHeight() * 0.40f).reduced (8.0f, 3.0f), 6.0f);
-    }
-    const juce::Point<float> c (kLed.x + (on ? 17.0f : -17.0f), kLed.y);
-    const auto circle = [&] (float r) { return juce::Rectangle<float> (r * 2.0f, r * 2.0f).withCentre (c); };
-    g.setColour (juce::Colours::black.withAlpha (0.55f));
-    g.fillEllipse (circle (15.0f).translated (2.0f, 4.0f));
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xfffafbfd), c.x - 6.0f, c.y - 8.0f,
-                                             juce::Colour (0xff6b6f7a), c.x + 9.0f, c.y + 11.0f, true));
-    g.fillEllipse (circle (14.0f));
+        const float top = trackTop(), mid = top + kTravel * 0.5f, bot = top + kTravel;
+        const float prop = (float) f.slider.valueToProportionOfLength (f.slider.getValue());
+        const float capY = bot - kTravel * prop;
+        g.setColour (kPal.track);                                                     // the slot, and the value from 0 dB to the cap in the accent
+        g.fillRoundedRectangle (x - 3.0f, top - 4.0f, 6.0f, kTravel + 8.0f, 3.0f);
+        g.setColour (kPal.accent);
+        g.fillRect (x - 3.0f, juce::jmin (capY, mid), 6.0f, std::abs (capY - mid));
+        for (int k = 0; k < 7; ++k)                                                   // +15, +10, +5, 0, -5, -10, -15
+        {
+            const float y = top + kTravel * (float) k / 6.0f;
+            const float w = (k == 3 || k == 0 || k == 6) ? 28.0f : 21.0f;
+            g.setColour (k == 3 ? kPal.ink : kPal.inkSoft);
+            g.fillRect (x - w - 10.0f, y - (k == 3 ? 1.0f : 0.75f), w, k == 3 ? 2.0f : 1.5f);
+            g.fillRect (x + 10.0f, y - (k == 3 ? 1.0f : 0.75f), w, k == 3 ? 2.0f : 1.5f);
+        }
+        if (scaleLabels)
+            for (const auto& [k, t] : { std::pair<int, const char*> { 0, "+15" }, { 3, "0" }, { 6, "-15" } })
+                ui::drawText (g, t, x - 44.0f, top + kTravel * (float) k / 6.0f, 13.0f, kPal.inkSoft, false, 0.0f, juce::Justification::centredRight, ui::Face::Mono);
+        ui::drawText (g, name, x, kPanelY + kNameDy, 21.0f, kPal.ink, true, 0.1f);
+        ui::drawText (g, dbText (f.slider.getValue()), x, kPanelY + kValueDy, 14.0f, kPal.accent, true, 0.0f, juce::Justification::centred, ui::Face::Mono);
+    };
+    for (int b = 0; b < ge7::kBands; ++b) fader (band[b], bandX (b), kNames[b], b == 0);
+    fader (level, levelX(), "LEVEL", true);
+    ui::paintFooter (g, kPal, kDesignH - 15.0f);
 }

@@ -1,86 +1,92 @@
 // VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
 #include "PluginEditor.h"
-#include "BF3Data.h"
+
+namespace ui = vibr::ui::vintage;
 
 namespace
 {
-// Positions are in the 1840 x 890 coordinates of the rendered background (make_background.py). The editor is resizable at a
-// fixed aspect ratio; paint() scales image pixels to the window.
-constexpr float kImgW = 1840.0f, kImgH = 968.0f;
-constexpr int kBaseW = 920;
+const ui::Palette kPal { juce::Colour (54, 183, 121) };           // the Modulation green #36B779: value rings, knob values and the plugin code
 
-constexpr float kKnobRadius = 78.0f;                       // black knob; the printed scale sits outside it
-constexpr float kKnobY = 532.0f;
-struct KnobSpec { const char* id; float x; float startDeg, endDeg; };
-const KnobSpec kManual { "manual", 192.0f, -154.0f, 154.0f }, kRes { "res", 478.0f, -154.0f, 154.0f },
-               kDepth { "depth", 802.0f, -154.0f, 154.0f }, kRate { "rate", 1088.0f, -154.0f, 154.0f },
-               kMode { "mode", 1530.0f, -55.0f, 55.0f };        // 3 positions: GATE / PAN, STANDARD, ULTRA
+// Design space 1120 x 388: header (0 to 100), one row of three panels (y 114, 244 high), footer. Margin 28, gap 18.
+constexpr float kDesignW = ui::kW, kDesignH = 388.0f;
+constexpr float kPanelY = 114.0f, kPanelH = 244.0f, kKnobDY = 86.0f;
+const juce::Rectangle<float> kPanels[3] { { 28.0f, kPanelY, 340.0f, kPanelH }, { 386.0f, kPanelY, 340.0f, kPanelH }, { 744.0f, kPanelY, 348.0f, kPanelH } };
 
-const juce::Point<float> kLed { 1765.0f, 87.0f };          // power slide switch (top right, ball left = off) = bypass
-
-// Tempo sync: a SYNC button in the SWEEP panel under the RATE knob, below a divider line (drawn in the background). While sync is on the
-// RATE knob selects the note division (attached to "division") and the choice is shown to the right of the button.
-const juce::Rectangle<float> kSyncPill = juce::Rectangle<float> (116.0f, 46.0f).withCentre ({ 1004.0f, 776.0f });
-const juce::Rectangle<float> kDivisionText = juce::Rectangle<float> (130.0f, 46.0f).withCentre ({ 1141.0f, 776.0f });
-const juce::Colour kBody (0xff36b779), kPanel (0xff18191c);
-
+constexpr float kKnobDX = 70.0f;                                   // the two knobs of a panel are 140 apart, symmetric about the panel centre
+juce::Point<float> knobCentre (int panel, int side)
+{
+    const auto& r = kPanels[panel];
+    return { r.getCentreX() + (side == 0 ? -kKnobDX : kKnobDX), r.getY() + kKnobDY };
+}
+juce::Rectangle<float> syncRect()                                  // under the RATE knob, 200 below the panel top, 30 high
+{
+    return juce::Rectangle<float> (110.0f, 30.0f).withCentre ({ knobCentre (1, 1).x, kPanelY + 215.0f });
+}
+juce::Rectangle<float> modeRect (int i)                            // three stacked buttons in the MODE panel
+{
+    const auto& r = kPanels[2];
+    return { r.getX() + 24.0f, r.getY() + 46.0f + 60.0f * (float) i, r.getWidth() - 48.0f, 46.0f };
+}
+const char* const kModeNames[3] = { "GATE / PAN", "STANDARD", "ULTRA" };
 } // namespace
 
 //==============================================================================
-//==============================================================================
 BF3AudioProcessorEditor::BF3AudioProcessorEditor (BF3AudioProcessor& p)
-    : PedalEditor (p, BF3Data::background_png, (size_t) BF3Data::background_pngSize, kImgW, kImgH, kBaseW, 460), proc (p),
+    : PedalEditor (p, kDesignW, kDesignH, 560), proc (p),
       syncAtt (*p.apvts.getParameter ("sync"), [this] (float v) { syncOn = v > 0.5f; syncChanged(); }, nullptr),
-      divisionAtt (*p.apvts.getParameter ("division"), [this] (float v) { division = (int) std::lround (v); repaint(); }, nullptr)
+      divisionAtt (*p.apvts.getParameter ("division"), [this] (float v) { division = (int) std::lround (v); repaint(); }, nullptr),
+      modeAtt (*p.apvts.getParameter ("mode"), [this] (float v) { mode = juce::jlimit (0, 2, (int) std::lround (v)); repaint(); }, nullptr)
 {
-    setLookAndFeel (&laf);
-    
-    const auto add = [this] (Knob& k, const KnobSpec& spec)
+    const auto add = [this] (Knob& k, const char* id)
     {
         k.slider.setSliderStyle (juce::Slider::RotaryVerticalDrag);
         k.slider.setTextBoxStyle (juce::Slider::NoTextBox, true, 0, 0);
-        k.slider.setRotaryParameters (juce::degreesToRadians (spec.startDeg), juce::degreesToRadians (spec.endDeg), true);
+        k.slider.setRotaryParameters (juce::degreesToRadians (-135.0f), juce::degreesToRadians (135.0f), true);
         k.slider.setMouseDragSensitivity (180);
         k.slider.setScrollWheelEnabled (false);
+        k.slider.setPopupDisplayEnabled (true, true, this);
         addAndMakeVisible (k.slider);
-        k.attachment = std::make_unique<juce::SliderParameterAttachment> (*proc.apvts.getParameter (spec.id), k.slider, nullptr);
+        k.attachment = std::make_unique<juce::SliderParameterAttachment> (*proc.apvts.getParameter (id), k.slider, nullptr);
     };
-    add (manual, kManual);
-    add (res, kRes);
-    add (depth, kDepth);
-    add (rate, kRate);
-    add (mode, kMode);
-    midiUI.add (manual.slider, "manual");  midiUI.add (res.slider, "res");    midiUI.add (depth.slider, "depth");
-    midiUI.add (rate.slider, "rate");      midiUI.add (mode.slider, "mode");
+    add (manual, "manual");
+    add (res, "res");
+    add (depth, "depth");
+    add (rate, "rate");
+    midiUI.add (manual.slider, "manual");  midiUI.add (res.slider, "res");
+    midiUI.add (depth.slider, "depth");    midiUI.add (rate.slider, "rate");
     syncAtt.sendInitialUpdate();
     divisionAtt.sendInitialUpdate();
+    modeAtt.sendInitialUpdate();
 
     resized();                                                       // place the knobs (the base class sized the window before they existed)
     startTimerHz (20);
 }
 
-BF3AudioProcessorEditor::~BF3AudioProcessorEditor() { setLookAndFeel (nullptr); }
+BF3AudioProcessorEditor::~BF3AudioProcessorEditor() { stopTimer(); }
 
 void BF3AudioProcessorEditor::resized()
 {
-    const float S = (float) getWidth() / kImgW;
-    const auto place = [S] (Knob& k, const KnobSpec& spec)
-    {
-        k.slider.setBounds (juce::Rectangle<float> (2.0f * kKnobRadius * S, 2.0f * kKnobRadius * S)
-                                .withCentre ({ spec.x * S, kKnobY * S }).toNearestInt());
-    };
-    place (manual, kManual);
-    place (res, kRes);
-    place (depth, kDepth);
-    place (rate, kRate);
-    place (mode, kMode);
+    placeKnob (manual.slider, knobCentre (0, 0));
+    placeKnob (res.slider, knobCentre (0, 1));
+    placeKnob (depth.slider, knobCentre (1, 0));
+    placeKnob (rate.slider, knobCentre (1, 1));
 }
 
 void BF3AudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 {
-    // the power slide switch is the bypass switch
-    if (! toggleBypassAt (e.position, kLed) && kSyncPill.expanded (4.0f).transformedBy (juce::AffineTransform::scale (imageScale())).contains (e.position))
+    if (toggleBypassAt (e.position)) return;
+    const auto p = e.position / scale();
+    if (syncRect().expanded (3.0f).contains (p))
+    {
         syncAtt.setValueAsCompleteGesture (syncOn ? 0.0f : 1.0f);
+        return;
+    }
+    for (int i = 0; i < 3; ++i)
+        if (modeRect (i).expanded (3.0f).contains (p))
+        {
+                modeAtt.setValueAsCompleteGesture ((float) i / 2.0f);          // the choice parameter is normalised 0, 0.5, 1
+            return;
+        }
 }
 
 void BF3AudioProcessorEditor::syncChanged()
@@ -95,56 +101,54 @@ void BF3AudioProcessorEditor::syncChanged()
 
 void BF3AudioProcessorEditor::paintOverChildren (juce::Graphics& g)
 {
-    midiUI.paintMarks (g, kBody);
+    midiUI.paintMarks (g, kPal.accent);
+}
+
+int BF3AudioProcessorEditor::stateKey() const
+{
+    int k = powerOn() ? 1 : 0;
+    for (const auto* s : { &manual.slider, &res.slider, &depth.slider, &rate.slider }) k = k * 31 + (int) std::lround (s->getValue() * 100.0);
+    return k * 31 + (syncOn ? 1 : 0) * 7 + division * 3 + mode;
 }
 
 void BF3AudioProcessorEditor::timerCallback()
 {
-    if (midiUI.needsRepaint()) { midiUI.tick(); repaint(); }
-    const bool on = proc.apvts.getRawParameterValue ("bypass")->load() < 0.5f;
-    if (on != lastOn) { lastOn = on; repaint(); }
+    const bool learn = midiUI.needsRepaint();
+    if (learn) midiUI.tick();
+    if (const int key = stateKey(); key != lastKey) { lastKey = key; repaint(); }
+    else if (learn) repaint();
 }
 
 void BF3AudioProcessorEditor::paint (juce::Graphics& g)
 {
-    paintBackground (g);       // the image, then image pixels
+    g.addTransform (juce::AffineTransform::scale (scale()));
+    ui::paintBody (g, kPal, kDesignW, kDesignH);
+    ui::paintHeaderNoPresets (g, kPal, "BF-3", "STEREO FLANGER", "LIQUID MOTION", powerOn());
+    ui::paintFooter (g, kPal, kDesignH - 15.0f);
 
-    // power slide switch: chrome ball left = off, right = on; the slot lights up green when on
-    const bool on = proc.apvts.getRawParameterValue ("bypass")->load() < 0.5f;
-    if (on)
+    ui::paintPanel (g, kPal, kPanels[0], "FLANGE");
+    ui::paintPanel (g, kPal, kPanels[1], "SWEEP");
+    ui::paintPanel (g, kPal, kPanels[2], "MODE");
+
+    const auto knob = [&] (Knob& k, int panel, int side, const char* name, const juce::String& value, const juce::String& lo, const juce::String& hi)
     {
-        const auto slot = juce::Rectangle<float> (66.0f, 34.0f).withCentre (kLed);
-        g.setColour (juce::Colour (0xff40d070).withAlpha (0.05f));
-        g.fillRoundedRectangle (slot.expanded (16.0f), 30.0f);
-        g.setColour (juce::Colour (0xff40d070).withAlpha (0.08f));
-        g.fillRoundedRectangle (slot.expanded (8.0f), 24.0f);
-        g.setGradientFill (juce::ColourGradient (juce::Colour (0xff2f8a4c), slot.getX(), slot.getY(),
-                                                 juce::Colour (0xff17512b), slot.getX(), slot.getBottom(), false));
-        g.fillRoundedRectangle (slot, 17.0f);
-        g.setColour (juce::Colours::white.withAlpha (0.10f));
-        g.fillRoundedRectangle (slot.withHeight (slot.getHeight() * 0.40f).reduced (8.0f, 3.0f), 6.0f);
-    }
-    // SYNC: a flat rounded button, dark with a body-colour border when off, filled body colour when on
-    const float rad = kSyncPill.getHeight() * 0.5f;
-    g.setColour (syncOn ? kBody : kPanel.darker (0.4f));
-    g.fillRoundedRectangle (kSyncPill, rad);
-    g.setColour (kBody);
-    g.drawRoundedRectangle (kSyncPill.reduced (1.0f), rad, 2.0f);
-    g.setFont (juce::Font (juce::FontOptions ("Avenir Next", 24.0f, juce::Font::bold)));
-    g.setColour (syncOn ? juce::Colours::white : kBody);
-    g.drawText ("SYNC", kSyncPill, juce::Justification::centred, false);
+        ui::paintKnob (g, kPal, knobCentre (panel, side), name, value, lo, hi, (float) k.slider.valueToProportionOfLength (k.slider.getValue()));
+    };
+    const auto tenths = [] (Knob& k) { return juce::String (k.slider.getValue(), 1); };
+    knob (manual, 0, 0, "MANUAL", tenths (manual), "0", "10");
+    knob (res, 0, 1, "RES", tenths (res), "0", "10");
+    knob (depth, 1, 0, "DEPTH", tenths (depth), "0", "10");
+
+    const auto& names = vibr::sync::divisionNames();
     if (syncOn)
+        knob (rate, 1, 1, "RATE", names[juce::jlimit (0, vibr::sync::kNumDivisions - 1, division)], "LONG", "SHORT");
+    else
     {
-        g.setColour (juce::Colours::white);
-        g.setFont (juce::Font (juce::FontOptions ("Avenir Next", 34.0f, juce::Font::bold)));
-        g.drawText (vibr::sync::divisionNames()[juce::jlimit (0, vibr::sync::kNumDivisions - 1, division)], kDivisionText, juce::Justification::centredLeft, false);
+        const float hz = bf3::rateHz ((float) rate.slider.getValue() * 0.1f);       // the knob is 0..10
+        knob (rate, 1, 1, "RATE", juce::String (hz, hz < 1.0f ? 2 : 1) + " HZ", "0.05", "8 Hz");
     }
+    ui::paintFlatButton (g, kPal, syncRect(), "SYNC", syncOn, 17.0f, 1.0f, 4.0f, 0.1f);
 
-    const juce::Point<float> c (kLed.x + (on ? 17.0f : -17.0f), kLed.y);
-    const auto circle = [&] (float r) { return juce::Rectangle<float> (r * 2.0f, r * 2.0f).withCentre (c); };
-    g.setColour (juce::Colours::black.withAlpha (0.55f));
-    g.fillEllipse (circle (15.0f).translated (2.0f, 4.0f));
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xfffafbfd), c.x - 6.0f, c.y - 8.0f,
-                                             juce::Colour (0xff6b6f7a), c.x + 9.0f, c.y + 11.0f, true));
-    g.fillEllipse (circle (14.0f));
+    for (int i = 0; i < 3; ++i)
+        ui::paintFlatButton (g, kPal, modeRect (i), kModeNames[i], mode == i, 20.0f, 1.0f, 4.0f, 0.1f);
 }

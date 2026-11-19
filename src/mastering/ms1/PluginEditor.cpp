@@ -1,9 +1,7 @@
 // VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
 #include "PluginEditor.h"
 #include "VibrLogo.h"
-#include "ui/VibrUI.h"
-
-namespace ui = vibr::ui;
+#include "ui/VintageUI.h"
 
 #include "EditorLayout.h"
 
@@ -11,7 +9,7 @@ using namespace ms1ui;
 
 //==============================================================================
 MS1AudioProcessorEditor::MS1AudioProcessorEditor (MS1AudioProcessor& p)
-    : LabEditor (p, p.apvts, p.undoManager, kW, 838.0f), proc (p),
+    : LabEditor (p, p.apvts, p.undoManager, kW, kDesignH), proc (p),
       knobs { { { "inGain", 0, 0, 1, "TRIM", 0, {}, {} },
                 { "limGain", 1, 0, 6, "GAIN", 1, {}, {} },       { "limCeiling", 1, 1, 6, "CEILING", 2, {}, {} },  { "limRelease", 1, 2, 6, "RELEASE", 3, {}, {} },
                 { "limLook", 1, 3, 6, "LOOKAHEAD", 4, {}, {} },  { "limLink", 1, 4, 6, "LINK", 5, {}, {} },        { "limTarget", 1, 5, 6, "TARGET", 6, {}, {} },
@@ -58,7 +56,6 @@ void MS1AudioProcessorEditor::timerCallback()
     if (proc.overLatch.exchange (false)) overLitUntil = juce::Time::getMillisecondCounter() + 1500;     // each overshoot lights the OVER lamp for 1.5 s
     repaint (juce::Rectangle<float> (0.0f, kRow1Y - 6.0f, kW, designH() - kRow1Y + 6.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer());     // the meters, history and displays move
     if (matchNoteTicks > 0) --matchNoteTicks;
-    if (barState.copiedAt != 0) { repaint (juce::Rectangle<float> (0.0f, 50.0f, 900.0f, 50.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer()); if (! barState.copiedRecently()) barState.copiedAt = 0; }
     grHist[(size_t) grPos] = proc.busGrDb(); limHist[(size_t) grPos] = -std::abs (proc.grDb.load()); grPos = (grPos + 1) % (int) grHist.size();
 }
 
@@ -135,10 +132,9 @@ void MS1AudioProcessorEditor::selectMbBand (int b)
 
 void MS1AudioProcessorEditor::layoutKnobs()
 {
-    const float sc = scale(), d = 2.0f * (kKnobR + kPad) * sc;
     for (auto& k : knobs)
     {
-        k.slider.setBounds (juce::Rectangle<float> (d, d).withCentre (knobCentre (k.panel, k.index, k.count) * sc).toNearestInt());
+        placeKnob (k.slider, knobCentre (k.panel, k.index, k.count));
         k.slider.setVisible (knobVisible (k));
     }
 }
@@ -151,34 +147,32 @@ void MS1AudioProcessorEditor::paint (juce::Graphics& g)
 {
     g.addTransform (juce::AffineTransform::scale (scale()));
 
-    vibr::ui::paintBody (g, kPal, kW, designH(), grain);
-    vibr::ui::paintHeader (g, kPal, "MS-1", "MASTERING SUITE", "AUDIO PERFECTION", isOn ("power"));
-    {   // the target chip
+    ui::paintBody (g, kPal, kW, designH());
+    ui::paintHeader (g, kPal, "MS-1", "MASTERING SUITE", "AUDIO PERFECTION");
+    ui::paintPresetBar (g, kPal, proc.presets, proc.undoManager, isOn ("power"));
+    {   // the target chip: a phosphor screen under the preset screen, it opens the target menu
         const auto chip = targetChipRect();
-        g.setColour (kPanel);
-        g.fillRoundedRectangle (chip, 6.0f);                                      // the same small corners as the preset bar
-        g.setColour (kDark);
-        g.drawRoundedRectangle (chip.reduced (0.9f), 6.0f, 1.8f);
+        ui::paintScreen (g, kPal, chip, 5.0f);
         const auto& t = ms1::target (choice ("target"));
-        drawText (g, "TARGET", chip.getX() + 14.0f, chip.getCentreY(), 13.0f, kInk.withAlpha (0.5f), true, 0.2f, juce::Justification::centredLeft);
-        drawText (g, t.name, chip.getX() + 78.0f, chip.getCentreY(), 13.0f, kBody, true, 0.06f, juce::Justification::centredLeft);
-        drawText (g, juce::String::formatted ("%.1f LUFS  %.1f dBTP", value ("limTarget"), value ("limCeiling")), chip.getRight() - 12.0f, chip.getCentreY(), 13.0f, kInk.withAlpha (0.85f), false, 0.02f, juce::Justification::centredRight);
+        drawText (g, "TARGET", chip.getX() + 14.0f, chip.getCentreY(), 13.0f, kPal.phosphorDim, false, 0.1f, juce::Justification::centredLeft, ui::Face::Mono);
+        drawText (g, t.name, chip.getX() + 82.0f, chip.getCentreY(), 13.0f, kPal.phosphor, true, 0.04f, juce::Justification::centredLeft, ui::Face::Mono);
+        drawText (g, juce::String::formatted ("%.1f LUFS  %.1f dBTP", value ("limTarget"), value ("limCeiling")), chip.getRight() - 14.0f, chip.getCentreY(), 13.0f, kPal.phosphor, false, 0.0f,
+                  juce::Justification::centredRight, ui::Face::Mono);
     }
-    vibr::ui::paintPresetBar (g, kPal, proc.presets, proc.undoManager, 62.0f, barState, true, 6.0f);
 
-    // panels: charcoal, light outline, title pill on the top edge (the stage panel has the tab pills instead)
-    static const char* displayTitle[4] = { "BAND GAIN REDUCTION", "STEREO FIELD", "TRANSFER CURVE", "BUS GAIN REDUCTION" };
+    static const char* displayTitle[4] = { "BAND REDUCTION", "STEREO FIELD", "TRANSFER CURVE", "GAIN REDUCTION" };
     for (int i = 0; i < 8; ++i)
         if (panelShown (i))
-            vibr::ui::paintPanel (g, kPal, panelRect (i), i == 5 ? juce::String (kTabName[tab]) : i == 6 ? juce::String (step == 5 ? "LIMITER GAIN REDUCTION" : displayTitle[tab]) : juce::String (kPanelName[i]));
+            ui::paintPanel (g, kPal, panelRect (i), i == 5 ? juce::String (kTabName[tab]) : i == 6 ? juce::String (step == 5 ? "GAIN REDUCTION" : displayTitle[tab]) : juce::String (kPanelName[i]));
     if (step == 4 && ! autoOpen)
-    {   // EXT lamp: lit while the host's sidechain input is the key of the bus compressor
+    {   // EXT lamp on the top edge: lit while the host's sidechain input is the key of the bus compressor
         const auto r6 = panelRect (6);
         const bool ext = proc.extKey.load (std::memory_order_relaxed);
-        const auto lamp = juce::Rectangle<float> (10.0f, 10.0f).withCentre ({ r6.getRight() - 52.0f, r6.getY() + 22.0f });
-        g.setColour (ext ? kBody : kBody.withAlpha (0.25f));
-        g.fillEllipse (lamp);
-        drawText (g, "EXT", lamp.getRight() + 6.0f, lamp.getCentreY(), 13.0f, kInk.withAlpha (ext ? 0.9f : 0.5f), true, 0.1f, juce::Justification::centredLeft);
+        const auto patch = juce::Rectangle<float> (r6.getRight() - 16.0f - 62.0f, r6.getY() - 11.0f, 62.0f, 24.0f);
+        g.setColour (kPal.paper);
+        g.fillRect (patch.expanded (4.0f, 0.0f));
+        paintLamp (g, { patch.getX() + 7.0f, r6.getY() + 1.0f }, ext, kPal.segGreen, kPal.segOff);
+        drawText (g, "EXT", patch.getX() + 22.0f, r6.getY() + 1.0f, 16.0f, kPal.ink, true, 0.1f, juce::Justification::centredLeft);
     }
     drawChain (g);
     if (step == 0 && ! autoOpen) drawSpectrum (g);
@@ -186,11 +180,11 @@ void MS1AudioProcessorEditor::paint (juce::Graphics& g)
     drawOutputMeters (g);
     if (autoOpen) drawAuto (g); else if (step != 0) drawStageDisplay (g);
     if (refOpen) drawReference (g);
-    {   // RESET: integrated loudness, range and the true-peak hold start again
-        vibr::ui::paintFlatButton (g, kPal, resetRect(), "RESET", false, 13.0f, 1.0f, 8.0f, 0.14f, 1.2f);
+    {   // RESET: integrated loudness, range and the true-peak hold start again (under the screens of LOUDNESS)
+        ui::paintFlatButton (g, kPal, resetRect(), "RESET", false, 16.0f, 1.0f, 4.0f, 0.08f);
     }
 
-    // the buttons of row 2
+    // the buttons of the LIMITER panel and of OUTPUT
     const int ch = choice ("limChar"), shape = choice ("ditherShape");
     const bool autoOn = isOn ("limAuto");
     const bool btnOn[8] = { ch == 0, ch == 1, ch == 2, autoOn, isOn ("delta"), shape != 0, isOn ("limRelAuto"), isOn ("limFreeze") };
@@ -198,7 +192,7 @@ void MS1AudioProcessorEditor::paint (juce::Graphics& g)
     for (int i = 0; i < 8; ++i)
     {
         if ((i < 4 || i >= 6) && (step != 5 || autoOpen)) continue;                                // the limiter buttons belong to the LIMITER step
-        vibr::ui::paintFlatButton (g, kPal, buttonRect (i), label[i], btnOn[i], 13.0f, 1.0f, 9.0f, 0.06f);
+        ui::paintFlatButton (g, kPal, buttonRect (i), label[i], btnOn[i], 14.0f, 1.0f, 4.0f, 0.04f);
         if (i == 5) paintCycleDots (g, buttonRect (i), 3, shape, btnOn[i]);                    // the dither shape: flat, gentle, aggressive
     }
 
@@ -208,7 +202,7 @@ void MS1AudioProcessorEditor::paint (juce::Graphics& g)
         const bool on[3] = { isOn ("trimPolarity"), hpf >= 1.0f, isOn ("monoCheck") };
         for (int i = 0; i < 3; ++i)
         {
-            vibr::ui::paintFlatButton (g, kPal, inputButtonRect (i), i == 0 && on[0] ? "INVERT" : lab[i], on[i], 13.0f, 1.0f, 9.0f, 0.04f);
+            ui::paintFlatButton (g, kPal, inputButtonRect (i), i == 0 && on[0] ? "INVERT" : lab[i], on[i], 14.0f, 1.0f, 4.0f, 0.02f);
             if (i == 0) paintCycleDots (g, inputButtonRect (i), 2, on[0] ? 1 : 0, on[0]);                                    // PHASE / INVERT
             else if (i == 1) paintCycleDots (g, inputButtonRect (i), 5, hpf < 1.0f ? 0 : hpf < 25.0f ? 1 : hpf < 35.0f ? 2 : hpf < 50.0f ? 3 : 4, on[1]);   // HPF: off, 20, 30, 40, 60 Hz
         }
@@ -218,12 +212,12 @@ void MS1AudioProcessorEditor::paint (juce::Graphics& g)
         const auto sb = stageButtons();
         for (int i = 0; i < (int) sb.size(); ++i)
         {
-            vibr::ui::paintFlatButton (g, kPal, stageButtonRect (i, (int) sb.size()), sb[(size_t) i].label, sb[(size_t) i].on, 13.0f);
+            ui::paintFlatButton (g, kPal, stageButtonRect (i, (int) sb.size()), sb[(size_t) i].label, sb[(size_t) i].on, 14.0f, 1.0f, 4.0f, 0.04f);
             if (sb[(size_t) i].steps > 0) paintCycleDots (g, stageButtonRect (i, (int) sb.size()), sb[(size_t) i].steps, sb[(size_t) i].cur, sb[(size_t) i].on);
         }
     }
 
-    // knobs: recessed ring, 11 ticks, legends, name and value
+    // knobs: value ring, legends, name and value
     for (auto& k : knobs)
     {
         if (! knobVisible (k)) continue;
@@ -231,7 +225,6 @@ void MS1AudioProcessorEditor::paint (juce::Graphics& g)
         static const char* lo[21] = { "-24", "0", "-3", "10", "0.5", "0", "-24", "off", "-30", "1.5", ".1", ".1", "0", "-60", "1", ".1", "10", "-12", "0", "off", "-6" },
                          * hi[21] = { "+24", "+24", "0", "1k", "5", "100", "-6", "24", "0", "10", "30", "AUTO", "+12", "0", "20", "200", "2k", "+12", "200", "250", "+6" };
         const bool outPanel = k.panel == 2;
-        const float dy = knobDy (k.panel);
         const char* loText = outPanel && k.kind == 0 ? "-12" : lo[k.kind], * hiText = outPanel && k.kind == 0 ? "+6" : hi[k.kind];
 
         const double v = k.slider.getValue();
@@ -259,11 +252,10 @@ void MS1AudioProcessorEditor::paint (juce::Graphics& g)
             case 18: txt = juce::String ((int) std::lround (v)) + " %"; break;
             default: txt = v < 1.0 ? juce::String ("OFF") : juce::String ((int) std::lround (std::max (20.0, v))) + " Hz"; break;      // 19: mono below
         }
-        vibr::ui::paintKnob (g, kPal, c, k.name, txt, loText, hiText, panelRect (k.panel).getY() + 154.0f + dy, panelRect (k.panel).getY() + 182.0f + dy);
-        ui::paintValueArc (g, c, vibr::ui::kKnobR, (float) k.slider.valueToProportionOfLength (k.slider.getValue()), kBody);
+        ui::paintKnob (g, kPal, c, k.name, txt, loText, hiText, (float) k.slider.valueToProportionOfLength (k.slider.getValue()));
     }
 
-    vibr::ui::paintFooter (g, kPal, (refOpen ? kRow4Y + kRow4H : kRow3Y + kRow3H) + 35.0f);
+    ui::paintFooter (g, kPal, designH() - 15.0f);
 }
 
 void MS1AudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
@@ -271,11 +263,11 @@ void MS1AudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
     grabKeyboardFocus();
     const auto p = e.position / scale();
     proc.undoManager.beginNewTransaction();                                                 // every click or drag is one undo step
-    if (powerRect().contains (p)) { toggle ("power"); return; }
+    if (ui::powerRect().contains (p)) { toggle ("power"); return; }
     if (targetChipRect().contains (p)) { showTargetMenu(); return; }
     if (autoButtonRect().contains (p)) { setAutoOpen (! autoOpen); return; }
     if (autoOpen && autoMouseDown (p)) return;
-    if (vibr::ui::presetBarMouseDown (p, *this, proc.presets, proc.undoManager, 62.0f, scale(), barState, [this] { repaint(); })) return;
+    if (ui::presetBarMouseDown (p, *this, proc.presets, proc.undoManager, scale(), [this] { repaint(); })) return;
     const bool eqShown = step == 0 && ! autoOpen;
     for (int i = 0; i < 5 && eqShown; ++i)                                                  // the spectrum options
         if (specButtonRect (i).expanded (2.0f).contains (p))

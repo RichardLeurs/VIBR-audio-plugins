@@ -5,57 +5,60 @@
 
 namespace
 {
-using vibr::ui::drawText;
-namespace ui = vibr::ui;
+namespace ui = vibr::ui::vintage;          // the default look (src/common/ui/VintageUI.h); the old grey look is vibr::ui (VibrUI.h)
+using ui::drawText;
 
-constexpr float kW = 1200.0f, kH = 890.0f, kRow1Y = 134.0f, kRow1H = 247.0f, kRow2Y = 405.0f, kRow2H = 216.0f, kRow3Y = 645.0f, kRow3H = 190.0f, kBarY = 39.0f;
-const ui::Palette kPal { juce::Colour (150, 59, 208), juce::Colour (30, 10, 44) };             // the Experimental colour #963BD0 and its print
-const juce::Colour kIce (143, 211, 244);
+constexpr float kW = ui::kW, kRow1Y = 114.0f, kRow1H = 204.0f, kRow2Y = 336.0f, kRow2H = 254.0f, kRow3Y = 608.0f, kRow3H = 234.0f, kH = kRow3Y + kRow3H + 30.0f;
+const ui::Palette kPal { juce::Colour (150, 59, 208) };                                              // the Experimental colour #963BD0: value rings, full steps and the plugin code
+const juce::Colour kMemory = kPal.accent.interpolatedWith (juce::Colours::white, 0.5f);               // the MORPH snapshot and the frozen bands on the phosphor screen
 
-// panels: 0 HOLD, 1 TEXTURE, 2 SHIFT (row 1), 3 WINDOW, 4 OUTPUT, 5 STATE (row 2), 6 SPECTRUM (row 3)
-constexpr float kPanelX[7] = { 20.0f, 350.0f, 720.0f, 20.0f, 490.0f, 950.0f, 20.0f };
-constexpr float kPanelW[7] = { 320.0f, 360.0f, 460.0f, 460.0f, 450.0f, 230.0f, 1160.0f };
+// FOLD panels: 0 HOLD, 1 TEXTURE, 2 SHIFT (row 1), 3 WINDOW, 4 STATE, 5 OUTPUT (row 2), 6 SPECTRUM (row 3); the knob table keeps its old panel numbers (4 = OUTPUT, 5 = STATE)
+constexpr float kPanelX[7] = { 28.0f, 310.0f, 658.0f, 28.0f, 480.0f, 749.0f, 28.0f };
+constexpr float kPanelW[7] = { 264.0f, 330.0f, 434.0f, 434.0f, 251.0f, 343.0f, 1064.0f };
 juce::Rectangle<float> panelRect (int i)
 {
     const float y = i < 3 ? kRow1Y : i < 6 ? kRow2Y : kRow3Y, h = i < 3 ? kRow1H : i < 6 ? kRow2H : kRow3H;
     return { kPanelX[i], y, kPanelW[i], h };
 }
-// HARMONY (the PT-1 layout in the same window): panels 7 .. 10 VOICE 1 .. 4 (row 1), 11 KEY, 12 CHORDS, 13 OUTPUT (row 2), 14 KEYBOARD (row 3)
+// the table's panel numbers: 0 hold, 1 texture, 2 shift, 3 window, 4 output; HARMONY: 7 .. 10 VOICE 1 .. 4, 11 KEY, 13 OUTPUT
+int foldPanel (int tablePanel) { return tablePanel == 4 ? 5 : tablePanel; }
+// HARMONY: panels 7 .. 10 VOICE 1 .. 4 (row 1), 11 KEY, 12 CHORDS, 13 OUTPUT (row 2), 14 KEYBOARD (row 3)
 juce::Rectangle<float> harmonyRect (int i)
 {
-    if (i < 11) return { 20.0f + 292.5f * (float) (i - 7), kRow1Y, 282.5f, kRow1H };
-    if (i == 14) return { 20.0f, kRow3Y, 1160.0f, kRow3H };
-    static const float x[3] = { 20.0f, 400.0f, 780.0f }, w[3] = { 370.0f, 370.0f, 400.0f };
+    if (i < 11) return { 28.0f + 270.5f * (float) (i - 7), kRow1Y, 252.5f, kRow1H };
+    if (i == 14) return { 28.0f, kRow3Y, 1064.0f, kRow3H };
+    static const float x[3] = { 28.0f, 431.0f, 644.0f }, w[3] = { 385.0f, 195.0f, 448.0f };
     return { x[i - 11], kRow2Y, w[i - 11], kRow2H };
 }
-juce::Rectangle<float> intelRect() { const auto r = harmonyRect (11); return juce::Rectangle<float> (124.0f, 40.0f).withCentre ({ r.getRight() - 20.0f - 62.0f, r.getY() + 92.0f }); }
-juce::Rectangle<float> chordRect (int c)
-{
-    const auto r = harmonyRect (12);
-    const float cx = c < 3 ? r.getCentreX() + 110.0f * (float) (c - 1) : r.getCentreX() + 55.0f * (float) (c == 3 ? -1 : 1);
-    return juce::Rectangle<float> (100.0f, 36.0f).withCentre ({ cx, r.getY() + (c < 3 ? 64.0f : 110.0f) });
-}
-juce::Rectangle<float> keyboardRect() { const auto r = harmonyRect (14); return { r.getX() + 40.0f, r.getY() + 48.0f, r.getWidth() - 80.0f, 110.0f }; }
-const std::vector<juce::String> kModeTabs { "FOLD", "HARMONY" };
-juce::Rectangle<float> modeTabsRect() { return { 690.0f, 55.0f, 220.0f, 0.0f }; }              // the tab pills sit in the header, right of the preset bar
+juce::Rectangle<float> intelRect() { const auto r = harmonyRect (11); return { r.getRight() - 20.0f - 130.0f, r.getY() + 90.0f, 130.0f, 30.0f }; }
+juce::Rectangle<float> heardRect() { const auto r = harmonyRect (11); return { r.getRight() - 20.0f - 130.0f, r.getY() + 134.0f, 130.0f, 30.0f }; }
+juce::Rectangle<float> chordRect (int c) { const auto r = harmonyRect (12); return { r.getX() + 20.0f, r.getY() + 24.0f + 36.0f * (float) c, r.getWidth() - 40.0f, 30.0f }; }
+juce::Rectangle<float> voiceScreenRect (int v) { const auto r = harmonyRect (7 + v); return { r.getX() + 20.0f, r.getY() + 24.0f, r.getWidth() - 40.0f, 30.0f }; }
+juce::Rectangle<float> keyboardRect() { const auto r = harmonyRect (14); return { r.getX() + 20.0f, r.getY() + 62.0f, r.getWidth() - 40.0f, 152.0f }; }
+
+const std::vector<juce::String> kModeTabs { "FOLD", "HARMONY" }, kHoldButtons { "FREEZE", "CAPTURE" };
+constexpr float kTabsTop = -15.0f, kTabsFont = 16.0f;
+const float kModeTabsLeft = std::max (ui::titleEnd ("SPECTRUM"), ui::titleEnd ("KEYBOARD")), kHoldLeft = ui::titleEnd ("HOLD");    // the same place in both modes
+juce::Rectangle<float> bottomPanel (bool harmony) { return harmony ? harmonyRect (14) : panelRect (6); }
+std::vector<juce::Rectangle<float>> modeTabRects (bool harmony) { return ui::tabRects (bottomPanel (harmony), kModeTabs, kTabsTop, kTabsFont, kModeTabsLeft); }
+ui::TabLayout holdLayout() { return ui::layoutTabs (panelRect (0), kHoldButtons, kTabsTop, kTabsFont, kHoldLeft); }      // FREEZE and CAPTURE sit on the edge of HOLD like tabs
+
+constexpr float kSmallR = 20.0f;                                                                   // the three knobs of a VOICE panel
+float knobRadius (int panel) { return panel >= 7 && panel <= 10 ? kSmallR : ui::kKnobR; }
 juce::Point<float> knobCentre (int panel, int k, int n)
 {
-    if (panel >= 7 && panel <= 10) { const auto r = harmonyRect (panel); return { r.getX() + 54.0f + (r.getWidth() - 108.0f) * (float) k * 0.5f, kRow1Y + 114.0f }; }      // a voice: INTERVAL, DETUNE, LEVEL
-    if (panel == 11 || panel == 13) { const auto r = harmonyRect (panel); return { r.getX() + 61.0f + 90.0f * (float) k, r.getY() + 92.0f }; }                         // KEY: key, scale; OUTPUT: spread, mix, level
-    const auto r = panelRect (panel);
-    if (panel == 0) return { r.getX() + 95.0f + 130.0f * (float) k, r.getY() + 128.0f };                          // under the buttons
-    const float cx = panel == 4 ? r.getX() + 165.0f : r.getCentreX();                                                // the output knobs sit left, the dB meters on the right
-    return { cx + (panel == 4 ? 120.0f : 105.0f) * ((float) k - 0.5f * (float) (n - 1)), r.getY() + 92.0f };
+    if (panel >= 7 && panel <= 10) { const auto r = harmonyRect (panel); return { r.getCentreX() + 76.0f * (float) (k - 1), r.getY() + 100.0f }; }       // a voice: INTERVAL, DETUNE, LEVEL
+    if (panel == 11) { const auto r = harmonyRect (11); return { r.getX() + 66.0f + 106.0f * (float) k, r.getY() + 112.0f }; }                           // KEY: key, scale
+    if (panel == 13) { const auto r = harmonyRect (13); return { r.getX() + 66.0f + 104.0f * (float) k, r.getY() + 112.0f }; }                           // OUTPUT: spread, mix, level
+    const auto r = panelRect (foldPanel (panel));
+    if (panel == 4) return { r.getX() + 66.0f + 106.0f * (float) k, r.getY() + 112.0f };                              // MIX and LEVEL left of the meters
+    const float pitch = panel == 0 || panel == 1 ? 108.0f : 104.0f;
+    return { r.getCentreX() + pitch * ((float) k - 0.5f * (float) (n - 1)), r.getY() + (panel == 3 ? 112.0f : 86.0f) };
 }
-float nameY (int panel) { return panel >= 7 && panel <= 10 ? kRow1Y + 114.0f + 64.0f : panel >= 11 ? kRow2Y + 154.0f : panelRect (panel).getY() + (panel == 0 ? 190.0f : 154.0f); }
-float valueY (int panel) { return panel >= 7 && panel <= 10 ? kRow1Y + 114.0f + 86.0f : panel >= 11 ? kRow2Y + 182.0f : panelRect (panel).getY() + (panel == 0 ? 218.0f : 182.0f); }
-juce::Point<float> meterOrigin (bool harmony) { const auto r = harmony ? harmonyRect (13) : panelRect (4); return { r.getX() + (harmony ? 310.0f : 317.0f), r.getY() + 46.0f }; }
-juce::Rectangle<float> freezeRect() { const auto r = panelRect (0); return { r.getX() + 16.0f, r.getY() + 22.0f, 170.0f, 32.0f }; }
-juce::Rectangle<float> captureRect() { const auto r = panelRect (0); return { r.getX() + 196.0f, r.getY() + 22.0f, 108.0f, 32.0f }; }
-juce::Rectangle<float> bandRect (int b) { const auto r = panelRect (0); return { r.getX() + 16.0f + 74.0f * (float) b, r.getY() + 62.0f, 66.0f, 26.0f }; }
-juce::Rectangle<float> plotRect() { const auto r = panelRect (6); return { r.getX() + 56.0f, r.getY() + 46.0f, r.getWidth() - 96.0f, 110.0f }; }
+juce::Point<float> meterOrigin() { const auto r = panelRect (5); return { r.getRight() - 20.0f - ui::kMeterW, r.getY() + (r.getHeight() - ui::kMeterH) * 0.5f }; }       // the same place in both modes
+juce::Rectangle<float> screenRect() { const auto r = panelRect (6); return { r.getX() + 20.0f, r.getY() + 24.0f, r.getWidth() - 40.0f, 146.0f }; }
+juce::Rectangle<float> plotRect() { const auto s = screenRect(); return { s.getX() + 48.0f, s.getY() + 36.0f, s.getWidth() - 96.0f, 82.0f }; }
 const char* const kBandIds[sf1::kBands] = { "fzLow", "fzLowMid", "fzHighMid", "fzHigh" };
-const char* const kBandShort[sf1::kBands] = { "LOW", "L-MID", "H-MID", "HIGH" };
 
 float xOfHz (float hz)                                                                                         // log frequency across the plot, 30 Hz .. 18 kHz
 {
@@ -68,8 +71,33 @@ float hzOfX (float x)
     return sf1::kDisplayLoHz * std::pow (sf1::kDisplayHiHz / sf1::kDisplayLoHz, juce::jlimit (0.0f, 1.0f, (x - r.getX()) / r.getWidth()));
 }
 float yOfDb (float db) { const auto r = plotRect(); return r.getBottom() - r.getHeight() * juce::jlimit (0.0f, 1.0f, (db + 90.0f) / 84.0f); }
+float bandLoHz (int b) { return b == 0 ? sf1::kDisplayLoHz : sf1::kBandEdgesHz[b - 1]; }
+float bandHiHz (int b) { return b == sf1::kBands - 1 ? sf1::kDisplayHiHz : sf1::kBandEdgesHz[b]; }
+juce::Rectangle<float> bandRect (int b)                                                                        // the switch of a band, under its column of the plot
+{
+    const float xa = xOfHz (bandLoHz (b)), xb = xOfHz (bandHiHz (b));
+    return { xa + 3.0f, screenRect().getBottom() + 10.0f, xb - xa - 6.0f, 30.0f };
+}
 
 juce::String hzText (float hz) { return hz >= 1000.0f ? juce::String (hz * 0.001f, hz >= 10000.0f ? 1 : 2) + " kHz" : juce::String ((int) std::lround (hz)) + " Hz"; }
+
+// a small knob (VOICE panels): the value ring, the legends, the name (16) and the value
+void paintSmallKnob (juce::Graphics& g, juce::Point<float> c, const juce::String& name, const juce::String& value, const juce::String& lo, const juce::String& hi, float prop)
+{
+    ui::paintValueArc (g, c, kSmallR, prop, kPal.accent, kPal.track);
+    const float ly = c.y + ui::ringRadius (kSmallR) * 0.707f + 15.0f;
+    drawText (g, lo, c.x - kSmallR * 1.4f, ly, 13.0f, kPal.inkSoft, false, 0.0f, juce::Justification::centredLeft, ui::Face::Mono);
+    drawText (g, hi, c.x + kSmallR * 1.4f, ly, 13.0f, kPal.inkSoft, false, 0.0f, juce::Justification::centredRight, ui::Face::Mono);
+    drawText (g, name, c.x, c.y + kSmallR * 1.71f + 20.0f, 16.0f, kPal.ink, true, 0.08f);
+    drawText (g, value, c.x, c.y + kSmallR * 1.71f + 38.0f, 14.0f, kPal.accent, true, 0.0f, juce::Justification::centred, ui::Face::Mono);
+}
+// a small read-out on a phosphor screen: the label dim on the left, the value bright on the right
+void paintReadout (juce::Graphics& g, juce::Rectangle<float> r, const juce::String& label, const juce::String& value, bool bright)
+{
+    ui::paintScreen (g, kPal, r, 4.0f);
+    drawText (g, label, r.getX() + 10.0f, r.getCentreY(), 14.0f, kPal.phosphorDim, false, 0.1f, juce::Justification::centredLeft, ui::Face::Mono);
+    drawText (g, value, r.getRight() - 10.0f, r.getCentreY(), 17.0f, bright ? kPal.phosphor : kPal.phosphorDim.withAlpha (0.7f), true, 0.0f, juce::Justification::centredRight, ui::Face::Mono);
+}
 }
 
 //==============================================================================
@@ -100,27 +128,25 @@ SF1AudioProcessorEditor::~SF1AudioProcessorEditor() = default;
 void SF1AudioProcessorEditor::timerCallback()
 {
     meter.update (proc.outMeter);
-    const auto region = [this] (juce::Rectangle<float> r) { return r.expanded (4.0f).transformedBy (juce::AffineTransform::scale (scale())).getSmallestIntegerContainer(); };
     const int mode = modeNow();
     if (mode != shownMode) { layoutKnobs(); repaint(); }                                                       // a preset, undo or automation changed the mode
+    const auto meterRect = juce::Rectangle<float> (meterOrigin().x, meterOrigin().y, ui::kMeterW, ui::kMeterH).expanded (2.0f);
     if (mode == 0)
     {
-        repaint (region (panelRect (6)));                                                                      // the spectrum
-        repaint (region (panelRect (5)));                                                                      // the state cards
-        repaint (region (panelRect (4).withTrimmedLeft (panelRect (4).getWidth() - 150.0f)));                   // the output meters
-        repaint (region (panelRect (0).withHeight (96.0f)));                                                   // the frozen band lamps
+        repaintDesign (panelRect (6));                                                                         // the spectrum and the band switches
+        repaintDesign (panelRect (4));                                                                         // the state cards
+        repaintDesign (meterRect);
     }
     else
     {
         const auto& eng = proc.engine.harmony();
         for (int v = 0; v < pt1::kNumVoices; ++v)                                                              // the played and the heard notes: repaint on a change
-            if (const float n = eng.voiceNote[v].load (std::memory_order_relaxed); n != shownNote[v]) { shownNote[v] = n; repaint (region (harmonyRect (7 + v))); repaint (region (harmonyRect (14))); }
-        if (const float hd = eng.detected.load (std::memory_order_relaxed); hd != shownHeard) { shownHeard = hd; repaint (region (harmonyRect (11))); repaint (region (harmonyRect (14))); }
-        repaint (region (harmonyRect (13).withTrimmedLeft (harmonyRect (13).getWidth() - 100.0f)));            // the output meters
+            if (const float n = eng.voiceNote[v].load (std::memory_order_relaxed); n != shownNote[v]) { shownNote[v] = n; repaintDesign (harmonyRect (7 + v)); repaintDesign (harmonyRect (14)); }
+        if (const float hd = eng.detected.load (std::memory_order_relaxed); hd != shownHeard) { shownHeard = hd; repaintDesign (harmonyRect (11)); repaintDesign (harmonyRect (14)); }
+        repaintDesign (meterRect);
     }
     if (midiUI != nullptr && midiUI->needsRepaint()) { midiUI->tick(); repaint(); }
-    if (capturedAt != 0 && juce::Time::currentTimeMillis() - capturedAt > 400) { capturedAt = 0; repaint (region (captureRect())); }
-    tickPresetBar();
+    if (capturedAt != 0 && juce::Time::currentTimeMillis() - capturedAt > 400) { capturedAt = 0; repaintDesign (panelRect (0).withHeight (40.0f).translated (0.0f, -12.0f)); }
 }
 
 
@@ -133,7 +159,7 @@ void SF1AudioProcessorEditor::layoutKnobs()
     for (int i = 0; i < (int) knobs.size(); ++i)
     {
         auto& k = knobs[(size_t) i];
-        placeKnob (k.slider, knobCentre (k.panel, k.index, k.count));
+        placeKnob (k.slider, knobCentre (k.panel, k.index, k.count), knobRadius (k.panel));
         k.slider.setVisible (knobShown (i));
         if (knobShown (i)) shown |= (juce::uint64) 1 << i;
     }
@@ -147,32 +173,44 @@ void SF1AudioProcessorEditor::layoutKnobs()
 void SF1AudioProcessorEditor::resized() { layoutKnobs(); }
 
 //==============================================================================
-// SPECTRUM: the input (grey), the output (body colour), the MORPH snapshot (ice, thin), the four frozen bands (ice washes with their names) and the moving
-// window (a bell in log frequency, one per channel when SPREAD pulls them apart). Click or drag in the plot to move the window's centre.
+// SPECTRUM: a phosphor screen with the input (dim), the output (bright), the MORPH snapshot (dashed), the four frozen bands (washes) and the moving window (a bell in log frequency,
+// one per channel when SPREAD pulls them apart). Click or drag in the plot to move the window's centre.
 void SF1AudioProcessorEditor::drawSpectrum (juce::Graphics& g)
 {
-    const auto r = plotRect();
-    g.setColour (juce::Colours::black.withAlpha (0.45f)); g.fillRoundedRectangle (r.expanded (8.0f, 8.0f), 10.0f);
+    const auto s = screenRect(), r = plotRect();
+    ui::paintScope (g, kPal, s, "", "CLICK OR DRAG TO MOVE THE WINDOW");
     const bool on = isOn ("power");
+    const float amount = value ("win") * 0.01f;
 
-    for (int b = 0; b < sf1::kBands; ++b)                                                                      // the bands: edges, names, frozen wash
+    float x = s.getX() + 12.0f;                                                                                // the legend, left in the strip above the plot
+    const auto legend = [&] (const juce::String& t, juce::Colour c)
     {
-        const float lo = b == 0 ? sf1::kDisplayLoHz : sf1::kBandEdgesHz[b - 1], hi = b == sf1::kBands - 1 ? sf1::kDisplayHiHz : sf1::kBandEdgesHz[b];
-        const float xa = xOfHz (lo), xb = xOfHz (hi), w = on ? proc.engine.bandFrozen (b) : 0.0f;
-        if (w > 0.0f) { g.setColour (kIce.withAlpha (0.08f + 0.17f * w)); g.fillRect (xa, r.getY(), xb - xa, r.getHeight()); }
-        if (b > 0) { g.setColour (kPal.ink.withAlpha (0.18f)); g.drawLine (xa, r.getY(), xa, r.getBottom(), 1.0f); }
-        drawText (g, sf1::bandName (b), (xa + xb) * 0.5f, r.getY() - 13.0f, 12.0f, w > 0.5f ? kIce : kPal.ink.withAlpha (0.55f), true, 0.1f);
-        if (w > 0.5f) drawText (g, "FROZEN", (xa + xb) * 0.5f, r.getY() + 12.0f, 11.0f, kIce, true, 0.12f);
+        drawText (g, t, x, s.getY() + 16.0f, 15.0f, c, false, 0.08f, juce::Justification::centredLeft, ui::Face::Mono);
+        x += ui::textWidth (ui::font (15.0f, false, ui::Face::Mono).withExtraKerningFactor (0.08f), t) + 28.0f;
+    };
+    legend ("IN", kPal.phosphorDim);
+    legend ("OUT", kPal.phosphor);
+    legend ("MEMORY", proc.engine.hasMemory() ? kMemory : kPal.phosphorDim.withAlpha (0.5f));
+    legend ("WINDOW", amount > 0.0f ? kPal.cream : kPal.phosphorDim.withAlpha (0.5f));
+
+    g.saveState();
+    g.reduceClipRegion (s.reduced (3.0f).toNearestInt());
+    for (int b = 0; b < sf1::kBands; ++b)                                                                      // the bands: edges and the frozen wash
+    {
+        const float xa = xOfHz (bandLoHz (b)), xb = xOfHz (bandHiHz (b)), w = on ? proc.engine.bandFrozen (b) : 0.0f;
+        if (w > 0.0f) { g.setColour (kMemory.withAlpha (0.10f + 0.20f * w)); g.fillRect (xa, r.getY(), xb - xa, r.getHeight()); }
+        if (b > 0) { g.setColour (kPal.phosphorDim.withAlpha (0.45f)); g.drawLine (xa, r.getY(), xa, r.getBottom(), 1.0f); }
     }
+    g.restoreState();
     for (const float db : { -12.0f, -36.0f, -60.0f, -84.0f })
     {
-        g.setColour (kPal.ink.withAlpha (0.08f)); g.drawLine (r.getX(), yOfDb (db), r.getRight(), yOfDb (db), 1.0f);
-        drawText (g, juce::String ((int) db), r.getX() - 22.0f, yOfDb (db), 12.0f, kPal.ink.withAlpha (0.6f), false, 0.0f);
+        g.setColour (kPal.phosphor.withAlpha (0.10f)); g.drawLine (r.getX(), yOfDb (db), r.getRight(), yOfDb (db), 1.0f);
+        drawText (g, juce::String ((int) db), r.getX() - 6.0f, yOfDb (db), 13.0f, kPal.phosphorDim, false, 0.0f, juce::Justification::centredRight, ui::Face::Mono);
     }
     for (const float hz : { 100.0f, 1000.0f, 10000.0f })
     {
-        g.setColour (kPal.ink.withAlpha (0.08f)); g.drawLine (xOfHz (hz), r.getY(), xOfHz (hz), r.getBottom(), 1.0f);
-        drawText (g, hz >= 1000.0f ? juce::String ((int) (hz / 1000.0f)) + "k" : juce::String ((int) hz), xOfHz (hz), r.getBottom() + 14.0f, 12.0f, kPal.ink.withAlpha (0.6f), false, 0.0f);
+        g.setColour (kPal.phosphor.withAlpha (0.10f)); g.drawLine (xOfHz (hz), r.getY(), xOfHz (hz), r.getBottom(), 1.0f);
+        drawText (g, hz >= 1000.0f ? juce::String ((int) (hz / 1000.0f)) + "k" : juce::String ((int) hz), xOfHz (hz), r.getBottom() + 14.0f, 13.0f, kPal.phosphorDim, false, 0.0f, juce::Justification::centred, ui::Face::Mono);
     }
 
     const auto curve = [&] (auto db, bool close)
@@ -180,8 +218,8 @@ void SF1AudioProcessorEditor::drawSpectrum (juce::Graphics& g)
         juce::Path p;
         for (int d = 0; d < sf1::kDisplayBands; ++d)
         {
-            const float x = r.getX() + r.getWidth() * ((float) d + 0.5f) / (float) sf1::kDisplayBands, y = yOfDb (db (d));
-            if (d == 0) p.startNewSubPath (x, y); else p.lineTo (x, y);
+            const float px = r.getX() + r.getWidth() * ((float) d + 0.5f) / (float) sf1::kDisplayBands, py = yOfDb (db (d));
+            if (d == 0) p.startNewSubPath (px, py); else p.lineTo (px, py);
         }
         if (close) { p.lineTo (r.getRight() - r.getWidth() * 0.5f / (float) sf1::kDisplayBands, r.getBottom()); p.lineTo (r.getX() + r.getWidth() * 0.5f / (float) sf1::kDisplayBands, r.getBottom()); p.closeSubPath(); }
         return p;
@@ -193,24 +231,24 @@ void SF1AudioProcessorEditor::drawSpectrum (juce::Graphics& g)
     {   // clip the curves to the plot
         juce::Graphics::ScopedSaveState save (g);
         g.reduceClipRegion (r.toNearestInt());
-        g.setColour (kPal.ink.withAlpha (0.14f)); g.fillPath (curve (inDb, true));
-        g.setColour (kPal.ink.withAlpha (0.45f)); g.strokePath (curve (inDb, false), juce::PathStrokeType (1.4f));
+        g.setColour (kPal.phosphorDim.withAlpha (0.18f)); g.fillPath (curve (inDb, true));
+        g.setColour (kPal.phosphorDim.withAlpha (0.8f)); g.strokePath (curve (inDb, false), juce::PathStrokeType (1.3f));
         if (on)
         {
-            g.setColour (kPal.body.withAlpha (0.25f)); g.fillPath (curve (outDb, true));
-            g.setColour (kPal.body); g.strokePath (curve (outDb, false), juce::PathStrokeType (2.2f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            g.setColour (kPal.phosphor.withAlpha (0.12f)); g.fillPath (curve (outDb, true));
+            g.setColour (kPal.phosphor.withAlpha (0.18f)); g.strokePath (curve (outDb, false), juce::PathStrokeType (5.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));      // glow
+            g.setColour (kPal.phosphor); g.strokePath (curve (outDb, false), juce::PathStrokeType (2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
         }
         if (proc.engine.hasMemory())
         {
             juce::Path dashed; const auto src = curve (memDb, false);
             const float dash[] = { 5.0f, 4.0f };
             juce::PathStrokeType (1.4f).createDashedStroke (dashed, src, dash, 2);
-            g.setColour (kIce.withAlpha (0.9f)); g.fillPath (dashed);
+            g.setColour (kMemory); g.fillPath (dashed);
         }
     }
 
-    const float amount = value ("win") * 0.01f;                                                                // the window (one bell per channel)
-    if (amount > 0.0f && on)
+    if (amount > 0.0f && on)                                                                                   // the window (one bell per channel)
     {
         const float sigma = std::max (0.05f, value ("winWidth")) / 2.355f;
         for (int c = 0; c < 2; ++c)
@@ -221,20 +259,14 @@ void SF1AudioProcessorEditor::drawSpectrum (juce::Graphics& g)
             for (int i = 0; i <= 120; ++i)
             {
                 const float f = sf1::displayBandHz ((float) i / 120.0f), d = (std::log2 (f) - std::log2 (centre)) / sigma, wv = std::exp (-0.5f * d * d);
-                const float x = xOfHz (f), y = r.getBottom() - r.getHeight() * (0.06f + 0.8f * amount * wv);
-                if (i == 0) bell.startNewSubPath (x, y); else bell.lineTo (x, y);
+                const float px = xOfHz (f), py = r.getBottom() - r.getHeight() * (0.06f + 0.8f * amount * wv);
+                if (i == 0) bell.startNewSubPath (px, py); else bell.lineTo (px, py);
             }
-            g.setColour (juce::Colours::white.withAlpha (c == 0 ? 0.85f : 0.5f));
+            g.setColour (kPal.cream.withAlpha (c == 0 ? 0.9f : 0.55f));
             g.strokePath (bell, juce::PathStrokeType (c == 0 ? 1.6f : 1.2f));
             g.drawLine (xOfHz (centre), r.getBottom() - 6.0f, xOfHz (centre), r.getBottom(), 2.0f);
         }
     }
-
-    drawText (g, "IN", r.getX(), r.getY() - 34.0f, 12.0f, kPal.ink.withAlpha (0.6f), true, 0.12f, juce::Justification::centredLeft);
-    drawText (g, "OUT", r.getX() + 36.0f, r.getY() - 34.0f, 12.0f, kPal.body, true, 0.12f, juce::Justification::centredLeft);
-    drawText (g, "MEMORY", r.getX() + 84.0f, r.getY() - 34.0f, 12.0f, proc.engine.hasMemory() ? kIce : kPal.ink.withAlpha (0.3f), true, 0.12f, juce::Justification::centredLeft);
-    drawText (g, "WINDOW", r.getX() + 160.0f, r.getY() - 34.0f, 12.0f, amount > 0.0f ? juce::Colours::white.withAlpha (0.85f) : kPal.ink.withAlpha (0.3f), true, 0.12f, juce::Justification::centredLeft);
-    drawText (g, "CLICK OR DRAG IN THE PLOT TO MOVE THE WINDOW", r.getRight(), r.getY() - 34.0f, 11.0f, kPal.ink.withAlpha (0.4f), true, 0.1f, juce::Justification::centredRight);
 }
 
 //==============================================================================
@@ -266,21 +298,27 @@ void SF1AudioProcessorEditor::drawKeyboard (juce::Graphics& g)
             if (black != (pass == 1)) continue;
             const auto k = keyX (m);
             const bool inKey = pt1::inScale ((((m - root) % 12) + 12) % 12, scale);
-            g.setColour (black ? juce::Colour (20, 21, 24) : juce::Colour (200, 202, 206).withAlpha (0.9f)); g.fillRect (k);
-            if (inKey && intel) { g.setColour (kPal.body.withAlpha (black ? 0.55f : 0.38f)); g.fillRect (k); }
-            g.setColour (juce::Colours::black.withAlpha (0.6f)); g.drawRect (k, 1.0f);
-            if (pc == 0) drawText (g, juce::String ("C") + juce::String (m / 12 - 1), k.getCentreX(), r.getBottom() - 10.0f, 11.0f, juce::Colour (40, 40, 44), true, 0.04f);
+            g.setColour (black ? kPal.ink : kPal.paperLight); g.fillRect (k);
+            if (inKey && intel) { g.setColour (kPal.accent.withAlpha (black ? 0.7f : 0.35f)); g.fillRect (k); }
+            g.setColour (kPal.ink); g.drawRect (k, 1.0f);
+            if (pc == 0) drawText (g, juce::String ("C") + juce::String (m / 12 - 1), k.getCentreX(), r.getBottom() - 12.0f, 13.0f, kPal.inkSoft, true, 0.0f, juce::Justification::centred, ui::Face::Mono);
         }
     const auto& eng = proc.engine.harmony();
     const float heard = eng.detected.load (std::memory_order_relaxed);
-    if (heard >= 0.0f) { const auto k = keyX (fold (heard)); g.setColour (kIce); g.drawEllipse (juce::Rectangle<float> (20.0f, 20.0f).withCentre ({ k.getCentreX(), r.getY() - 14.0f }), 2.0f); drawText (g, "HEARD", k.getCentreX(), r.getY() - 32.0f, 11.0f, kIce, true, 0.1f); }
+    if (heard >= 0.0f)
+    {
+        const auto k = keyX (fold (heard));
+        g.setColour (kPal.accent); g.drawEllipse (juce::Rectangle<float> (18.0f, 18.0f).withCentre ({ k.getCentreX(), r.getY() - 14.0f }), 2.0f);
+        drawText (g, "HEARD", k.getCentreX(), r.getY() - 33.0f, 13.0f, kPal.accent, true, 0.1f, juce::Justification::centred, ui::Face::Mono);
+    }
     for (int v = 0; v < pt1::kNumVoices; ++v)
     {
         const float n = eng.voiceNote[v].load (std::memory_order_relaxed);
         if (n < 0.0f) continue;
-        const auto k = keyX (fold (n)); const float cy = k.getY() + k.getHeight() * (k.getHeight() < r.getHeight() ? 0.40f : 0.78f);
-        g.setColour (kPal.body); g.fillEllipse (juce::Rectangle<float> (20.0f, 20.0f).withCentre ({ k.getCentreX(), cy }));
-        drawText (g, juce::String (v + 1), k.getCentreX(), cy, 12.0f, kPal.dark, true, 0.0f);
+        const auto k = keyX (fold (n)); const float cy = k.getY() + k.getHeight() * (k.getHeight() < r.getHeight() ? 0.40f : 0.70f);
+        g.setColour (kPal.accent); g.fillEllipse (juce::Rectangle<float> (22.0f, 22.0f).withCentre ({ k.getCentreX(), cy }));
+        g.setColour (kPal.ink); g.drawEllipse (juce::Rectangle<float> (22.0f, 22.0f).withCentre ({ k.getCentreX(), cy }).reduced (1.0f), 2.0f);
+        drawText (g, juce::String (v + 1), k.getCentreX(), cy, 14.0f, kPal.cream, true, 0.0f, juce::Justification::centred, ui::Face::Mono);
     }
 }
 
@@ -304,18 +342,18 @@ juce::String SF1AudioProcessorEditor::harmonyText (int kind, double v) const
 //==============================================================================
 void SF1AudioProcessorEditor::paintOverChildren (juce::Graphics& g)
 {
-    if (midiUI != nullptr) midiUI->paintMarks (g, kPal.body);
+    if (midiUI != nullptr) midiUI->paintMarks (g, kPal.accent);
 }
 
 void SF1AudioProcessorEditor::paint (juce::Graphics& g)
 {
     g.addTransform (juce::AffineTransform::scale (scale()));
-    ui::paintBody (g, kPal, kW, kH, grain);
-    ui::paintHeader (g, kPal, "SF-1", "SPECTRAL FOLD", "FROZEN HARMONICS", isOn ("power"));
-    ui::paintPresetBar (g, kPal, proc.presets, proc.undoManager, kBarY, barState, false, 6.0f);
+    ui::paintBody (g, kPal, kW, kH);
+    ui::paintHeader (g, kPal, "SF-1", "SPECTRAL FOLD", "FROZEN HARMONICS");
+    ui::paintPresetBar (g, kPal, proc.presets, proc.undoManager, isOn ("power"));
+    ui::paintFooter (g, kPal, kH - 15.0f);
 
     const int mode = modeNow();
-    ui::paintTabs (g, kPal, modeTabsRect(), kModeTabs, mode, 13.0f);
     if (mode == 1)
     {
         for (int v = 0; v < pt1::kNumVoices; ++v) ui::paintPanel (g, kPal, harmonyRect (7 + v), "VOICE " + juce::String (v + 1));
@@ -323,47 +361,72 @@ void SF1AudioProcessorEditor::paint (juce::Graphics& g)
         ui::paintPanel (g, kPal, harmonyRect (12), "CHORDS");
         ui::paintPanel (g, kPal, harmonyRect (13), "OUTPUT");
         ui::paintPanel (g, kPal, harmonyRect (14), "KEYBOARD");
+        ui::paintTabs (g, kPal, harmonyRect (14), kModeTabs, mode, kTabsTop, kTabsFont, kModeTabsLeft);
         drawKeyboard (g);
         const auto& eng = proc.engine.harmony();
         const auto midiName = [] (float m) { return m < 0.0f ? juce::String ("--") : juce::String (pt1::noteName ((int) std::lround (m))) + juce::String ((int) std::lround (m) / 12 - 1); };
         for (int v = 0; v < pt1::kNumVoices; ++v)                                                              // the note each voice plays now
         {
             const float n = eng.voiceNote[v].load (std::memory_order_relaxed);
-            drawText (g, midiName (n), harmonyRect (7 + v).getCentreX(), kRow1Y + 50.0f, 30.0f, n < 0.0f ? kPal.ink.withAlpha (0.45f) : kPal.body, true, 0.06f);
+            paintReadout (g, voiceScreenRect (v), "NOTE", midiName (n), n >= 0.0f);
         }
-        ui::paintFlatButton (g, kPal, intelRect(), "INTELLIGENT", isOn ("hIntel"), 13.0f, 1.0f, 10.0f, 0.06f);
-        drawText (g, "HEARD: " + midiName (eng.detected.load (std::memory_order_relaxed)), intelRect().getCentreX(), kRow2Y + 154.0f, 14.0f, kPal.ink.withAlpha (0.85f), true, 0.08f);
+        ui::paintFlatButton (g, kPal, intelRect(), "INTELLIGENT", isOn ("hIntel"), 17.0f);
+        const float heard = eng.detected.load (std::memory_order_relaxed);
+        paintReadout (g, heardRect(), "HEARD", midiName (heard), heard >= 0.0f);
         for (int c = 0; c < pt1::kNumChords; ++c)
         {
             bool on = true;                                                                                    // a chord button is "on" while the four interval knobs still match its chord
             for (int v = 0; v < pt1::kNumVoices && on; ++v)
                 on = std::abs (proc.apvts.getParameter ("hInt" + juce::String (v + 1))->getValue() - pt1::intervalValue (pt1::chordSemis (c, v))) < 0.0075f;
-            ui::paintFlatButton (g, kPal, chordRect (c), pt1::chordName (c), on, 13.0f, 1.0f, 10.0f, 0.06f);
+            ui::paintFlatButton (g, kPal, chordRect (c), pt1::chordName (c), on, 17.0f);
         }
-        drawText (g, "SETS THE FOUR INTERVALS", harmonyRect (12).getCentreX(), kRow2Y + 160.0f, 14.0f, kPal.ink.withAlpha (0.75f), true, 0.1f);
+        {
+            const auto cr = harmonyRect (12);
+            const juce::String hint = "SETS THE 4 INTERVALS";
+            drawText (g, hint, cr.getCentreX(), cr.getY() + 218.0f, 14.0f, kPal.inkSoft, false, 0.05f);
+        }
     }
     else
     {
-    ui::paintPanel (g, kPal, panelRect (0), "HOLD");
-    ui::paintPanel (g, kPal, panelRect (1), "TEXTURE");
-    ui::paintPanel (g, kPal, panelRect (2), "SHIFT");
-    ui::paintPanel (g, kPal, panelRect (3), "WINDOW");
-    ui::paintPanel (g, kPal, panelRect (4), "OUTPUT");
-    ui::paintPanel (g, kPal, panelRect (5), "STATE");
-    ui::paintPanel (g, kPal, panelRect (6), "SPECTRUM");
-    drawSpectrum (g);
+        ui::paintPanel (g, kPal, panelRect (0), "HOLD");
+        ui::paintPanel (g, kPal, panelRect (1), "TEXTURE");
+        ui::paintPanel (g, kPal, panelRect (2), "SHIFT");
+        ui::paintPanel (g, kPal, panelRect (3), "WINDOW");
+        ui::paintPanel (g, kPal, panelRect (4), "STATE");
+        ui::paintPanel (g, kPal, panelRect (5), "OUTPUT");
+        ui::paintPanel (g, kPal, panelRect (6), "SPECTRUM");
+        ui::paintTabs (g, kPal, panelRect (6), kModeTabs, mode, kTabsTop, kTabsFont, kModeTabsLeft);
+        drawSpectrum (g);
 
-    const bool on = isOn ("power"), all = isOn ("freeze");
-    const auto iceButton = [&] (juce::Rectangle<float> b, const juce::String& label, bool lit, float size, float alpha = 1.0f)
-    {
-        if (lit) { g.setColour (kIce.withMultipliedAlpha (alpha)); g.fillRoundedRectangle (b, 9.0f); }
-        g.setColour ((lit ? kIce : kPal.ink.withAlpha (0.4f)).withMultipliedAlpha (alpha)); g.drawRoundedRectangle (b.reduced (0.5f), 9.0f, 1.3f);
-        drawText (g, label, b.getCentreX(), b.getCentreY(), size, lit ? kPal.dark : kPal.ink.withAlpha (0.9f * alpha), true, 0.1f);
-    };
-    iceButton (freezeRect(), "FREEZE", all, 15.0f);
-    ui::paintFlatButton (g, kPal, captureRect(), "CAPTURE", capturedAt != 0, 13.0f);
-    for (int b = 0; b < sf1::kBands; ++b) iceButton (bandRect (b), kBandShort[b], isOn (kBandIds[b]) || all, 11.0f, all && ! isOn (kBandIds[b]) ? 0.6f : 1.0f);
+        const bool all = isOn ("freeze");
+        {                                                                                                      // FREEZE and CAPTURE on the top edge of HOLD (the line is cut round them like round tabs)
+            const auto lay = holdLayout();
+            const float x0 = lay.rects.front().getX() - 6.0f, x1 = lay.rects.back().getRight() + 6.0f;
+            g.setColour (kPal.paper); g.fillRect (x0, panelRect (0).getY() - 1.0f, x1 - x0, 4.0f);
+            ui::paintFlatButton (g, kPal, lay.rects[0], "FREEZE", all, lay.size);
+            ui::paintFlatButton (g, kPal, lay.rects[1], "CAPTURE", capturedAt != 0, lay.size);
+        }
+        for (int b = 0; b < sf1::kBands; ++b)
+            ui::paintFlatButton (g, kPal, bandRect (b), sf1::bandName (b), isOn (kBandIds[b]) || all, 17.0f, all && ! isOn (kBandIds[b]) ? 0.6f : 1.0f);
 
+        // STATE: value cards on small phosphor screens
+        const auto r = panelRect (4);
+        const double fs = proc.getSampleRate() > 0.0 ? proc.getSampleRate() : 48000.0;
+        int frozen = 0; for (int b = 0; b < sf1::kBands; ++b) if (proc.engine.bandFrozen (b) > 0.5f) ++frozen;
+        const float winHz = proc.engine.windowCentreNow (0);
+        const juce::String cards[4][2] = { { "LATENCY", juce::String (1000.0 * proc.engine.latency() / fs, 1) + " MS" },
+                                           { "WINDOW", value ("win") > 0.0f && winHz > 0.0f ? hzText (winHz) : juce::String ("--") },
+                                           { "FROZEN", juce::String (frozen) + " / 4" },
+                                           { "MEMORY", proc.engine.hasMemory() ? juce::String ("SET") : juce::String ("EMPTY") } };
+        const float cw = (r.getWidth() - 40.0f - 10.0f) * 0.5f, ch = (r.getHeight() - 48.0f - 10.0f) * 0.5f;
+        for (int i = 0; i < 4; ++i)
+        {
+            const juce::Rectangle<float> c (r.getX() + 20.0f + (cw + 10.0f) * (float) (i % 2), r.getY() + 24.0f + (ch + 10.0f) * (float) (i / 2), cw, ch);
+            const bool hot = (i == 2 && frozen > 0) || (i == 3 && proc.engine.hasMemory());
+            ui::paintScreen (g, kPal, c, 4.0f);
+            drawText (g, cards[i][0], c.getCentreX(), c.getY() + 22.0f, 14.0f, kPal.phosphorDim, false, 0.1f, juce::Justification::centred, ui::Face::Mono);
+            drawText (g, cards[i][1], c.getCentreX(), c.getBottom() - 38.0f, 20.0f, hot ? kMemory : kPal.phosphor, true, 0.0f, juce::Justification::centred, ui::Face::Mono);
+        }
     }
 
     for (int i = 0; i < (int) knobs.size(); ++i)                                                               // the knobs with their value text
@@ -387,30 +450,11 @@ void SF1AudioProcessorEditor::paint (juce::Graphics& g)
             default: txt = juce::String ((int) std::lround (v)) + " %"; break;
         }
         const auto c = knobCentre (k.panel, k.index, k.count);
-        const float kr = k.panel >= 7 ? 23.0f : ui::kKnobR;                                                    // HARMONY: three knobs in a 282 wide voice panel, the PT-1 radius
-        ui::paintKnob (g, kPal, c, k.name, txt, lo, hi, nameY (k.panel), valueY (k.panel), 1.0f, kr);
-        ui::paintValueArc (g, c, kr, (float) k.slider.valueToProportionOfLength (k.slider.getValue()), kPal.body);
+        const float prop = (float) k.slider.valueToProportionOfLength (k.slider.getValue());
+        if (k.panel >= 7 && k.panel <= 10) paintSmallKnob (g, c, k.name, txt, lo, hi, prop);
+        else ui::paintKnob (g, kPal, c, k.name, txt, lo, hi, prop);
     }
-    meter.paint (g, meterOrigin (mode == 1).x, meterOrigin (mode == 1).y, isOn ("power"), kPal.body, kPal.ink, 110.0f, 26.0f, 13.0f);
-
-    if (mode == 0)
-    {   // STATE: value cards
-        const auto r = panelRect (5);
-        const double fs = proc.getSampleRate() > 0.0 ? proc.getSampleRate() : 48000.0;
-        int frozen = 0; for (int b = 0; b < sf1::kBands; ++b) if (proc.engine.bandFrozen (b) > 0.5f) ++frozen;
-        const float winHz = proc.engine.windowCentreNow (0);
-        const juce::String cards[4][2] = { { "LATENCY", juce::String (1000.0 * proc.engine.latency() / fs, 1) + " MS" },
-                                           { "WINDOW", value ("win") > 0.0f && winHz > 0.0f ? hzText (winHz) : juce::String ("--") },
-                                           { "FROZEN", juce::String (frozen) + " / 4" },
-                                           { "MEMORY", proc.engine.hasMemory() ? juce::String ("SET") : juce::String ("EMPTY") } };
-        for (int i = 0; i < 4; ++i)
-        {
-            const juce::Rectangle<float> c (r.getX() + 14.0f + 102.0f * (float) (i % 2), r.getY() + 34.0f + 86.0f * (float) (i / 2), 100.0f, 64.0f);
-            const bool hot = (i == 2 && frozen > 0) || (i == 3 && proc.engine.hasMemory());
-            ui::paintValueCard (g, kPal, c.withTrimmedRight (4.0f), cards[i][0], cards[i][1], hot ? kIce : kPal.body, 15.0f);
-        }
-    }
-    ui::paintFooter (g, kPal, kRow3Y + kRow3H + 35.0f);
+    ui::paintMeter (g, kPal, meter, meterOrigin().x, meterOrigin().y, isOn ("power"));
 }
 
 void SF1AudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
@@ -418,16 +462,11 @@ void SF1AudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
     const auto p = e.position / scale();
     proc.undoManager.beginNewTransaction();
     if (ui::powerRect().contains (p)) { toggle ("power"); return; }
-    if (ui::presetBarMouseDown (p, *this, proc.presets, proc.undoManager, kBarY, scale(), barState, [this] { repaint(); }, false)) { layoutKnobs(); return; }
+    if (ui::presetBarMouseDown (p, *this, proc.presets, proc.undoManager, scale(), [this] { repaint(); })) { layoutKnobs(); return; }
     {
-        const auto tabs = ui::tabRects (modeTabsRect(), kModeTabs, 13.0f);
+        const auto tabs = modeTabRects (modeNow() == 1);
         for (int i = 0; i < (int) tabs.size(); ++i)
-            if (tabs[(size_t) i].expanded (3.0f).contains (p))
-            {
-                auto* par = proc.apvts.getParameter ("mode");
-                par->beginChangeGesture(); par->setValueNotifyingHost (par->convertTo0to1 ((float) i)); par->endChangeGesture();
-                layoutKnobs(); repaint(); return;
-            }
+            if (tabs[(size_t) i].expanded (3.0f).contains (p)) { setChoice ("mode", i); layoutKnobs(); repaint(); return; }
     }
     if (modeNow() == 1)
     {
@@ -444,8 +483,9 @@ void SF1AudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
             }
         return;
     }
-    if (freezeRect().expanded (3.0f).contains (p)) { toggle ("freeze"); repaint(); return; }
-    if (captureRect().expanded (3.0f).contains (p)) { proc.engine.requestCapture(); capturedAt = juce::Time::currentTimeMillis(); repaint(); return; }
+    const auto hold = holdLayout().rects;
+    if (hold[0].expanded (3.0f).contains (p)) { toggle ("freeze"); repaint(); return; }
+    if (hold[1].expanded (3.0f).contains (p)) { proc.engine.requestCapture(); capturedAt = juce::Time::currentTimeMillis(); repaint(); return; }
     for (int b = 0; b < sf1::kBands; ++b)
         if (bandRect (b).expanded (3.0f).contains (p)) { toggle (kBandIds[b]); repaint(); return; }
     if (plotRect().expanded (8.0f).contains (p))                                                                // the window centre follows the mouse

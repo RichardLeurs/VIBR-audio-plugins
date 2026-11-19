@@ -2,14 +2,17 @@
 #pragma once
 
 #include "BypassLink.h"
+#include "MidiMap.h"
+#include "plugin/LabProcessor.h"
 
 #include <JuceHeader.h>
 #include "UtilityEngine.h"
 #include "ui/OutputMeter.h"
+#include "ui/Presets.h"
 
 // SU-1 Stereo Utility: channels (invert, swap, mono, mid / side solo), width, pan and level (see UtilityEngine.h).
 // Host parameters: power, gain, pan, autoRate, autoDepth, width, spread, bassMono, invL, invR, swap, mono, solo.
-class SU1AudioProcessor : public juce::AudioProcessor
+class SU1AudioProcessor : public vibr::LabProcessor
 {
 public:
     SU1AudioProcessor();
@@ -24,25 +27,11 @@ public:
     bool hasEditor() const override { return true; }
 
     const juce::String getName() const override { return "SU-1"; }
-    bool acceptsMidi() const override { return false; }
+    bool acceptsMidi() const override { return true; }          // MIDI learn: CCs move the knobs
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
     double getTailLengthSeconds() const override { return 0.05; }
-    juce::AudioProcessorParameter* getBypassParameter() const override { return apvts.getParameter ("bypass"); }
 
-    int getNumPrograms() override { return 1; }
-    int getCurrentProgram() override { return 0; }
-    void setCurrentProgram (int) override {}
-    const juce::String getProgramName (int) override { return {}; }
-    void changeProgramName (int, const juce::String&) override {}
-
-    void getStateInformation (juce::MemoryBlock&) override;
-    void setStateInformation (const void*, int) override;
-
-    juce::AudioProcessorValueTreeState apvts;
-
-    vibr::BypassLink bypassLink { apvts };                // host bypass <-> OFF / ON switch
-    vibr::ui::PeakTap outMeter;                                    // sample peak of the output, read by the OUTPUT meters of the editor
     const su1::Engine& getEngine() const { return engine; }       // for the FIELD display of the editor
 
 private:

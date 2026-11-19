@@ -1,11 +1,4 @@
 # VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
-juce_add_binary_data(CS3Assets
-  HEADER_NAME CS3Data.h
-  NAMESPACE CS3Data
-  SOURCES
-    assets/background.png
-)
-
 juce_add_plugin(CS-3
   COMPANY_NAME "VIBR"
   ICON_BIG "${RL_ICON}"
@@ -42,7 +35,6 @@ target_compile_definitions(CS-3
 
 target_link_libraries(CS-3
   PRIVATE
-    CS3Assets
     rl_common
     juce::juce_audio_utils
     juce::juce_dsp

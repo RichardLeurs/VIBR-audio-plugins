@@ -1,11 +1,4 @@
 # VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
-juce_add_binary_data(OC5Assets
-  HEADER_NAME OC5Data.h
-  NAMESPACE OC5Data
-  SOURCES
-    assets/background.png
-)
-
 juce_add_plugin(OC-5
   COMPANY_NAME "VIBR"
   ICON_BIG "${RL_ICON}"
@@ -42,7 +35,6 @@ target_compile_definitions(OC-5
 
 target_link_libraries(OC-5
   PRIVATE
-    OC5Assets
     rl_common
     juce::juce_audio_utils
     juce::juce_dsp

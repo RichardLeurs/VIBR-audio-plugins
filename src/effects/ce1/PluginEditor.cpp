@@ -1,119 +1,120 @@
 // VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
 #include "PluginEditor.h"
-#include "CE1Data.h"
+
+namespace ui = vibr::ui::vintage;
 
 namespace
 {
-// Positions are in the coordinates of the rendered background (2200 x 890, see make_background.py);
-// the editor shows it at 1100 x 383 and paint() scales them with S.
-constexpr int kW = 1100, kH = 445;
-constexpr float S = (float) kW / 2200.0f;
+const ui::Palette kPal { juce::Colour (32, 182, 165) };           // the Modulation turquoise #20B6A5: value rings, knob values and the plugin code
 
-juce::Point<float> at (float x, float y) { return { x * S, y * S }; }
+// Design space 1120 x 388: header (0 to 100), one row of four panels (y 114, 244 high), footer. Margin 28, gap 18.
+constexpr float kDesignW = ui::kW, kDesignH = 388.0f;
+constexpr float kPanelY = 114.0f, kPanelH = 244.0f, kKnobDY = 86.0f;
+const juce::Rectangle<float> kPanels[4] { { 28.0f, kPanelY, 300.0f, kPanelH },  { 346.0f, kPanelY, 190.0f, kPanelH },
+                                          { 554.0f, kPanelY, 330.0f, kPanelH }, { 902.0f, kPanelY, 190.0f, kPanelH } };   // INPUT, CHORUS, VIBRATO, EFFECT
 
-const juce::Point<float> kLevel { 400.0f, 438.0f }, kChorus { 835.0f, 438.0f }, kDepth { 1280.0f, 438.0f }, kRate { 1620.0f, 438.0f };
-constexpr float kKnobRadius = 72.0f;
-constexpr float kPad = 3.0f;
-
-const juce::Point<float> kLever { 160.0f, 438.0f };                                   // input HIGH / LOW
-const juce::Point<float> kPeakLed { 160.0f, 548.0f };
-const juce::Point<float> kEffectButton { 1980.0f, 458.0f };                           // chorus / vibrato
-const juce::Point<float> kPowerSwitch { 2125.0f, 87.0f };                             // power slide switch (ball left = off)
-
-// Tempo sync (vibrato rate only): a SYNC button in the VIBRATO panel under the RATE knob, below a divider line drawn in the background.
-// While sync is on the RATE knob selects the note division (it is attached to "division") and the division is shown next to the button.
-const auto kSyncPill     = juce::Rectangle<float> (116.0f, 46.0f).withCentre ({ 1548.0f, 698.0f });
-const auto kDivisionText = juce::Rectangle<float> (130.0f, 46.0f).withCentre ({ 1677.0f, 698.0f });
-const juce::Colour kBody (0xff20b6a5), kPanel (0xff18191c);
-
-juce::Point<float> polar (juce::Point<float> c, float r, float a)
+constexpr float kKnobDX = 70.0f;                                   // the two knobs of the VIBRATO panel are 140 apart, symmetric about the panel centre
+enum { kLevel, kChorus, kDepth, kRate };
+juce::Point<float> knobCentre (int which)
 {
-    return { c.x + r * std::sin (a), c.y - r * std::cos (a) };
-}
-
-// lamp sitting in a chrome bezel that is painted in the background
-void drawLamp (juce::Graphics& g, juce::Point<float> c, bool on, juce::Colour colour)
-{
-    const auto circle = [&] (float r) { return juce::Rectangle<float> (r * 2.0f, r * 2.0f).withCentre (c); };
-    if (on)
+    switch (which)
     {
-        g.setColour (colour.withAlpha (0.20f));
-        g.fillEllipse (circle (32.0f));
-        g.setColour (colour.withAlpha (0.25f));
-        g.fillEllipse (circle (21.0f));
+        case kLevel:  return { kPanels[0].getX() + 225.0f, kPanels[0].getY() + kKnobDY };
+        case kChorus: return { kPanels[1].getCentreX(), kPanels[1].getY() + kKnobDY };
+        case kDepth:  return { kPanels[2].getCentreX() - kKnobDX, kPanels[2].getY() + kKnobDY };
+        default:      return { kPanels[2].getCentreX() + kKnobDX, kPanels[2].getY() + kKnobDY };
     }
-    g.setGradientFill (juce::ColourGradient (on ? colour.brighter (0.8f) : colour.darker (1.8f), c.x - 5.0f, c.y - 7.0f,
-                                             on ? colour.darker (0.2f) : colour.darker (3.0f), c.x + 8.0f, c.y + 10.0f, true));
-    g.fillEllipse (circle (11.5f));
-    g.setColour (juce::Colours::white.withAlpha (on ? 0.55f : 0.18f));
-    g.fillEllipse (juce::Rectangle<float> (6.0f, 4.0f).withCentre (c.translated (-4.0f, -6.0f)));
+}
+juce::Rectangle<float> syncRect()                                  // under the RATE knob, 200 below the panel top, 30 high
+{
+    return juce::Rectangle<float> (110.0f, 30.0f).withCentre ({ knobCentre (kRate).x, kPanelY + 215.0f });
+}
+// two stacked buttons that share their middle border: i = 0 on top (HIGH, CHORUS), 1 below (LOW, VIBRATO)
+juce::Rectangle<float> pairRect (int panel, int i)
+{
+    const auto& r = kPanels[panel];
+    const float w = panel == 0 ? 110.0f : r.getWidth() - 48.0f;
+    return { r.getX() + (panel == 0 ? 25.0f : 24.0f), r.getY() + 73.0f + 48.0f * (float) i, w, 50.0f };
+}
+juce::Point<float> peakLamp() { return { kPanels[0].getX() + 53.0f, kPanelY + 215.0f }; }
+
+void paintPair (juce::Graphics& g, int panel, const char* top, const char* bottom, bool topOn)
+{
+    for (const int i : { topOn ? 1 : 0, topOn ? 0 : 1 })            // the lit one last: it keeps its whole border
+        ui::paintFlatButton (g, kPal, pairRect (panel, i), i == 0 ? top : bottom, (i == 0) == topOn, 20.0f, 1.0f, 4.0f, 0.1f);
 }
 } // namespace
 
 //==============================================================================
-// Black knurled knob with a raised cap and a white pointer (same as the DM-1).
-//==============================================================================
 CE1AudioProcessorEditor::CE1AudioProcessorEditor (CE1AudioProcessor& p)
-    : AudioProcessorEditor (&p), proc (p),
+    : PedalEditor (p, kDesignW, kDesignH, 560), proc (p),
+      inputAtt (*p.apvts.getParameter ("inputHigh"), [this] (float v) { inputHigh = v > 0.5f; repaint(); }, nullptr),
+      vibratoAtt (*p.apvts.getParameter ("vibrato"), [this] (float v) { vibrato = v > 0.5f; repaint(); }, nullptr),
       syncAtt (*p.apvts.getParameter ("sync"), [this] (float v) { syncOn = v > 0.5f; syncChanged(); }, nullptr),
       divisionAtt (*p.apvts.getParameter ("division"), [this] (float v) { division = (int) std::lround (v); repaint(); }, nullptr)
 {
-    setLookAndFeel (&laf);
-
-    background = juce::ImageFileFormat::loadFrom (CE1Data::background_png, (size_t) CE1Data::background_pngSize);
-
-    addKnob (level,  "level");
-    addKnob (chorus, "chorusIntensity");
-    addKnob (depth,  "vibratoDepth");
-    addKnob (rate,   "vibratoRate");
+    const auto add = [this] (Knob& k, const char* id)
+    {
+        k.slider.setSliderStyle (juce::Slider::RotaryVerticalDrag);
+        k.slider.setTextBoxStyle (juce::Slider::NoTextBox, true, 0, 0);
+        k.slider.setRotaryParameters (juce::degreesToRadians (-135.0f), juce::degreesToRadians (135.0f), true);
+        k.slider.setMouseDragSensitivity (180);
+        k.slider.setScrollWheelEnabled (false);
+        k.slider.setPopupDisplayEnabled (true, true, this);
+        addAndMakeVisible (k.slider);
+        k.attachment = std::make_unique<juce::SliderParameterAttachment> (*proc.apvts.getParameter (id), k.slider, nullptr);
+    };
+    add (level, "level");
+    add (chorus, "chorusIntensity");
+    add (depth, "vibratoDepth");
+    add (rate, "vibratoRate");
     midiUI.add (level.slider, "level");  midiUI.add (chorus.slider, "chorusIntensity");
     midiUI.add (depth.slider, "vibratoDepth");  midiUI.add (rate.slider, "vibratoRate");
-    addSwitch (inputSwitch,  "inputHigh");
-    addSwitch (effectSwitch, "vibrato");
-    addSwitch (powerSwitch,  "power");
+    inputAtt.sendInitialUpdate();
+    vibratoAtt.sendInitialUpdate();
     syncAtt.sendInitialUpdate();
     divisionAtt.sendInitialUpdate();
 
-    setSize (kW, kH);
-    startTimerHz (30);
+    resized();                                                       // place the knobs (the base class sized the window before they existed)
+    startTimerHz (20);
 }
 
-CE1AudioProcessorEditor::~CE1AudioProcessorEditor()
-{
-    setLookAndFeel (nullptr);
-}
-
-void CE1AudioProcessorEditor::addKnob (Knob& k, const juce::String& paramId)
-{
-    k.slider.setSliderStyle (juce::Slider::RotaryVerticalDrag);
-    k.slider.setTextBoxStyle (juce::Slider::NoTextBox, true, 0, 0);
-    k.slider.setRotaryParameters (juce::degreesToRadians (-135.0f), juce::degreesToRadians (135.0f), true);
-    k.slider.setMouseDragSensitivity (180);
-    k.slider.setScrollWheelEnabled (false);
-    addAndMakeVisible (k.slider);
-    k.attachment = std::make_unique<juce::SliderParameterAttachment> (*proc.apvts.getParameter (paramId), k.slider, nullptr);
-}
-
-void CE1AudioProcessorEditor::addSwitch (Switch& s, const juce::String& paramId)
-{
-    addAndMakeVisible (s.button);
-    s.attachment = std::make_unique<juce::ButtonParameterAttachment> (*proc.apvts.getParameter (paramId), s.button);
-    s.button.onStateChange = [this] { repaint(); };
-}
+CE1AudioProcessorEditor::~CE1AudioProcessorEditor() { stopTimer(); }
 
 void CE1AudioProcessorEditor::resized()
 {
-    auto place = [] (Knob& k, juce::Point<float> c)
-    {
-        const float d = 2.0f * (kKnobRadius * S + kPad);
-        k.slider.setBounds (juce::Rectangle<float> (d, d).withCentre (at (c.x, c.y)).toNearestInt());
-    };
-    place (level, kLevel);  place (chorus, kChorus);  place (depth, kDepth);  place (rate, kRate);
+    placeKnob (level.slider, knobCentre (kLevel));
+    placeKnob (chorus.slider, knobCentre (kChorus));
+    placeKnob (depth.slider, knobCentre (kDepth));
+    placeKnob (rate.slider, knobCentre (kRate));
+}
 
-    const auto sq = [] (juce::Point<float> c, float w, float h) { return juce::Rectangle<float> (w * S, h * S).withCentre (at (c.x, c.y)).toNearestInt(); };
-    inputSwitch.button.setBounds (sq (kLever, 90.0f, 110.0f));
-    powerSwitch.button.setBounds (sq (kPowerSwitch, 110.0f, 70.0f));
-    effectSwitch.button.setBounds (sq (kEffectButton, 110.0f, 150.0f));
+void CE1AudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
+{
+    if (e.mods.isPopupMenu()) return;
+    if (toggleBypassAt (e.position)) return;
+    const auto p = e.position / scale();
+    const auto hit = [&] (juce::Rectangle<float> r) { return r.expanded (3.0f).contains (p); };
+    if (hit (syncRect()))
+    {
+        syncAtt.setValueAsCompleteGesture (syncOn ? 0.0f : 1.0f);
+        return;
+    }
+    const auto choose = [&] (juce::ParameterAttachment& att, int panel, bool currentTop)
+    {
+        for (int i = 0; i < 2; ++i)
+            if (hit (pairRect (panel, i)))
+            {
+                if ((i == 0) != currentTop)
+                {
+                    att.setValueAsCompleteGesture (panel == 0 ? (i == 0 ? 1.0f : 0.0f) : (i == 0 ? 0.0f : 1.0f));   // HIGH = 1, LOW = 0; CHORUS = 0, VIBRATO = 1
+                }
+                return true;
+            }
+        return false;
+    };
+    if (choose (inputAtt, 0, inputHigh)) return;
+    choose (vibratoAtt, 3, ! vibrato);
 }
 
 void CE1AudioProcessorEditor::syncChanged()
@@ -126,101 +127,74 @@ void CE1AudioProcessorEditor::syncChanged()
     repaint();
 }
 
-void CE1AudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
-{
-    if (kSyncPill.expanded (4.0f).transformedBy (juce::AffineTransform::scale (S)).contains (e.position))
-        syncAtt.setValueAsCompleteGesture (syncOn ? 0.0f : 1.0f);
-}
-
 void CE1AudioProcessorEditor::paintOverChildren (juce::Graphics& g)
 {
-    midiUI.paintMarks (g, kBody);
+    midiUI.paintMarks (g, kPal.accent);
+}
+
+int CE1AudioProcessorEditor::stateKey() const
+{
+    int k = powerOn() ? 1 : 0;
+    for (const auto* s : { &level.slider, &chorus.slider, &depth.slider, &rate.slider }) k = k * 31 + (int) std::lround (s->getValue() * 100.0);
+    return k * 31 + (syncOn ? 1 : 0) * 7 + division * 3 + (inputHigh ? 1 : 0) * 2 + (vibrato ? 1 : 0) + (peakLit ? 1000003 : 0);
 }
 
 void CE1AudioProcessorEditor::timerCallback()
 {
-    if (midiUI.needsRepaint()) { midiUI.tick(); repaint(); }
-    if (proc.inputPeak.exchange (0.0f) > 0.9f) peakHold = 8;
+    const bool learn = midiUI.needsRepaint();
+    if (learn) midiUI.tick();
+    if (proc.inputPeak.exchange (0.0f) > 0.9f) peakHold = 3;
     const bool lit = peakHold > 0;
     if (peakHold > 0) --peakHold;
-    if (lit != peakLit)
-    {
-        peakLit = lit;
-        repaint (juce::Rectangle<float> (80.0f * S, 80.0f * S).withCentre (at (kPeakLed.x, kPeakLed.y)).toNearestInt());
-    }
+    peakLit = lit;
+    if (const int key = stateKey(); key != lastKey) { lastKey = key; repaint(); }
+    else if (learn) repaint();
 }
 
 //==============================================================================
 void CE1AudioProcessorEditor::paint (juce::Graphics& g)
 {
-    g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
-    g.drawImage (background, 0, 0, kW, kH, 0, 0, background.getWidth(), background.getHeight());
-    g.addTransform (juce::AffineTransform::scale (S));      // from here on: background pixels
+    g.addTransform (juce::AffineTransform::scale (scale()));
+    ui::paintBody (g, kPal, kDesignW, kDesignH);
+    ui::paintHeaderNoPresets (g, kPal, "CE-1", "CHORUS / VIBRATO", "LUSH DIMENSION", powerOn());
+    ui::paintFooter (g, kPal, kDesignH - 15.0f);
 
-    // input HIGH / LOW lever: chrome ball in the slot (top = HIGH)
+    ui::paintPanel (g, kPal, kPanels[0], "INPUT");
+    ui::paintPanel (g, kPal, kPanels[1], "CHORUS");
+    ui::paintPanel (g, kPal, kPanels[2], "VIBRATO");
+    ui::paintPanel (g, kPal, kPanels[3], "EFFECT");
+
+    const auto knob = [&] (Knob& k, int which, const char* name, const juce::String& value, const juce::String& lo, const juce::String& hi)
     {
-        const bool high = inputSwitch.button.getToggleState();
-        const juce::Point<float> ball (kLever.x, kLever.y + (high ? -17.0f : 17.0f));
-        g.setColour (juce::Colours::black.withAlpha (0.55f));
-        g.fillEllipse (juce::Rectangle<float> (30.0f, 30.0f).withCentre (ball + juce::Point<float> (2.0f, 4.0f)));
-        g.setGradientFill (juce::ColourGradient (juce::Colour (0xfffafbfd), ball.x - 6.0f, ball.y - 8.0f,
-                                                 juce::Colour (0xff6b6f7a), ball.x + 9.0f, ball.y + 11.0f, true));
-        g.fillEllipse (juce::Rectangle<float> (28.0f, 28.0f).withCentre (ball));
+        ui::paintKnob (g, kPal, knobCentre (which), name, value, lo, hi, (float) k.slider.valueToProportionOfLength (k.slider.getValue()));
+    };
+    const auto tenths = [] (Knob& k) { return juce::String (k.slider.getValue(), 1); };
+    knob (level, kLevel, "LEVEL", tenths (level), "0", "10");
+    knob (chorus, kChorus, "INTENSITY", tenths (chorus), "0", "10");
+    knob (depth, kDepth, "DEPTH", tenths (depth), "0", "10");
+
+    const auto& names = vibr::sync::divisionNames();
+    if (syncOn)
+        knob (rate, kRate, "RATE", names[juce::jlimit (0, vibr::sync::kNumDivisions - 1, division)], "LONG", "SHORT");
+    else
+    {
+        const float hz = ce1::vibratoRateHz ((float) rate.slider.getValue() * 0.1f);       // the knob is 0..10
+        knob (rate, kRate, "RATE", juce::String (hz, hz < 1.0f ? 2 : 1) + " HZ", "0.4", "10 Hz");
     }
+    ui::paintFlatButton (g, kPal, syncRect(), "SYNC", syncOn, 17.0f, 1.0f, 4.0f, 0.1f);
 
-    drawLamp (g, kPeakLed, peakLit, juce::Colour (0xffff2a1a));
+    paintPair (g, 0, "HIGH", "LOW", inputHigh);
+    paintPair (g, 3, "CHORUS", "VIBRATO", ! vibrato);
 
-    // chorus / vibrato lever: chrome ball in the slot (top = chorus, bottom = vibrato)
+    // peak lamp (input clipping) with its name
     {
-        const bool vib = effectSwitch.button.getToggleState();
-        const juce::Point<float> ball (kEffectButton.x, kEffectButton.y + (vib ? 17.0f : -17.0f));
-        g.setColour (juce::Colours::black.withAlpha (0.55f));
-        g.fillEllipse (juce::Rectangle<float> (30.0f, 30.0f).withCentre (ball + juce::Point<float> (2.0f, 4.0f)));
-        g.setGradientFill (juce::ColourGradient (juce::Colour (0xfffafbfd), ball.x - 6.0f, ball.y - 8.0f,
-                                                 juce::Colour (0xff6b6f7a), ball.x + 9.0f, ball.y + 11.0f, true));
-        g.fillEllipse (juce::Rectangle<float> (28.0f, 28.0f).withCentre (ball));
-    }
-
-    // SYNC: a flat rounded button, dark with a body-colour border when off, filled body colour when on
-    {
-        const float rad = kSyncPill.getHeight() * 0.5f;
-        g.setColour (syncOn ? kBody : kPanel.darker (0.4f));
-        g.fillRoundedRectangle (kSyncPill, rad);
-        g.setColour (kBody);
-        g.drawRoundedRectangle (kSyncPill.reduced (1.0f), rad, 2.0f);
-        g.setFont (juce::Font (juce::FontOptions ("Avenir Next", 24.0f, juce::Font::bold)));
-        g.setColour (syncOn ? juce::Colours::white : kBody);
-        g.drawText ("SYNC", kSyncPill, juce::Justification::centred, false);
-
-        if (syncOn)
-        {
-            g.setColour (juce::Colours::white);
-            g.setFont (juce::Font (juce::FontOptions ("Avenir Next", 34.0f, juce::Font::bold)));
-            g.drawText (vibr::sync::divisionNames()[juce::jlimit (0, vibr::sync::kNumDivisions - 1, division)], kDivisionText, juce::Justification::centredLeft, false);
-        }
-    }
-
-    // power slide switch: chrome ball left = off, right = on
-    {
-        const bool on = powerSwitch.button.getToggleState();
-        if (on)      // the slot lights up green (subtle)
-        {
-            const auto slot = juce::Rectangle<float> (66.0f, 34.0f).withCentre (kPowerSwitch);
-            g.setColour (juce::Colour (0xff40d070).withAlpha (0.05f));
-            g.fillRoundedRectangle (slot.expanded (16.0f), 30.0f);
-            g.setColour (juce::Colour (0xff40d070).withAlpha (0.08f));
-            g.fillRoundedRectangle (slot.expanded (8.0f), 24.0f);
-            g.setGradientFill (juce::ColourGradient (juce::Colour (0xff2f8a4c), slot.getX(), slot.getY(),
-                                                     juce::Colour (0xff17512b), slot.getX(), slot.getBottom(), false));
-            g.fillRoundedRectangle (slot, 17.0f);
-            g.setColour (juce::Colours::white.withAlpha (0.10f));
-            g.fillRoundedRectangle (slot.withHeight (slot.getHeight() * 0.40f).reduced (8.0f, 3.0f), 6.0f);
-        }
-        const juce::Point<float> ball (kPowerSwitch.x + (on ? 17.0f : -17.0f), kPowerSwitch.y);
-        g.setColour (juce::Colours::black.withAlpha (0.55f));
-        g.fillEllipse (juce::Rectangle<float> (30.0f, 30.0f).withCentre (ball + juce::Point<float> (2.0f, 4.0f)));
-        g.setGradientFill (juce::ColourGradient (juce::Colour (0xfffafbfd), ball.x - 6.0f, ball.y - 8.0f,
-                                                 juce::Colour (0xff6b6f7a), ball.x + 9.0f, ball.y + 11.0f, true));
-        g.fillEllipse (juce::Rectangle<float> (28.0f, 28.0f).withCentre (ball));
+        const auto c = peakLamp();
+        const auto disc = juce::Rectangle<float> (14.0f, 14.0f).withCentre (c);
+        if (peakLit) { g.setColour (kPal.ledOn.withAlpha (0.25f)); g.fillEllipse (disc.expanded (7.0f)); }
+        g.setColour (peakLit ? kPal.ledOn : kPal.ledOff);
+        g.fillEllipse (disc);
+        g.setColour (kPal.ink);
+        g.drawEllipse (disc.expanded (1.0f), 2.0f);
+        ui::drawText (g, "PEAK", c.x + 17.0f, c.y, 17.0f, kPal.ink, true, 0.1f, juce::Justification::centredLeft);
     }
 }

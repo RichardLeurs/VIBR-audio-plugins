@@ -2,14 +2,13 @@
 #pragma once
 
 #include "PluginProcessor.h"
-#include "ui/LabEditor.h"
+#include "ui/VintageLabEditor.h"
 #include "ui/OutputMeter.h"
 
-// MS-1 window, drawn in code on a satin body: header (name, description, target preset, power), SPECTRUM (with the EQ: curve, 8 draggable band nodes,
-// a strip with the selected band) and LOUDNESS panels on top, and under them
-// INPUT (trim), LIMITER (six knobs, character, auto gain) and OUTPUT (gain, dither, delta), and a third row with the BUS COMPRESSOR (six knobs, BUS IN,
-// sidechain high-pass) and its GAIN REDUCTION history. See .claude/mastering_specs.md.
-class MS1AudioProcessorEditor : public vibr::ui::LabEditor
+// MS-1 window (1120 wide, 784 high; 934 with the REFERENCE panel) in the Vintage Hardware look (ui/VintageUI.h): header (name, preset screen, loudness target chip, UNDO / REDO,
+// A / B, power), row 1 INPUT, LOUDNESS, OUTPUT, row 2 the workflow strip, row 3 the panels of the step (SPECTRUM with the EQ, STAGES + display, LIMITER + gain reduction),
+// row 4 REFERENCE. See EditorLayout.h and .claude/mastering_specs.md.
+class MS1AudioProcessorEditor : public vibr::ui::vintage::LabEditor
 {
 public:
     explicit MS1AudioProcessorEditor (MS1AudioProcessor&);
@@ -75,7 +74,7 @@ private:
         if (i == 6) return step >= 1 && ! autoOpen;
         return true;
     }
-    float designH() const { return refOpen ? 992.0f : 838.0f; }      // the design height without / with the REFERENCE panel (width 1200)
+    float designH() const { return refOpen ? 934.0f : 784.0f; }      // the design height without / with the REFERENCE panel (width 1120)
     void setStep (int s);
     void setRefOpen (bool open);
     juce::String knobParam (const Knob& k) const { return k.perBand ? "mb" + juce::String (selMb + 1) + k.id : k.id; }

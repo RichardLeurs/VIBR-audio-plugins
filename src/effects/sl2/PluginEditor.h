@@ -2,13 +2,11 @@
 #pragma once
 
 #include "PluginProcessor.h"
-#include "ui/PedalLook.h"
-#include "ui/PedalEditor.h"
+#include "ui/VintagePedalEditor.h"
 
-// Black knurled knob with a raised cap and a white pointer (same as the DM-1), drawn over the scales printed in the background.
-using SL2LookAndFeel = vibr::ui::PedalKnobLookAndFeel;
-
-class SL2AudioProcessorEditor : public vibr::ui::PedalEditor,
+// SL-2 in the default (Vintage Hardware) look: OUTPUT (BALANCE, TEMPO), SLICE (ATTACK, DUTY), MODE (5 buttons), VARIATION (11 numbered buttons) and TEMPO SOURCE (KNOB / HOST),
+// drawn in code (no background image).
+class SL2AudioProcessorEditor : public vibr::ui::vintage::PedalEditor,
                                 private juce::Timer
 {
 public:
@@ -21,16 +19,19 @@ public:
 
 private:
     void timerCallback() override;
+    void setParam (const char* id, float value01);
 
     struct Knob
     {
+        const char* id;
+        const char* name;
         juce::Slider slider;
         std::unique_ptr<juce::SliderParameterAttachment> attachment;
     };
 
     SL2AudioProcessor& proc;
-    SL2LookAndFeel laf;
-    Knob balance, tempo, attack, duty, variation, mode;
+    Knob balance { "balance", "BALANCE", {}, {} }, tempo { "tempo", "TEMPO", {}, {} }, attack { "attack", "ATTACK", {}, {} }, duty { "duty", "DUTY", {}, {} };
+    int lastVariation = -1, lastMode = -1;
     bool lastOn = true, lastHost = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SL2AudioProcessorEditor)

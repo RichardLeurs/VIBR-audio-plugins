@@ -2,13 +2,10 @@
 #pragma once
 
 #include "PluginProcessor.h"
-#include "ui/PedalLook.h"
-#include "ui/PedalEditor.h"
+#include "ui/VintagePedalEditor.h"
 
-// Black knurled knob with a raised cap and a white pointer (same as the DM-1), drawn over the scales printed in the background.
-using OC5LookAndFeel = vibr::ui::PedalKnobLookAndFeel;
-
-class OC5AudioProcessorEditor : public vibr::ui::PedalEditor,
+// OC-5 in the default (Vintage Hardware) look: LEVEL (three knobs), LOW (one knob) and MODE (VINTAGE / POLY), drawn in code (no background image).
+class OC5AudioProcessorEditor : public vibr::ui::vintage::PedalEditor,
                                 private juce::Timer
 {
 public:
@@ -16,8 +13,8 @@ public:
     ~OC5AudioProcessorEditor() override;
 
     void paint (juce::Graphics&) override;
-    void resized() override;
     void paintOverChildren (juce::Graphics&) override;
+    void resized() override;
     void mouseDown (const juce::MouseEvent&) override;
 
 private:
@@ -25,14 +22,15 @@ private:
 
     struct Knob
     {
+        const char* id;
+        const char* name;
         juce::Slider slider;
         std::unique_ptr<juce::SliderParameterAttachment> attachment;
     };
 
     OC5AudioProcessor& proc;
     MidiLearnUI midiUI { proc.midiMap };       // right-click a knob: MIDI learn
-    OC5LookAndFeel laf;
-    Knob direct, up1, down1, down2;
+    Knob direct { "direct", "DIRECT", {}, {} }, up1 { "up1", "+1 OCT", {}, {} }, down1 { "down1", "-1 OCT", {}, {} }, down2 { "down2", "-2 OCT", {}, {} };
     bool lastOn = true, lastPoly = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (OC5AudioProcessorEditor)

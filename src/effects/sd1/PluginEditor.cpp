@@ -1,61 +1,82 @@
 // VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
 #include "PluginEditor.h"
-#include "SD1Data.h"
+
+namespace ui = vibr::ui::vintage;
 
 namespace
 {
-// Positions are in the 2520 x 918 coordinates of the rendered background (make_background.py). The editor is resizable at a
-// fixed aspect ratio; paint() scales image pixels to the window.
-constexpr float kImgW = 2520.0f, kImgH = 918.0f;
-constexpr int kBaseW = 1260;
+const ui::Palette kPal { juce::Colour (57, 121, 239) };
 
-constexpr float kKnobRadius = 60.0f;                       // black knob; the printed scale sits outside it
-constexpr float kKnobY = 500.0f;
-struct KnobSpec { const char* id; float x; float startDeg, endDeg; };
-const KnobSpec kKnobs[9] = {
-    { "level",        360.0f, -154.0f, 154.0f }, { "delayTime",    635.0f, -130.0f, 50.0f },     // TIME only turns from SHORT to LONG
-    { "factor",       845.0f, -154.0f, 154.0f }, { "feedback",    1135.0f, -154.0f, 154.0f },
-    { "hiCut",       1345.0f, -154.0f, 154.0f }, { "modIntensity", 1635.0f, -154.0f, 154.0f },
-    { "modFrequency", 1845.0f, -154.0f, 154.0f }, { "direct",     2135.0f, -154.0f, 154.0f },
-    { "effect",      2345.0f, -154.0f, 154.0f } };
+// Design space 1120 x 636 (margin 28, gap 18): row 1 (y 114, 246 high) INPUT and DELAY TIME, row 2 (y 378, 228 high) three equal two-knob panels.
+constexpr float kDesignW = 1120.0f, kDesignH = 636.0f, kGap = 18.0f;
+constexpr float kRow1Y = 114.0f, kRow1H = 246.0f, kRow2Y = 378.0f, kRow2H = 228.0f, kKnobDy = 86.0f;
+constexpr float kAreaW = kDesignW - 2.0f * ui::kMargin;
+constexpr float kInputW = 360.0f, kTimeW = kAreaW - kInputW - kGap, kThirdW = (kAreaW - 2.0f * kGap) / 3.0f;
 
-// tempo sync: SYNC button in the DELAY TIME panel (500 .. 980 x 268 .. 780) under the TIME knob, below a divider line (drawn in the background at y 660)
-const juce::Rectangle<float> kSyncPill = juce::Rectangle<float> (116.0f, 46.0f).withCentre ({ 635.0f, 723.0f });
-const juce::Rectangle<float> kDivisionText = juce::Rectangle<float> (130.0f, 46.0f).withCentre ({ 777.0f, 723.0f });
-constexpr int kTimeKnob = 1;                               // index of "delayTime" in kKnobs; while sync is on it picks the division
-const juce::Colour kBody { 0xff3979ef };
+juce::Rectangle<float> inputPanel()  { return { ui::kMargin, kRow1Y, kInputW, kRow1H }; }
+juce::Rectangle<float> timePanel()   { return { ui::kMargin + kInputW + kGap, kRow1Y, kTimeW, kRow1H }; }
+juce::Rectangle<float> thirdPanel (int i) { return { ui::kMargin + (float) i * (kThirdW + kGap), kRow2Y, kThirdW, kRow2H }; }   // REGENERATION, MODULATION, OUTPUT
 
-const juce::Point<float> kLed { 2445.0f, 87.0f };          // power slide switch (top right, ball left = off) = the `power` parameter
-const juce::Rectangle<float> kMeter { 94.0f, 356.0f, 36.0f, 262.0f };      // headroom meter frame
+constexpr float kTimeSpread = 130.0f, kPairSpread = 85.0f;
 
-// lamp sitting in a chrome bezel that is painted in the background (image pixels)
-void drawLamp (juce::Graphics& g, juce::Point<float> c, bool on, juce::Colour colour)
+// index in knobs[]: 0 level, 1 delayTime, 2 factor, 3 feedback, 4 hiCut, 5 modIntensity, 6 modFrequency, 7 direct, 8 effect
+juce::Point<float> knobCentre (int i)
 {
-    const auto circle = [&] (float r) { return juce::Rectangle<float> (r * 2.0f, r * 2.0f).withCentre (c); };
-    if (on)
+    switch (i)
     {
-        g.setColour (colour.withAlpha (0.20f));
-        g.fillEllipse (circle (32.0f));
-        g.setColour (colour.withAlpha (0.25f));
-        g.fillEllipse (circle (21.0f));
+        case 0: return { inputPanel().getRight() - 76.0f, kRow1Y + kKnobDy };
+        case 1: return { timePanel().getCentreX() - kTimeSpread, kRow1Y + kKnobDy };
+        case 2: return { timePanel().getCentreX() + kTimeSpread, kRow1Y + kKnobDy };
+        default:
+        {
+            const int panel = (i - 3) / 2, side = (i - 3) % 2;
+            return { thirdPanel (panel).getCentreX() + (side == 0 ? -kPairSpread : kPairSpread), kRow2Y + kKnobDy };
+        }
     }
-    g.setGradientFill (juce::ColourGradient (on ? colour.brighter (0.8f) : colour.darker (1.8f), c.x - 5.0f, c.y - 7.0f,
-                                             on ? colour.darker (0.2f) : colour.darker (3.0f), c.x + 8.0f, c.y + 10.0f, true));
-    g.fillEllipse (circle (11.5f));
-    g.setColour (juce::Colours::white.withAlpha (on ? 0.55f : 0.18f));
-    g.fillEllipse (juce::Rectangle<float> (6.0f, 4.0f).withCentre (c.translated (-4.0f, -6.0f)));
+}
+
+juce::Rectangle<float> syncRect() { return juce::Rectangle<float> (120.0f, 30.0f).withCentre ({ knobCentre (1).x, kRow1Y + 215.0f }); }
+juce::Rectangle<float> meterScreen() { return { inputPanel().getX() + 22.0f, kRow1Y + 36.0f, 130.0f, 190.0f }; }
+
+struct KnobSpec { const char* id; const char* name; const char* lo; const char* hi; float startDeg, endDeg; };
+const KnobSpec kKnobs[9] = {
+    { "level",        "LEVEL",     "MIN",   "MAX",  -135.0f, 135.0f }, { "delayTime", "TIME", "SHORT", "LONG", -130.0f, 50.0f },     // TIME only turns from SHORT to LONG
+    { "factor",       "FACTOR",    "x0.25", "x1",   -135.0f, 135.0f }, { "feedback",  "FEEDBACK", "-10", "+10", -135.0f, 135.0f },
+    { "hiCut",        "HI-CUT",    "MIN",   "MAX",  -135.0f, 135.0f }, { "modIntensity", "INTENSITY", "MIN", "MAX", -135.0f, 135.0f },
+    { "modFrequency", "FREQUENCY", "SLOW",  "FAST", -135.0f, 135.0f }, { "direct",    "DIRECT", "MIN", "MAX", -135.0f, 135.0f },
+    { "effect",       "EFFECT",    "MIN",   "MAX",  -135.0f, 135.0f } };
+constexpr int kTimeKnob = 1, kFactorKnob = 2, kFeedbackKnob = 3;
+
+// a knob with its own sweep (the TIME knob): the ring, the legends at its ends, the name and the value, as ui::paintKnob
+void paintRangeKnob (juce::Graphics& g, juce::Point<float> c, const char* name, const juce::String& value, const char* lo, const char* hi, float prop, float startDeg, float endDeg)
+{
+    const float R = ui::kKnobR, r = ui::ringRadius (R), w = R * 0.24f;
+    const float a0 = juce::degreesToRadians (startDeg), a1 = juce::degreesToRadians (endDeg);
+    juce::Path track, lit;
+    track.addCentredArc (c.x, c.y, r, r, 0.0f, a0, a1, true);
+    g.setColour (kPal.track);
+    g.strokePath (track, juce::PathStrokeType (w, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    if (prop > 0.002f)
+    {
+        lit.addCentredArc (c.x, c.y, r, r, 0.0f, a0, a0 + prop * (a1 - a0), true);
+        g.setColour (kPal.accent);
+        g.strokePath (lit, juce::PathStrokeType (w, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    }
+    const auto endPoint = [&] (float a) { return juce::Point<float> (c.x + std::sin (a) * r, c.y - std::cos (a) * r); };
+    const auto pe = endPoint (a0), pf = endPoint (a1);
+    ui::drawText (g, lo, pe.x - 12.0f, pe.y + 24.0f, 13.0f, kPal.inkSoft, false, 0.0f, juce::Justification::centredLeft, ui::Face::Mono);       // under the lower left end
+    ui::drawText (g, hi, pf.x + 12.0f, pf.y - 4.0f, 13.0f, kPal.inkSoft, false, 0.0f, juce::Justification::centredLeft, ui::Face::Mono);        // right of the upper right end
+    ui::drawText (g, name, c.x, c.y + R * 1.71f + 22.0f, 21.0f, kPal.ink, true, 0.1f);
+    ui::drawText (g, value, c.x, c.y + R * 1.71f + 43.0f, 14.0f, kPal.accent, true, 0.0f, juce::Justification::centred, ui::Face::Mono);
 }
 } // namespace
 
 //==============================================================================
-//==============================================================================
 SDD1000AudioProcessorEditor::SDD1000AudioProcessorEditor (SDD1000AudioProcessor& p)
-    : PedalEditor (p, SD1Data::background_png, (size_t) SD1Data::background_pngSize, kImgW, kImgH, kBaseW, 630), proc (p),
-      syncAtt (*p.apvts.getParameter ("sync"), [this] (float v) { syncOn = v > 0.5f; syncChanged(); }),
-      divisionAtt (*p.apvts.getParameter ("division"), [this] (float v) { division = (int) std::lround (v); repaint(); })
+    : PedalEditor (p, kDesignW, kDesignH), proc (p),
+      syncAtt (*p.apvts.getParameter ("sync"), [this] (float v) { syncOn = v > 0.5f; syncChanged(); }, nullptr),
+      divisionAtt (*p.apvts.getParameter ("division"), [this] (float v) { division = (int) std::lround (v); repaint(); }, nullptr)
 {
-    setLookAndFeel (&laf);
-    
     for (int i = 0; i < 9; ++i)
     {
         auto& k = knobs[i];
@@ -64,6 +85,8 @@ SDD1000AudioProcessorEditor::SDD1000AudioProcessorEditor (SDD1000AudioProcessor&
         k.slider.setRotaryParameters (juce::degreesToRadians (kKnobs[i].startDeg), juce::degreesToRadians (kKnobs[i].endDeg), true);
         k.slider.setMouseDragSensitivity (180);
         k.slider.setScrollWheelEnabled (false);
+        k.slider.setPopupDisplayEnabled (true, true, this);
+        k.slider.onValueChange = [this] { repaint(); };
         addAndMakeVisible (k.slider);
         k.attachment = std::make_unique<juce::SliderParameterAttachment> (*proc.apvts.getParameter (kKnobs[i].id), k.slider, nullptr);
         midiUI.add (k.slider, kKnobs[i].id);
@@ -76,31 +99,27 @@ SDD1000AudioProcessorEditor::SDD1000AudioProcessorEditor (SDD1000AudioProcessor&
     startTimerHz (30);
 }
 
-SDD1000AudioProcessorEditor::~SDD1000AudioProcessorEditor() { setLookAndFeel (nullptr); }
+SDD1000AudioProcessorEditor::~SDD1000AudioProcessorEditor() = default;
 
 void SDD1000AudioProcessorEditor::resized()
 {
-    const float S = (float) getWidth() / kImgW;
-    for (int i = 0; i < 9; ++i)
-        knobs[i].slider.setBounds (juce::Rectangle<float> (2.0f * kKnobRadius * S, 2.0f * kKnobRadius * S)
-                                       .withCentre ({ kKnobs[i].x * S, kKnobY * S }).toNearestInt());
+    for (int i = 0; i < 9; ++i) placeKnob (knobs[i].slider, knobCentre (i));
 }
 
 void SDD1000AudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 {
-    // power slide switch (top right) = power
-    const float S = (float) getWidth() / kImgW;
-    const auto toggle = [this] (const char* id)
+    if (e.mods.isPopupMenu()) return;
+    const auto pt = e.position / scale();
+    if (ui::powerRect().expanded (3.0f).contains (pt))                // the power switch = the `power` parameter
     {
-        auto* prm = proc.apvts.getParameter (id);
+        auto* prm = proc.apvts.getParameter ("power");
         prm->beginChangeGesture();
         prm->setValueNotifyingHost (prm->getValue() > 0.5f ? 0.0f : 1.0f);
         prm->endChangeGesture();
-    };
-    if (juce::Rectangle<float> (110.0f * S, 70.0f * S).withCentre (kLed * S).contains (e.position)) toggle ("power");
-
-    // tempo sync: the SYNC button toggles (the TIME knob then selects the note division)
-    if ((kSyncPill.expanded (4.0f) * S).contains (e.position)) syncAtt.setValueAsCompleteGesture (syncOn ? 0.0f : 1.0f);
+        repaint();
+        return;
+    }
+    if (syncRect().expanded (3.0f).contains (pt)) syncAtt.setValueAsCompleteGesture (syncOn ? 0.0f : 1.0f);      // the TIME knob then selects the note division
 }
 
 void SDD1000AudioProcessorEditor::syncChanged()
@@ -111,13 +130,14 @@ void SDD1000AudioProcessorEditor::syncChanged()
     divisionKnobAtt.reset();
     if (syncOn) divisionKnobAtt = std::make_unique<juce::SliderParameterAttachment> (*proc.apvts.getParameter ("division"), k.slider, nullptr);
     else        k.attachment    = std::make_unique<juce::SliderParameterAttachment> (*proc.apvts.getParameter ("delayTime"), k.slider, nullptr);
-    knobs[2].slider.setAlpha (syncOn ? 0.35f : 1.0f);
+    knobs[kFactorKnob].slider.setAlpha (syncOn ? 0.35f : 1.0f);
     repaint();
 }
 
 void SDD1000AudioProcessorEditor::paintOverChildren (juce::Graphics& g)
 {
-    midiUI.paintMarks (g, kBody);
+    g.addTransform (juce::AffineTransform::scale (scale()));
+    midiUI.paintMarks (g, kPal.accent);
 }
 
 void SDD1000AudioProcessorEditor::timerCallback()
@@ -125,7 +145,7 @@ void SDD1000AudioProcessorEditor::timerCallback()
     if (midiUI.needsRepaint()) { midiUI.tick(); repaint(); }
     const float db = juce::Decibels::gainToDecibels (proc.meterLevel.load(), -60.0f);
     meterDb += (db - meterDb) * 0.5f;
-    const bool pwr = proc.apvts.getRawParameterValue ("power")->load() > 0.5f;
+    const bool pwr = proc.apvts.getRawParameterValue ("power")->load() > 0.5f && proc.apvts.getRawParameterValue ("bypass")->load() < 0.5f;
     const int segs = (meterDb >= -20.0f) + (meterDb >= -10.0f) + (meterDb >= 0.0f) + (meterDb >= 6.0f);
     if (segs != lastSegs || pwr != lastPower)
     {
@@ -136,47 +156,68 @@ void SDD1000AudioProcessorEditor::timerCallback()
 
 void SDD1000AudioProcessorEditor::paint (juce::Graphics& g)
 {
-    paintBackground (g);       // the image, then image pixels
+    g.addTransform (juce::AffineTransform::scale (scale()));
+    ui::paintBody (g, kPal, kDesignW, kDesignH);
+    ui::paintHeaderNoPresets (g, kPal, "SD-1", "DIGITAL DELAY", "DIGITAL ECHOES", lastPower);
 
-    // ---- headroom meter: 4 LED segments (-20, -10, 0, +6 dB), bottom to top
+    const auto prop = [this] (int i) { return (float) knobs[i].slider.valueToProportionOfLength (knobs[i].slider.getValue()); };
+    const auto one = [this] (int i) { return juce::String (knobs[i].slider.getValue(), 1); };
+    const auto plain = [&] (int i)
     {
+        ui::paintKnob (g, kPal, knobCentre (i), kKnobs[i].name, one (i), kKnobs[i].lo, kKnobs[i].hi, prop (i));
+    };
+
+    // INPUT: the headroom screen (4 segments, bottom to top) and LEVEL
+    ui::paintPanel (g, kPal, inputPanel(), "INPUT");
+    {
+        const auto screen = meterScreen();
+        ui::paintScope (g, kPal, screen, "HEADROOM", "");
+        const auto plot = ui::scopePlotRect (screen);
         constexpr int segs = 4;
         const float thresholds[segs] = { -20.0f, -10.0f, 0.0f, 6.0f };
-        const float segH = kMeter.getHeight() / (float) segs;
+        const char* labels[segs] = { "-20dB", "-10dB", "0dB", "+6dB" };
+        const float gap = 6.0f, segH = (plot.getHeight() - gap * (float) (segs - 1)) / (float) segs;
         for (int i = 0; i < segs; ++i)
         {
-            const bool lit = meterDb >= thresholds[i];
-            const juce::Colour base = i == 3 ? juce::Colour (0xffe03a2a) : (i == 2 ? juce::Colour (0xffe8b820) : juce::Colour (0xff35c46a));
-            const juce::Rectangle<float> seg (kMeter.getX() + 6.0f, kMeter.getBottom() - (float) (i + 1) * segH + 5.0f, kMeter.getWidth() - 12.0f, segH - 10.0f);
-            g.setColour (lit ? base : base.darker (2.6f).withAlpha (0.55f));
-            g.fillRoundedRectangle (seg, 3.0f);
-            if (lit)
-            {
-                g.setColour (base.withAlpha (0.28f));
-                g.fillRoundedRectangle (seg.expanded (3.0f), 5.0f);
-            }
+            const bool lit = lastPower && meterDb >= thresholds[i];
+            const auto lampCol = i == 3 ? kPal.segRed : (i == 2 ? kPal.segYellow : kPal.segGreen);
+            const juce::Rectangle<float> seg (screen.getX() + 14.0f, plot.getBottom() - (float) (i + 1) * segH - (float) i * gap, 46.0f, segH);
+            g.setColour (lit ? lampCol : kPal.segOff);
+            g.fillRoundedRectangle (seg, 2.0f);
+            ui::drawText (g, labels[i], seg.getRight() + 10.0f, seg.getCentreY(), 13.0f, kPal.phosphorDim, false, 0.0f, juce::Justification::centredLeft, ui::Face::Mono);
         }
     }
+    plain (0);
 
-    // ---- power slide switch: chrome ball left = off, right = on; the slot lights up green when on
-    const bool on = proc.apvts.getRawParameterValue ("power")->load() > 0.5f;
-    vibr::ui::paintSlideSwitch (g, kLed, on);
+    // DELAY TIME: TIME (the note division while sync is on), FACTOR (dimmed with sync on) and the SYNC button under TIME
+    ui::paintPanel (g, kPal, timePanel(), "DELAY TIME");
+    paintRangeKnob (g, knobCentre (kTimeKnob), kKnobs[kTimeKnob].name,
+                    syncOn ? juce::String (vibr::sync::divisionNames()[juce::jlimit (0, vibr::sync::kNumDivisions - 1, division)]) : one (kTimeKnob),
+                    syncOn ? "SLOW" : "SHORT", syncOn ? "FAST" : "LONG", prop (kTimeKnob), kKnobs[kTimeKnob].startDeg, kKnobs[kTimeKnob].endDeg);
+    if (syncOn) g.beginTransparencyLayer (0.35f);
+    ui::paintKnob (g, kPal, knobCentre (kFactorKnob), "FACTOR",
+                   "x" + juce::String (0.25f * std::pow (4.0f, (float) knobs[kFactorKnob].slider.getValue() / 10.0f), 2), "x0.25", "x1", prop (kFactorKnob));
+    if (syncOn) g.endTransparencyLayer();
+    ui::paintFlatButton (g, kPal, syncRect(), "SYNC", syncOn);
 
-    // ---- SYNC: a flat rounded button, dark with a body-colour border when off, filled body colour when on
-    const float rad = kSyncPill.getHeight() * 0.5f;
-    g.setColour (syncOn ? kBody : juce::Colour (0xff18191c));
-    g.fillRoundedRectangle (kSyncPill, rad);
-    g.setColour (kBody);
-    g.drawRoundedRectangle (kSyncPill.reduced (1.0f), rad, 2.0f);
-    g.setFont (juce::Font (juce::FontOptions ("Avenir Next", 24.0f, juce::Font::bold)));
-    g.setColour (syncOn ? juce::Colours::white : kBody);
-    g.drawText ("SYNC", kSyncPill, juce::Justification::centred, false);
-
-    // the chosen note division (the TIME knob sets it) next to the button while sync is on
-    if (syncOn)
+    // REGENERATION (FEEDBACK is bipolar: 5 = none), MODULATION, OUTPUT
+    ui::paintPanel (g, kPal, thirdPanel (0), "REGENERATION");
     {
-        g.setColour (juce::Colours::white);
-        g.setFont (juce::Font (juce::FontOptions ("Avenir Next", 34.0f, juce::Font::bold)));
-        g.drawText (vibr::sync::divisionNames()[juce::jlimit (0, vibr::sync::kNumDivisions - 1, division)], kDivisionText, juce::Justification::centredLeft, false);
+        const double v = knobs[kFeedbackKnob].slider.getValue();
+        const float amount = (float) (v - 5.0) * 2.0f;
+        ui::paintBipolarArc (g, knobCentre (kFeedbackKnob), ui::kKnobR, amount / 10.0f, kPal.accent, kPal.track);
+        const auto c = knobCentre (kFeedbackKnob);
+        const float rr = ui::kKnobR * 1.71f, ly = c.y + ui::ringRadius (ui::kKnobR) * 0.707f + 15.0f;
+        ui::drawText (g, "-10", c.x - ui::kKnobR * 1.4f, ly, 13.0f, kPal.inkSoft, false, 0.0f, juce::Justification::centredLeft, ui::Face::Mono);
+        ui::drawText (g, "+10", c.x + ui::kKnobR * 1.4f, ly, 13.0f, kPal.inkSoft, false, 0.0f, juce::Justification::centredRight, ui::Face::Mono);
+        ui::drawText (g, "FEEDBACK", c.x, c.y + rr + 22.0f, 21.0f, kPal.ink, true, 0.1f);
+        ui::drawText (g, (amount > 0.0f ? "+" : "") + juce::String (amount, 1), c.x, c.y + rr + 43.0f, 14.0f, kPal.accent, true, 0.0f, juce::Justification::centred, ui::Face::Mono);
     }
+    plain (4);
+    ui::paintPanel (g, kPal, thirdPanel (1), "MODULATION");
+    plain (5); plain (6);
+    ui::paintPanel (g, kPal, thirdPanel (2), "OUTPUT");
+    plain (7); plain (8);
+
+    ui::paintFooter (g, kPal, kDesignH - 15.0f);
 }

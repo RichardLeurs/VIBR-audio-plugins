@@ -1,14 +1,15 @@
 // VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
 #pragma once
 
-#include "ui/OutputMeter.h"
 #include "PluginProcessor.h"
-#include "ui/LabEditor.h"
+#include "ui/VintageLabEditor.h"
 
-// RH-1 window (1200 x 690), on the shared UI of src/common/ui: header (name, preset chip, A / B, undo), the CONTROL panel with the source tab pills (LFO, ENVELOPE,
-// STEPS) on its top edge, the DESTINATION panel with the destination tab pills (FILTER, TREMOLO, SLICER) and the types of the destination, the PATTERN display (the
-// 16-step lane to click and paint, the control signal and the destination over five seconds, the 11 patterns of the SL-2) and OUTPUT (MIX, LEVEL).
-class RH1AudioProcessorEditor : public vibr::ui::LabEditor
+// RH-1 window (1120 x 660): the RH-1 with the "vintage hardware" look of ui/VintageUI.h in src/common (cream plate, bakelite knobs, phosphor screens). Header (name, preset screen,
+// undo / redo, A / B, power), the SOURCE panel with the source tabs (LFO, ENVELOPE, STEPS), the TARGET panel with the destination tabs (FILTER, TREMOLO, SLICER,
+// MATRIX) and the types of the destination, the PATTERN panel (the 16-step lane to click and paint, the scope with the control signal and the destination over five
+// seconds, the 11 slice patterns of the SL-2) and OUTPUT (MIX, LEVEL, L / R meters). The MATRIX tab draws the VC-1 layout of the RH-1, scaled into the same window.
+// All drawing goes through `ui` = vibr::ui::vintage: the editor holds the layout and the behaviour only.
+class RH1AudioProcessorEditor : public vibr::ui::vintage::LabEditor
 {
 public:
     explicit RH1AudioProcessorEditor (RH1AudioProcessor&);
@@ -30,7 +31,8 @@ private:
     void setChoice (const char* id, int index);
     void setValue (const juce::String& id, float v, bool gesture);
     void drawPattern (juce::Graphics&);
-    void drawMatrix (juce::Graphics&);                                 // the destination MATRIX (the VC-1 window)
+    void drawMatrix (juce::Graphics&);
+    void drawBigMatrixKnobs (juce::Graphics&);                                 // the destination MATRIX (the VC-1 layout, in matrix space: see matrixXform)
     juce::String matrixText (int kind, double v) const;
     bool knobShown (int i) const;
     int stepAt (juce::Point<float> p) const;                          // the step under a point of the lane, or -1

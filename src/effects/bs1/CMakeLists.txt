@@ -1,10 +1,5 @@
 # VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
-juce_add_binary_data(BS1Assets
-  HEADER_NAME BS1Data.h
-  NAMESPACE BS1Data
-  SOURCES
-    assets/background.png
-)
+# the rendered background (assets/background.png, make_background.py) is no longer compiled in: the editor draws in code (Vintage Hardware look)
 
 juce_add_plugin(BS-1
   COMPANY_NAME "VIBR"
@@ -42,7 +37,6 @@ target_compile_definitions(BS-1
 target_link_libraries(BS-1
   PRIVATE
     rl_common
-    BS1Assets
     juce::juce_audio_utils
     juce::juce_dsp
   PUBLIC

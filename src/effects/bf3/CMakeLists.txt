@@ -1,10 +1,5 @@
 # VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
-juce_add_binary_data(BF3Assets
-  HEADER_NAME BF3Data.h
-  NAMESPACE BF3Data
-  SOURCES
-    assets/background.png
-)
+# The background image (assets/background.png, make_background.py) is no longer compiled in: the editor is drawn in code (Vintage Hardware look).
 
 juce_add_plugin(BF-3
   COMPANY_NAME "VIBR"
@@ -43,7 +38,6 @@ target_compile_definitions(BF-3
 target_link_libraries(BF-3
   PRIVATE
     rl_common
-    BF3Assets
     juce::juce_audio_utils
     juce::juce_dsp
   PUBLIC

@@ -1,11 +1,4 @@
 # VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
-juce_add_binary_data(GE7Assets
-  HEADER_NAME GE7Data.h
-  NAMESPACE GE7Data
-  SOURCES
-    assets/background.png
-)
-
 juce_add_plugin(GE-7
   COMPANY_NAME "VIBR"
   ICON_BIG "${RL_ICON}"
@@ -42,7 +35,7 @@ target_compile_definitions(GE-7
 
 target_link_libraries(GE-7
   PRIVATE
-    GE7Assets
+    rl_common
     juce::juce_audio_utils
     juce::juce_dsp
   PUBLIC

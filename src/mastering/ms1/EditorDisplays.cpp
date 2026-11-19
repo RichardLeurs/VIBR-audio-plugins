@@ -1,27 +1,37 @@
 // VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
-// MS-1 editor, the displays: chain strip, spectrum and EQ, meters, loudness, gain reduction history, stage displays.
+// MS-1 editor, the displays: chain strip, spectrum and EQ, meters, loudness, gain reduction history, stage displays (Vintage Hardware look: phosphor screens).
 #include "PluginEditor.h"
 #include "EditorLayout.h"
 #include "VibrLogo.h"
-#include "ui/VibrUI.h"
+#include "ui/VintageUI.h"
 
 using namespace ms1ui;
 
+namespace
+{
+// text on a phosphor screen: Plex Mono, centred or aligned from (x, y)
+void screenText (juce::Graphics& g, const juce::String& s, float x, float y, float size, juce::Colour c, bool bold = false, juce::Justification j = juce::Justification::centred, float kerning = 0.0f)
+{
+    drawText (g, s, x, y, size, c, bold, kerning, j, ui::Face::Mono);
+}
+}
+
 void MS1AudioProcessorEditor::drawChain (juce::Graphics& g)
 {
-    ui::paintPanel (g, kPal, juce::Rectangle<float> (kMargin - 0.0f, kChainY, 1160.0f, kChainH), {}, ui::Pill::Plain, 10.0f);       // small corners like its buttons
+    ui::paintPanel (g, kPal, juce::Rectangle<float> (kMargin, kChainY, kPanelW[3], kChainH), {});
     {   // AUTO: lit while its panel is open; a dot while the analyser is learning
         const auto b = autoButtonRect();
-        ui::paintFlatButton (g, kPal, b, "AUTO", autoOpen, 13.0f, 1.0f, 10.0f, 0.1f, 1.3f);
-        if (proc.autoAn.learning.load()) { g.setColour (autoOpen ? kPal.dark : kPal.body); g.fillEllipse (juce::Rectangle<float> (7.0f, 7.0f).withCentre ({ b.getRight() - 9.0f, b.getY() + 9.0f })); }
+        ui::paintFlatButton (g, kPal, b, "AUTO", autoOpen, 16.0f, 1.0f, 4.0f, 0.1f);
+        if (proc.autoAn.learning.load()) { g.setColour (autoOpen ? kPal.ledOn : kWarn); g.fillEllipse (juce::Rectangle<float> (7.0f, 7.0f).withCentre ({ b.getRight() - 9.0f, b.getY() + 9.0f })); }
     }
     for (int i = 0; i < kChainStages; ++i)
     {
         const auto r = chainRect (i);
         const bool on = kChainOn[i] == nullptr || isOn (kChainOn[i]), selected = i == step && ! autoOpen;                                              // while the AUTO panel is shown no step is selected
-        ui::paintFlatButton (g, kPal, r, kChainName[i], selected, 13.0f, 1.0f, 10.0f, 0.1f, 1.3f);
-        const auto dot = juce::Rectangle<float> (12.0f, 12.0f).withCentre ({ r.getX() + 20.0f, r.getCentreY() });      // the power dot: filled = on
-        const auto col = selected ? kPal.dark : kPal.body;
+        ui::paintFlatButton (g, kPal, r, {}, selected);
+        const auto col = selected ? kPal.cream : kPal.ink;
+        drawText (g, kChainName[i], r.getX() + 30.0f, r.getCentreY() - 1.0f, 15.0f, col, true, 0.08f, juce::Justification::centredLeft);
+        const auto dot = juce::Rectangle<float> (12.0f, 12.0f).withCentre ({ r.getX() + 16.0f, r.getCentreY() - 1.0f });      // the power dot: filled = on
         g.setColour (col);
         if (on) g.fillEllipse (dot); else g.drawEllipse (dot.reduced (1.0f), 1.5f);
         float gr = 0.0f;                                                                                               // the gain reduction of the stage (dB)
@@ -30,17 +40,17 @@ void MS1AudioProcessorEditor::drawChain (juce::Graphics& g)
         else if (i == 5) gr = -std::abs (proc.grDb.load());
         if (on && gr < -0.05f)
         {
-            const auto bar = juce::Rectangle<float> (r.getRight() - 50.0f, r.getBottom() - 9.0f, 38.0f, 3.0f);
+            const auto bar = juce::Rectangle<float> (r.getX() + 30.0f, r.getBottom() - 7.0f, 80.0f, 3.0f);
             g.setColour (col.withAlpha (0.3f)); g.fillRoundedRectangle (bar, 1.5f);
             g.setColour (col); g.fillRoundedRectangle (bar.withWidth (bar.getWidth() * std::clamp (-gr / 12.0f, 0.0f, 1.0f)), 1.5f);
         }
         if (i < kChainStages - 1)
-            drawText (g, ">", r.getRight() + 11.0f, r.getCentreY(), 13.0f, kInk.withAlpha (0.4f), true, 0.0f);
+            drawText (g, ">", r.getRight() + 7.0f, r.getCentreY(), 14.0f, kPal.inkSoft, true, 0.0f);
     }
     {   // REF: opens / closes the REFERENCE panel; a dot shows that the B (reference) monitor is on
         const auto r = refPillRect();
-        ui::paintFlatButton (g, kPal, r, "REFERENCE", refOpen, 13.0f, 1.0f, 10.0f, 0.1f, 1.3f);
-        if (isOn ("refAB") && proc.reference.hasData()) { g.setColour (refOpen ? kPal.dark : kPal.body); g.fillEllipse (juce::Rectangle<float> (7.0f, 7.0f).withCentre ({ r.getX() + 12.0f, r.getCentreY() })); }
+        ui::paintFlatButton (g, kPal, r, "REFERENCE", refOpen, 15.0f, 1.0f, 4.0f, 0.08f);
+        if (isOn ("refAB") && proc.reference.hasData()) { g.setColour (refOpen ? kPal.ledOn : kWarn); g.fillEllipse (juce::Rectangle<float> (7.0f, 7.0f).withCentre ({ r.getX() + 11.0f, r.getCentreY() })); }
     }
 }
 
@@ -49,21 +59,20 @@ void MS1AudioProcessorEditor::drawChain (juce::Graphics& g)
 void MS1AudioProcessorEditor::drawSpectrum (juce::Graphics& g)
 {
     const auto r = plotRect();
-    g.setColour (juce::Colours::black.withAlpha (0.45f));
-    g.fillRoundedRectangle (r.expanded (8.0f), 10.0f);
+    ui::paintScreen (g, kPal, specScreenRect(), 6.0f);
     const auto xOf = [&] (float f) { return r.getX() + r.getWidth() * std::log (f / 20.0f) / std::log (1000.0f); };
     const auto yOf = [&] (float db) { return r.getBottom() - r.getHeight() * (std::clamp (db, -90.0f, 0.0f) + 90.0f) / 90.0f; };
     for (float db : { -80.0f, -60.0f, -40.0f, -20.0f, 0.0f })
     {
-        g.setColour (kInk.withAlpha (0.1f));
+        g.setColour (kPal.phosphor.withAlpha (0.10f));
         g.drawLine (r.getX(), yOf (db), r.getRight(), yOf (db), 1.0f);
-        drawText (g, juce::String ((int) db), r.getX() - 22.0f, yOf (db), 13.0f, kInk.withAlpha (0.5f), false, 0.0f);
+        screenText (g, juce::String ((int) db), r.getX() - 20.0f, yOf (db), 13.0f, kPal.phosphorDim);
     }
     for (float f : { 20.0f, 50.0f, 100.0f, 200.0f, 500.0f, 1000.0f, 2000.0f, 5000.0f, 10000.0f, 20000.0f })
     {
-        g.setColour (kInk.withAlpha (0.1f));
+        g.setColour (kPal.phosphor.withAlpha (0.10f));
         g.drawLine (xOf (f), r.getY(), xOf (f), r.getBottom(), 1.0f);
-        drawText (g, f >= 1000.0f ? juce::String ((int) (f / 1000.0f)) + "k" : juce::String ((int) f), xOf (f), r.getBottom() + 14.0f, 13.0f, kInk.withAlpha (0.5f), false, 0.0f);
+        screenText (g, f >= 1000.0f ? juce::String ((int) (f / 1000.0f)) + "k" : juce::String ((int) f), xOf (f), r.getBottom() + 14.0f, 13.0f, kPal.phosphorDim);
     }
     const float slope = proc.specOption (MS1AudioProcessor::SpecSlope) == 0 ? 0.0f : proc.specOption (MS1AudioProcessor::SpecSlope) == 1 ? 3.0f : 4.5f;
     std::array<float, ms1::kBands> pre, post;
@@ -90,8 +99,10 @@ void MS1AudioProcessorEditor::drawSpectrum (juce::Graphics& g)
         if (dashed) { juce::Path dashedPath; const float dash[2] = { 3.0f, 3.0f }; juce::PathStrokeType (thick).createDashedStroke (dashedPath, line, dash, 2); g.fillPath (dashedPath); }
         else g.strokePath (line, juce::PathStrokeType (thick, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
     };
+    bool haveRef = false;
     if (const float* rs = proc.reference.spectrum())                                                // the long-term spectrum of the reference, at the matched level
     {
+        haveRef = true;
         const float shift = isOn ("refMatch") ? proc.refMatchDb.load() : 0.0f;
         juce::Path line;
         for (int b = 0; b < ms1::kBands; ++b)
@@ -102,23 +113,38 @@ void MS1AudioProcessorEditor::drawSpectrum (juce::Graphics& g)
         }
         juce::Graphics::ScopedSaveState ss (g);
         g.reduceClipRegion (r.expanded (2.0f).toNearestInt());
-        g.setColour (kRed.withAlpha (0.8f));
+        g.setColour (kPal.segRed.withAlpha (0.85f));
         g.strokePath (line, juce::PathStrokeType (1.6f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-        drawText (g, "REFERENCE", r.getX() + 168.0f, r.getY() + 12.0f, 13.0f, kRed, true, 0.14f);
     }
-    draw (pre, kInk.withAlpha (0.55f), 0.0f, 1.4f);
-    draw (post, kBody, 0.14f, 2.2f);
-    if (specHold) draw (holdPeak, kBody.withAlpha (0.65f), 0.0f, 1.2f, true);
-    drawText (g, "BEFORE", r.getX() + 36.0f, r.getY() + 12.0f, 13.0f, kInk.withAlpha (0.55f), true, 0.14f);
-    drawText (g, "AFTER", r.getX() + 96.0f, r.getY() + 12.0f, 13.0f, kBody, true, 0.14f);
-    {   // the option buttons
+    draw (pre, kScreenGrey, 0.0f, 1.4f);
+    draw (post, kPal.accent, 0.16f, 2.2f);
+    if (specHold) draw (holdPeak, kPal.accent.withAlpha (0.7f), 0.0f, 1.2f, true);
+
+    {   // the legend, right on the info line of the panel: a short line in the colour of each curve
+        const auto panel = panelRect (3);
+        float x = panel.getRight() - 16.0f;
+        const float cy = panel.getY() + 30.0f;
+        const auto item = [&] (const juce::String& t, juce::Colour c)
+        {
+            drawText (g, t, x, cy, 14.0f, kPal.inkSoft, true, 0.1f, juce::Justification::centredRight);
+            x -= textWidth (font (14.0f, true).withExtraKerningFactor (0.1f), t) + 14.0f;
+            g.setColour (c);
+            g.fillRoundedRectangle (x - 16.0f, cy - 1.5f, 16.0f, 3.0f, 1.5f);
+            x -= 16.0f + 22.0f;
+        };
+        if (haveRef) item ("REFERENCE", kPal.segRed);
+        item ("AFTER", kPal.accent);
+        item ("BEFORE", kScreenGrey);
+    }
+    {   // the option buttons on the top edge
         static const char* srcName[4] = { "SRC: MID", "SRC: SIDE", "SRC: LEFT", "SRC: RIGHT" };
         const int mode = proc.specOption (MS1AudioProcessor::SpecMode), src = proc.specOption (MS1AudioProcessor::SpecSource), sl = proc.specOption (MS1AudioProcessor::SpecSlope);
         const juce::String label[5] = { mode == 0 ? "SMOOTH 1/6" : "FFT 8192", sl == 0 ? "SLOPE 0" : sl == 1 ? "SLOPE +3" : "SLOPE +4.5", "HOLD", "FREEZE", srcName[juce::jlimit (0, 3, src)] };
         const bool on[5] = { mode == 1, sl != 2, specHold, specFreeze, src != 0 };
+        cutEdge (g, specButtonRect (0).getUnion (specButtonRect (4)).withTrimmedLeft (0.0f), panelRect (3).getY());
         for (int i = 0; i < 5; ++i)
         {
-            vibr::ui::paintFlatButton (g, kPal, specButtonRect (i), label[i], on[i], 13.0f, 1.0f, 7.0f, 0.04f, 1.0f);
+            ui::paintFlatButton (g, kPal, specButtonRect (i), label[i], on[i], 14.0f, 1.0f, 4.0f, 0.04f);
             static const int steps[5] = { 2, 3, 0, 0, 4 };                                // SMOOTH / FFT, the slope and the source cycle through settings on each click
             if (steps[i] > 0) paintCycleDots (g, specButtonRect (i), steps[i], i == 0 ? mode : i == 1 ? sl : src, on[i]);
         }
@@ -158,10 +184,10 @@ void MS1AudioProcessorEditor::drawEq (juce::Graphics& g)
     std::array<ms1::EqBand, ms1::kEqBands> bands;
     for (int b = 0; b < ms1::kEqBands; ++b) bands[(size_t) b] = eqBand (b);
 
-    g.setColour (kInk.withAlpha (eqIn ? 0.35f : 0.15f));                                            // the 0 dB line and the scale on the right
+    g.setColour (kPal.cream.withAlpha (eqIn ? 0.45f : 0.2f));                                            // the 0 dB line and the scale on the right
     g.drawLine (r.getX(), yOf (0.0f), r.getRight(), yOf (0.0f), 1.2f);
     for (float db : { -12.0f, 0.0f, 12.0f })
-        drawText (g, juce::String::formatted ("%+d", (int) db), r.getRight() + 16.0f, yOf (db), 13.0f, kInk.withAlpha (0.4f), false, 0.0f);
+        screenText (g, juce::String::formatted ("%+d", (int) db), r.getRight() + 22.0f, yOf (db), 13.0f, kPal.phosphorDim);
 
     juce::Path curve;
     for (int i = 0; i <= 200; ++i)
@@ -175,7 +201,7 @@ void MS1AudioProcessorEditor::drawEq (juce::Graphics& g)
     {
         juce::Graphics::ScopedSaveState ss (g);
         g.reduceClipRegion (r.expanded (2.0f).toNearestInt());
-        g.setColour ((eqIn ? kInk : kInk.withAlpha (0.5f)).withAlpha (eqIn ? 0.95f : 0.35f));
+        g.setColour (kPal.cream.withAlpha (eqIn ? 0.95f : 0.35f));
         g.strokePath (curve, juce::PathStrokeType (2.2f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
     }
     for (int b = 0; b < ms1::kEqBands; ++b)
@@ -183,40 +209,36 @@ void MS1AudioProcessorEditor::drawEq (juce::Graphics& g)
         const auto& e = bands[(size_t) b];
         const juce::Point<float> c (xOf (e.freq), yOf (e.gainDb));
         const bool sel = b == selBand, live = eqIn && e.on;
-        g.setColour (juce::Colours::black.withAlpha (0.6f));
-        g.fillEllipse (juce::Rectangle<float> (22.0f, 22.0f).withCentre (c));
-        if (sel) { g.setColour (kBody.withAlpha (live ? 1.0f : 0.5f)); g.fillEllipse (juce::Rectangle<float> (22.0f, 22.0f).withCentre (c)); }
-        g.setColour ((sel ? kBody : kInk).withAlpha (live ? 0.95f : 0.35f));
-        g.drawEllipse (juce::Rectangle<float> (22.0f, 22.0f).withCentre (c), 1.6f);
-        drawText (g, juce::String (b + 1), c.x, c.y, 13.0f, sel ? kDark.withAlpha (live ? 1.0f : 0.6f) : kInk.withAlpha (live ? 0.95f : 0.4f), true, 0.0f);
+        const auto disc = juce::Rectangle<float> (22.0f, 22.0f).withCentre (c);
+        g.setColour (kPal.screen);
+        g.fillEllipse (disc);
+        if (sel) { g.setColour (kPal.accent.withAlpha (live ? 1.0f : 0.5f)); g.fillEllipse (disc); }
+        g.setColour ((sel ? kPal.accent : kPal.cream).withAlpha (live ? 0.95f : 0.35f));
+        g.drawEllipse (disc, 1.6f);
+        screenText (g, juce::String (b + 1), c.x, c.y, 13.0f, sel ? kPal.screen.withAlpha (live ? 1.0f : 0.6f) : kPal.cream.withAlpha (live ? 0.95f : 0.4f), true);
         if (live && isOn (("eq" + juce::String (b + 1) + "Dyn").toRawUTF8()))                      // a dynamic band: a ring that fills with how much of its gain applies now
         {
             const float amt = proc.eqDynAmount (b);
-            g.setColour (kBody.withAlpha (0.25f + 0.75f * amt));
+            g.setColour (kPal.accent.withAlpha (0.25f + 0.75f * amt));
             g.drawEllipse (juce::Rectangle<float> (30.0f, 30.0f).withCentre (c), 1.0f + 2.0f * amt);
         }
     }
 
-    // type, frequency, gain, Q of the selected band: top left of the panel, above BEFORE
+    // type, frequency, gain, Q of the selected band: the info line at the top left of the panel
     const auto s = eqInfoRect();
     const auto& e = bands[(size_t) selBand];
     const char* type = selBand == 0 ? "LOW SHELF" : selBand == ms1::kEqBands - 1 ? "HIGH SHELF" : "BELL";
     const juce::String freq = e.freq >= 1000.0f ? juce::String (e.freq * 0.001f, 2) + " kHz" : juce::String ((int) std::lround (e.freq)) + " Hz";
     drawText (g, juce::String (selBand + 1) + "  " + type + "   " + freq + "   " + juce::String::formatted ("%+.1f dB", (double) e.gainDb) + "   Q " + juce::String (e.q, 2),
-              s.getX(), s.getCentreY(), 13.0f, kInk.withAlpha (0.95f), true, 0.06f, juce::Justification::centredLeft);
-    {   // the dynamic strip of the selected band
+              s.getX(), s.getCentreY(), 16.0f, kPal.ink, true, 0.06f, juce::Justification::centredLeft);
+    {   // the strip of the selected band: dynamic EQ
         const juce::String id = "eq" + juce::String (selBand + 1);
-        const auto s2 = eqDynStripRect();
-        g.setColour (juce::Colours::black.withAlpha (0.4f));
-        g.fillRoundedRectangle (s2, 8.0f);
         const bool dyn = isOn ((id + "Dyn").toRawUTF8()), below = isOn ((id + "DynBelow").toRawUTF8());
         for (int i = 0; i < 2; ++i)
-        {
-            vibr::ui::paintFlatButton (g, kPal, eqDynButtonRect (i), i == 0 ? "DYNAMIC" : (below ? "BELOW" : "ABOVE"), i == 0 ? dyn : below, 13.0f, 1.0f, 8.0f, 0.08f, 1.2f);
-        }
+            ui::paintFlatButton (g, kPal, eqDynButtonRect (i), i == 0 ? "DYNAMIC" : (below ? "BELOW" : "ABOVE"), i == 0 ? dyn : below, 14.0f, 1.0f, 4.0f, 0.04f);
         {
             const bool lin = choice ("eqPhase") == 1;
-            vibr::ui::paintFlatButton (g, kPal, eqPhaseRect(), lin ? "LINEAR" : "MIN PH", lin, 13.0f, 1.0f, 8.0f, 0.06f, 1.2f);
+            ui::paintFlatButton (g, kPal, eqPhaseRect(), lin ? "LINEAR" : "MIN PH", lin, 14.0f, 1.0f, 4.0f, 0.04f);
             paintCycleDots (g, eqPhaseRect(), 2, lin ? 1 : 0, lin);
         }
         const float thr = value ((id + "DynThr").toRawUTF8()), ratio = value ((id + "DynRatio").toRawUTF8()), atk = value ((id + "DynAtk").toRawUTF8()), rel = value ((id + "DynRel").toRawUTF8());
@@ -225,35 +247,32 @@ void MS1AudioProcessorEditor::drawEq (juce::Graphics& g)
         {
             static const char* suffix[4] = { "DynThr", "DynRatio", "DynAtk", "DynRel" };
             const auto f = eqDynFieldRect (i);
-            vibr::ui::paintField (g, kPal, f, text[i], dyn, 13.0f);
+            ui::paintFlatButton (g, kPal, f, text[i], false, 14.0f, dyn ? 1.0f : 0.55f, 4.0f, 0.02f);
             if (auto* par = proc.apvts.getParameter (id + suffix[i]))                       // the value as a bar along the bottom edge: the field is dragged up / down, a double click resets it
             {
-                const auto track = juce::Rectangle<float> (f.getX() + 10.0f, f.getBottom() - 6.0f, f.getWidth() - 20.0f, 3.0f);
-                g.setColour (kInk.withAlpha (dyn ? 0.18f : 0.08f)); g.fillRoundedRectangle (track, 1.5f);
-                g.setColour (dyn ? kBody : kInk.withAlpha (0.3f)); g.fillRoundedRectangle (track.withWidth (track.getWidth() * par->getValue()), 1.5f);
+                const auto track = juce::Rectangle<float> (f.getX() + 10.0f, f.getBottom() - 8.0f, f.getWidth() - 20.0f, 3.0f);
+                g.setColour (kPal.ink.withAlpha (dyn ? 0.18f : 0.08f)); g.fillRoundedRectangle (track, 1.5f);
+                g.setColour (kPal.ink.withAlpha (dyn ? 1.0f : 0.35f)); g.fillRoundedRectangle (track.withWidth (track.getWidth() * par->getValue()), 1.5f);
             }
         }
     }
     const char* labels[7] = { "EQ IN", "BAND ON", "STEREO", "L", "R", "M", "S" };
     const bool on[7] = { eqIn, e.on, e.mode == ms1::EqStereo, e.mode == ms1::EqLeft, e.mode == ms1::EqRight, e.mode == ms1::EqMid, e.mode == ms1::EqSide };
     for (int i = 0; i < 7; ++i)
-    {
-        vibr::ui::paintFlatButton (g, kPal, eqButtonRect (i), labels[i], on[i], 13.0f, 1.0f, 8.0f, 0.08f, 1.2f);
-    }
+        ui::paintFlatButton (g, kPal, eqButtonRect (i), labels[i], on[i], 14.0f, 1.0f, 4.0f, 0.04f);
 }
 
 //==============================================================================
-// LOUDNESS: momentary, short-term, integrated, range, true-peak hold and the limiter's gain reduction, and the short-term history
-// OUTPUT panel: true-peak bars for the left and right channel (the tick is the limiter ceiling, red above it, the mark holds the highest peak for 1.5 s), their peak
-// in dB under them, and the OVER lamp: it lights red when the output went above the ceiling and goes out 1.5 s after the last overshoot (RESET or a click on it clears it at once)
+// OUTPUT panel: true-peak bars for the left and right channel (the shared meter), and the OVER lamp on the top edge: it lights red when the output went above the ceiling
+// and goes out 1.5 s after the last overshoot (RESET or a click on it clears it at once)
 void MS1AudioProcessorEditor::drawOutputMeters (juce::Graphics& g)
 {
-    meter.paint (g, meterOrigin().x, meterOrigin().y, isOn ("power"), kBody, kInk, 110.0f, 26.0f, 13.0f);
+    ui::paintMeter (g, kPal, meter, meterOrigin().x, meterOrigin().y, isOn ("power"));
     const bool over = (juce::int32) (overLitUntil - juce::Time::getMillisecondCounter()) > 0;
-    const auto lamp = overRect();
-    g.setColour (over ? kRed : juce::Colours::black.withAlpha (0.45f)); g.fillRoundedRectangle (lamp, 10.0f);
-    g.setColour (over ? kRed : kInk.withAlpha (0.35f)); g.drawRoundedRectangle (lamp.reduced (0.5f), 10.0f, 1.2f);
-    drawText (g, "OVER", lamp.getCentreX(), lamp.getCentreY(), 13.0f, over ? kInk : kInk.withAlpha (0.55f), true, 0.14f);
+    const auto b = overRect();
+    cutEdge (g, b, panelRect (2).getY());
+    paintLamp (g, { b.getX() + 10.0f, b.getCentreY() }, over, kPal.ledOn, kPal.ledOff);
+    drawText (g, "OVER", b.getX() + 26.0f, b.getCentreY(), 16.0f, kPal.ink, true, 0.1f, juce::Justification::centredLeft);
 }
 
 void MS1AudioProcessorEditor::drawLoudness (juce::Graphics& g)
@@ -267,44 +286,45 @@ void MS1AudioProcessorEditor::drawLoudness (juce::Graphics& g)
     const float peakDb = lv.samplePeakDb.load(), rmsDb = lv.rmsDb.load(), winPeak = lv.windowPeakDb.load(), shortTerm = ld.shortTerm.load(), momentary = ld.momentary.load(), ceiling = value ("limCeiling");
     const auto diff = [] (float a, float b) { return a <= -70.0f || b <= -70.0f ? juce::String ("--") : juce::String (a - b, 1); };          // the ratios need real signal (above the -70 absolute gate)
 
-    // the meters: a label, a bar that fills from the left over a scale, an optional tick (the target, the ceiling) and the value at the end
-    const auto panel = panelRect (4);
-    const float labelX = panel.getX() + 14.0f, barX = panel.getX() + 98.0f, barW = panel.getX() + kLoudMeterW - 54.0f - barX;
-    const auto meter = [&] (float y, const char* label, float lo, float hi, float v, juce::Colour fill, float tick, const juce::String& text, juce::Colour textCol, float redFrom = 1.0e9f)
+    // the meters on one screen: a label, a bar that fills from the left over a scale, an optional tick (the target, the ceiling) and the value at the end
+    const auto panel = panelRect (4), scr = loudBarsRect();
+    ui::paintScreen (g, kPal, scr, 6.0f);
+    const float labelX = scr.getX() + 12.0f, barX = scr.getX() + 100.0f, barW = 76.0f, valueX = scr.getRight() - 12.0f;
+    const auto meter = [&] (int row, const char* label, float lo, float hi, float v, juce::Colour fill, float tick, const juce::String& text, juce::Colour textCol, float redFrom = 1.0e9f)
     {
-        const juce::Rectangle<float> bar (barX, y + 4.0f, barW, 14.0f);
-        g.setColour (juce::Colours::black.withAlpha (0.45f)); g.fillRoundedRectangle (bar, 4.0f);
+        const float cy = scr.getY() + 20.0f + 27.0f * (float) row;
+        const juce::Rectangle<float> bar (barX, cy - 6.0f, barW, 12.0f);
+        g.setColour (kPal.segOff); g.fillRoundedRectangle (bar, 3.0f);
         const auto xOf = [&] (float x) { return bar.getX() + bar.getWidth() * (std::clamp (x, lo, hi) - lo) / (hi - lo); };
         if (v > lo)
         {
             juce::Graphics::ScopedSaveState ss (g);
-            juce::Path clip; clip.addRoundedRectangle (bar, 4.0f); g.reduceClipRegion (clip);
+            juce::Path clip; clip.addRoundedRectangle (bar, 3.0f); g.reduceClipRegion (clip);
             const float x1 = xOf (v), xr = xOf (redFrom);
             g.setColour (fill); g.fillRect (juce::Rectangle<float> (bar.getX(), bar.getY(), std::min (x1, xr) - bar.getX(), bar.getHeight()));
-            if (v > redFrom) { g.setColour (kRed); g.fillRect (juce::Rectangle<float> (xr, bar.getY(), x1 - xr, bar.getHeight())); }
+            if (v > redFrom) { g.setColour (kPal.segRed); g.fillRect (juce::Rectangle<float> (xr, bar.getY(), x1 - xr, bar.getHeight())); }
         }
-        if (tick > lo) { g.setColour (kInk.withAlpha (0.95f)); g.fillRect (xOf (tick) - 0.8f, bar.getY() - 3.0f, 1.6f, bar.getHeight() + 6.0f); }
-        drawText (g, label, labelX, bar.getCentreY(), 13.0f, kInk.withAlpha (0.6f), true, 0.12f, juce::Justification::centredLeft);
-        drawText (g, text, panel.getX() + kLoudMeterW, bar.getCentreY(), 13.0f, textCol, true, 0.02f, juce::Justification::centredRight);
+        if (tick > lo) { g.setColour (kPal.cream); g.fillRect (xOf (tick) - 0.8f, bar.getY() - 3.0f, 1.6f, bar.getHeight() + 6.0f); }
+        screenText (g, label, labelX, cy, 13.0f, kPal.phosphorDim, false, juce::Justification::centredLeft);
+        screenText (g, text, valueX, cy, 13.0f, textCol, true, juce::Justification::centredRight);
     };
     const bool onTarget = integrated > -119.0f && std::abs (integrated - target) < 1.0f;
-    meter (panel.getY() + 36.0f,  "MOMENTARY",  -40.0f, 0.0f, momentary, kBody.withAlpha (0.55f), target, lufs (momentary), kInk.withAlpha (0.95f));
-    meter (panel.getY() + 63.0f,  "SHORT-TERM", -40.0f, 0.0f, shortTerm, kBody.withAlpha (0.8f), target, lufs (shortTerm), kInk.withAlpha (0.95f));
-    meter (panel.getY() + 90.0f,  "INTEGRATED", -40.0f, 0.0f, integrated, kBody, target, lufs (integrated), onTarget ? kBody : kInk.withAlpha (0.95f));
-    meter (panel.getY() + 123.0f, "LEVEL",      -60.0f, 0.0f, rmsDb, kInk.withAlpha (0.55f), peakDb, peakDb <= -119.0f ? juce::String ("--") : juce::String (peakDb, 1), peakDb >= -0.05f ? kRed : kInk.withAlpha (0.95f));
-    meter (panel.getY() + 150.0f, "TRUE PEAK",  -24.0f, 0.0f, tpMax, kInk.withAlpha (0.75f), ceiling, tpMax <= -119.0f ? juce::String ("--") : juce::String (tpMax, 1), tpMax > ceiling + 0.05f ? kRed : kInk.withAlpha (0.95f), ceiling + 0.05f);
-    meter (panel.getY() + 177.0f, "GAIN RED.",   0.0f, 12.0f, -gr, kBody, -1.0e9f, juce::String (gr, 1), gr < -6.0f ? kRed : kInk.withAlpha (0.95f), 6.0f);
-    // the rest, as one quiet line
+    meter (0, "MOMENTARY",  -40.0f, 0.0f, momentary, kPal.accent.withAlpha (0.55f), target, lufs (momentary), kPal.phosphor);
+    meter (1, "SHORT-TERM", -40.0f, 0.0f, shortTerm, kPal.accent.withAlpha (0.8f), target, lufs (shortTerm), kPal.phosphor);
+    meter (2, "INTEGRATED", -40.0f, 0.0f, integrated, kPal.accent, target, lufs (integrated), onTarget ? kPal.accent : kPal.phosphor);
+    meter (3, "LEVEL",      -60.0f, 0.0f, rmsDb, kPal.phosphorDim, peakDb, peakDb <= -119.0f ? juce::String ("--") : juce::String (peakDb, 1), peakDb >= -0.05f ? kPal.segRed : kPal.phosphor);
+    meter (4, "TRUE PEAK",  -24.0f, 0.0f, tpMax, kPal.phosphor.withAlpha (0.75f), ceiling, tpMax <= -119.0f ? juce::String ("--") : juce::String (tpMax, 1), tpMax > ceiling + 0.05f ? kPal.segRed : kPal.phosphor, ceiling + 0.05f);
+    meter (5, "GAIN RED.",   0.0f, 12.0f, -gr, kPal.accent, -1.0e9f, juce::String (gr, 1), gr < -6.0f ? kPal.segRed : kPal.phosphor, 6.0f);
+    // the rest, as one quiet line under the screens
     drawText (g, "RANGE " + (ld.range.load() > 0.05f ? juce::String (ld.range.load(), 1) : juce::String ("--")) + " LU    CREST " + diff (peakDb, rmsDb) + "    PLR " + diff (tpMax, integrated)
                  + "    PSR " + diff (winPeak, shortTerm) + "    DR " + (lv.drValid.load() && rmsDb > -70.0f ? juce::String ((int) std::lround (lv.dr.load())) : juce::String ("--")),
-              panel.getCentreX(), panel.getY() + 222.0f, 13.0f, kInk.withAlpha (0.6f), true, 0.06f);
-    // the short-term history
+              scr.getX(), panel.getY() + 215.0f, 14.0f, kPal.inkSoft, true, 0.06f, juce::Justification::centredLeft);
+    // the short-term history: a scope with the target dashed
+    ui::paintScope (g, kPal, loudHistScreenRect(), "SHORT-TERM, 5 MIN", {});
     const auto h = historyRect();
-    g.setColour (juce::Colours::black.withAlpha (0.45f));
-    g.fillRoundedRectangle (h.expanded (4.0f), 6.0f);
     const auto yOf = [&] (float lu) { return h.getBottom() - h.getHeight() * (std::clamp (lu, -40.0f, 0.0f) + 40.0f) / 40.0f; };
     const float dash[2] = { 5.0f, 4.0f };
-    g.setColour (kBody.withAlpha (0.7f));
+    g.setColour (kPal.phosphorDim);
     g.drawDashedLine (juce::Line<float> (h.getX(), yOf (target), h.getRight(), yOf (target)), dash, 2, 1.2f);
     const int pos = ld.historyPos.load (std::memory_order_acquire);
     juce::Path line;
@@ -316,47 +336,47 @@ void MS1AudioProcessorEditor::drawLoudness (juce::Graphics& g)
         const juce::Point<float> pt (h.getX() + h.getWidth() * (float) k / (float) (ms1::Loudness::kHistory - 1), yOf (v));
         if (! started) { line.startNewSubPath (pt); started = true; } else line.lineTo (pt);
     }
-    g.setColour (kBody);
+    g.setColour (kPal.accent);
     juce::Graphics::ScopedSaveState ss (g);
     g.reduceClipRegion (h.expanded (2.0f).toNearestInt());
     g.strokePath (line, juce::PathStrokeType (1.8f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-    drawText (g, "SHORT-TERM, LAST 5 MIN", h.getX() + 6.0f, h.getY() + 8.0f, 13.0f, kInk.withAlpha (0.45f), true, 0.12f, juce::Justification::centredLeft);
 }
 
 //==============================================================================
-// GAIN REDUCTION of the bus compressor: the last 8 seconds hanging from the top (0 .. -12 dB), the value now and the largest in the window
+// GAIN REDUCTION of the bus compressor / the limiter: the last 8 seconds hanging from the top (0 .. -12 dB), the value now and the largest in the window
 void MS1AudioProcessorEditor::drawBusGr (juce::Graphics& g, const std::array<float, 240>& hist, bool on, float now, const char* maxLabel)
 {
-    const auto panel = panelRect (6), r = juce::Rectangle<float> (panel.getX() + 18.0f, panel.getY() + 36.0f, panel.getWidth() - 36.0f, 188.0f);
-    g.setColour (juce::Colours::black.withAlpha (0.45f));
-    g.fillRoundedRectangle (r.expanded (6.0f), 10.0f);
-    const auto yOf = [&] (float db) { return r.getY() + r.getHeight() * std::clamp (-db, 0.0f, 12.0f) / 12.0f; };
+    const auto panel = panelRect (6), r = dispRect();
+    ui::paintScreen (g, kPal, r, 6.0f);
+    const auto yOf = [&] (float db) { return r.getY() + 8.0f + (r.getHeight() - 16.0f) * std::clamp (-db, 0.0f, 12.0f) / 12.0f; };
+    const auto plot = r.withTrimmedLeft (30.0f).withTrimmedRight (12.0f);
     for (float db : { 0.0f, -3.0f, -6.0f, -9.0f, -12.0f })
     {
-        g.setColour (kInk.withAlpha (0.1f));
-        g.drawLine (r.getX(), yOf (db), r.getRight(), yOf (db), 1.0f);
-        drawText (g, juce::String ((int) db), r.getRight() - 12.0f, yOf (db) + (db == 0.0f ? 8.0f : -7.0f), 13.0f, kInk.withAlpha (0.45f), false, 0.0f);
+        g.setColour (kPal.phosphor.withAlpha (0.10f));
+        g.drawLine (plot.getX(), yOf (db), plot.getRight(), yOf (db), 1.0f);
+        screenText (g, juce::String ((int) db), r.getX() + 6.0f + 12.0f, yOf (db) + (db == 0.0f ? 6.0f : db == -12.0f ? -6.0f : 0.0f), 13.0f, kPal.phosphorDim);
     }
     juce::Path area;
     const int n = (int) hist.size();
     float worst = 0.0f;
-    area.startNewSubPath (r.getX(), r.getY());
+    area.startNewSubPath (plot.getX(), yOf (0.0f));
     for (int k = 0; k < n; ++k)
     {
         const float v = hist[(size_t) ((grPos + k) % n)];
         worst = std::min (worst, v);
-        area.lineTo (r.getX() + r.getWidth() * (float) k / (float) (n - 1), yOf (v));
+        area.lineTo (plot.getX() + plot.getWidth() * (float) k / (float) (n - 1), yOf (v));
     }
-    area.lineTo (r.getRight(), r.getY());
+    area.lineTo (plot.getRight(), yOf (0.0f));
     area.closeSubPath();
-    g.setColour (kBody.withAlpha (on ? 0.25f : 0.1f));
+    g.setColour (kPal.accent.withAlpha (on ? 0.25f : 0.1f));
     g.fillPath (area);
-    g.setColour (kBody.withAlpha (on ? 1.0f : 0.35f));
+    g.setColour (kPal.accent.withAlpha (on ? 1.0f : 0.35f));
     g.strokePath (area, juce::PathStrokeType (1.6f));
-    drawText (g, "NOW", panel.getX() + 70.0f, panel.getBottom() - 46.0f, 13.0f, kInk.withAlpha (0.5f), true, 0.16f);
-    drawText (g, juce::String (now, 1) + " dB", panel.getX() + 70.0f, panel.getBottom() - 24.0f, 20.0f, on ? kBody : kInk.withAlpha (0.4f), true, 0.02f);
-    drawText (g, maxLabel, panel.getRight() - 90.0f, panel.getBottom() - 46.0f, 13.0f, kInk.withAlpha (0.5f), true, 0.16f);
-    drawText (g, juce::String (worst, 1) + " dB", panel.getRight() - 90.0f, panel.getBottom() - 24.0f, 20.0f, worst < -6.0f ? kRed : (on ? kInk.withAlpha (0.95f) : kInk.withAlpha (0.4f)), true, 0.02f);
+    const float cxNow = panel.getX() + 90.0f, cxMax = panel.getRight() - 90.0f;
+    drawText (g, "NOW", cxNow, panel.getY() + 232.0f, 14.0f, kPal.inkSoft, true, 0.16f);
+    drawText (g, juce::String (now, 1) + " dB", cxNow, panel.getY() + 260.0f, 22.0f, on ? kPal.ink : kPal.inkSoft, true, 0.02f);
+    drawText (g, maxLabel, cxMax, panel.getY() + 232.0f, 14.0f, kPal.inkSoft, true, 0.16f);
+    drawText (g, juce::String (worst, 1) + " dB", cxMax, panel.getY() + 260.0f, 22.0f, worst < -6.0f ? kWarn : (on ? kPal.ink : kPal.inkSoft), true, 0.02f);
 }
 
 //==============================================================================
@@ -367,23 +387,22 @@ void MS1AudioProcessorEditor::drawStageDisplay (juce::Graphics& g)
     if (step == 5) { drawBusGr (g, limHist, true, -std::abs (proc.grDb.load()), "MAX (8 S)"); return; }
     if (tab == 3) { drawBusGr (g, grHist, isOn ("busOn"), proc.busGrDb(), "MAX (8 S)"); return; }
     const auto panel = panelRect (6), full = dispRect(), r = tab == 1 ? full.withTrimmedRight (172.0f) : full;
-    g.setColour (juce::Colours::black.withAlpha (0.45f));
-    g.fillRoundedRectangle (full.expanded (6.0f), 10.0f);
+    ui::paintScreen (g, kPal, full, 6.0f);
     const auto xOf = [&] (float f) { return r.getX() + r.getWidth() * std::log (f / 20.0f) / std::log (1000.0f); };
 
     if (tab == 2)
     {
         const int ch = choice ("colourChar");
         const float drive = value ("colourDrive") * 0.01f;
-        const auto sq = juce::Rectangle<float> (r.getHeight(), r.getHeight()).withCentre ({ r.getCentreX(), r.getCentreY() });
+        const auto sq = juce::Rectangle<float> (r.getHeight() - 16.0f, r.getHeight() - 16.0f).withCentre ({ r.getCentreX(), r.getCentreY() });
         const auto px = [&] (float x) { return sq.getCentreX() + x * sq.getWidth() * 0.5f; };
         const auto py = [&] (float y) { return sq.getCentreY() - std::clamp (y, -1.15f, 1.15f) * sq.getHeight() * 0.5f; };
-        g.setColour (kInk.withAlpha (0.12f));
+        g.setColour (kPal.phosphor.withAlpha (0.2f));
         g.drawRect (sq, 1.0f);
         g.drawLine (sq.getX(), sq.getCentreY(), sq.getRight(), sq.getCentreY(), 1.0f);
         g.drawLine (sq.getCentreX(), sq.getY(), sq.getCentreX(), sq.getBottom(), 1.0f);
         const float dash[2] = { 4.0f, 4.0f };
-        g.setColour (kInk.withAlpha (0.35f));
+        g.setColour (kPal.phosphorDim.withAlpha (0.7f));
         g.drawDashedLine (juce::Line<float> (px (-1.0f), py (-1.0f), px (1.0f), py (1.0f)), dash, 2, 1.0f);
         juce::Path curve;
         for (int i = 0; i <= 120; ++i)
@@ -395,14 +414,14 @@ void MS1AudioProcessorEditor::drawStageDisplay (juce::Graphics& g)
         {
             juce::Graphics::ScopedSaveState ss (g);
             g.reduceClipRegion (sq.expanded (1.0f).toNearestInt());
-            g.setColour (isOn ("colourOn") ? kBody : kBody.withAlpha (0.35f));
+            g.setColour (isOn ("colourOn") ? kPal.accent : kPal.accent.withAlpha (0.35f));
             g.strokePath (curve, juce::PathStrokeType (2.6f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
         }
         static const char* names[3] = { "TAPE", "TUBE", "TRANSFORMER" };
-        drawText (g, "IN", sq.getRight() + 16.0f, sq.getCentreY() + 10.0f, 13.0f, kInk.withAlpha (0.45f), true, 0.12f);
-        drawText (g, "OUT", sq.getCentreX() + 14.0f, sq.getY() + 8.0f, 13.0f, kInk.withAlpha (0.45f), true, 0.12f);
-        drawText (g, names[juce::jlimit (0, 2, ch)], panel.getCentreX(), panel.getY() + 240.0f, 16.0f, kBody, true, 0.14f);
-        drawText (g, "4X OVERSAMPLED  |  LATENCY " + juce::String (ms1::Colour::kLatency) + " SAMPLES", panel.getCentreX(), panel.getY() + 264.0f, 13.0f, kInk.withAlpha (0.5f), true, 0.12f);
+        screenText (g, "IN", sq.getRight() - 14.0f, sq.getCentreY() + 12.0f, 13.0f, kPal.phosphorDim);
+        screenText (g, "OUT", sq.getCentreX() + 20.0f, sq.getY() + 10.0f, 13.0f, kPal.phosphorDim);
+        drawText (g, names[juce::jlimit (0, 2, ch)], panel.getCentreX(), panel.getY() + 232.0f, 18.0f, kPal.ink, true, 0.14f);
+        drawText (g, "4X OVERSAMPLED  |  LATENCY " + juce::String (ms1::Colour::kLatency) + " SAMPLES", panel.getCentreX(), panel.getY() + 256.0f, 14.0f, kPal.inkSoft, true, 0.06f);
         return;
     }
 
@@ -417,59 +436,60 @@ void MS1AudioProcessorEditor::drawStageDisplay (juce::Graphics& g)
     {
         const float x0 = xOf (edge[k]), x1 = xOf (edge[k + 1]);
         const bool sel = tab == 0 && k == selMb;
-        g.setColour (kBody.withAlpha (sel ? 0.16f : 0.07f));
-        g.fillRect (juce::Rectangle<float> (x0, r.getY(), x1 - x0, r.getHeight()));
+        g.setColour (kPal.accent.withAlpha (sel ? 0.18f : 0.07f));
+        g.fillRect (juce::Rectangle<float> (x0, r.getY() + 3.0f, x1 - x0, r.getHeight() - 6.0f));
         const float cx = 0.5f * (x0 + x1), bw = std::min (34.0f, x1 - x0 - 10.0f);
         if (tab == 0)
         {
-            const float gr = proc.mbGr[(size_t) k].load (std::memory_order_relaxed), h = r.getHeight() * std::clamp (-gr / 18.0f, 0.0f, 1.0f);
+            const float gr = proc.mbGr[(size_t) k].load (std::memory_order_relaxed), h = (r.getHeight() - 6.0f) * std::clamp (-gr / 18.0f, 0.0f, 1.0f);
             const juce::String id = "mb" + juce::String (k + 1);
             const bool bandOn = isOn ((id + "On").toRawUTF8());
-            g.setColour (kBody.withAlpha (stageOn && bandOn ? 0.85f : 0.3f));
-            g.fillRoundedRectangle (juce::Rectangle<float> (bw, std::max (2.0f, h)).withX (cx - bw * 0.5f).withY (r.getY()), 3.0f);
-            drawText (g, juce::String (gr, 1), cx, r.getY() + 14.0f + std::max (2.0f, h) , 13.0f, kInk.withAlpha (0.85f), true, 0.02f);
-            drawText (g, kBandName[k], cx, r.getBottom() - 14.0f, 13.0f, isOn ((id + "Solo").toRawUTF8()) ? kBody : kInk.withAlpha (sel ? 1.0f : 0.6f), true, 0.1f);
+            g.setColour (kPal.accent.withAlpha (stageOn && bandOn ? 0.85f : 0.3f));
+            g.fillRoundedRectangle (juce::Rectangle<float> (bw, std::max (2.0f, h)).withX (cx - bw * 0.5f).withY (r.getY() + 3.0f), 3.0f);
+            screenText (g, juce::String (gr, 1), cx, r.getY() + 16.0f + std::max (2.0f, h), 13.0f, kPal.phosphor, true);
+            screenText (g, kBandName[k], cx, r.getBottom() - 14.0f, 13.0f, isOn ((id + "Solo").toRawUTF8()) ? kPal.accent : sel ? kPal.phosphor : kPal.phosphorDim, true);
         }
         else
         {
-            const float w = value (("width" + juce::String (k + 1)).toRawUTF8()) * 0.01f, h = r.getHeight() * 0.5f * std::clamp (w, 0.0f, 2.0f);
-            g.setColour (kBody.withAlpha (stageOn ? 0.85f : 0.3f));
-            g.fillRoundedRectangle (juce::Rectangle<float> (bw, std::max (2.0f, h)).withX (cx - bw * 0.5f).withY (r.getBottom() - std::max (2.0f, h)), 3.0f);
+            const float w = value (("width" + juce::String (k + 1)).toRawUTF8()) * 0.01f, h = (r.getHeight() - 6.0f) * 0.5f * std::clamp (w, 0.0f, 2.0f);
+            g.setColour (kPal.accent.withAlpha (stageOn ? 0.85f : 0.3f));
+            g.fillRoundedRectangle (juce::Rectangle<float> (bw, std::max (2.0f, h)).withX (cx - bw * 0.5f).withY (r.getBottom() - 3.0f - std::max (2.0f, h)), 3.0f);
             static const char* nm[3] = { "LOW", "MID", "HIGH" };
-            drawText (g, juce::String ((int) std::lround (w * 100.0f)) + " %", cx, r.getBottom() - std::max (2.0f, h) - 12.0f, 13.0f, kInk.withAlpha (0.85f), true, 0.02f);
-            drawText (g, nm[k], cx, r.getBottom() - 14.0f, 13.0f, kInk.withAlpha (0.6f), true, 0.1f);
+            screenText (g, juce::String ((int) std::lround (w * 100.0f)) + " %", cx, r.getBottom() - 3.0f - std::max (2.0f, h) - 12.0f, 13.0f, kPal.phosphor, true);
+            screenText (g, nm[k], cx, r.getBottom() - 14.0f, 13.0f, kPal.phosphorDim, true);
             const float safe = proc.imager.safeScale[k].load (std::memory_order_relaxed);
-            if (isOn ("imgSafe") && safe < 0.98f) drawText (g, "SAFE " + juce::String ((int) std::lround ((safe - 1.0f) * 100.0f)) + " %", cx, r.getY() + 26.0f, 13.0f, kRed, true, 0.06f);
+            if (isOn ("imgSafe") && safe < 0.98f) screenText (g, juce::String ((int) std::lround ((safe - 1.0f) * 100.0f)) + " %", cx, r.getY() + 48.0f, 13.0f, kPal.segRed, true);        // the label of the row is in the top left
             const float sm = proc.imager.sideMidDb[k].load (std::memory_order_relaxed);                  // the measured width: the side level against the mid level of the band
-            drawText (g, sm <= -59.0f ? juce::String ("S/M --") : "S/M " + juce::String (sm, 0) + " dB", cx, r.getY() + 12.0f, 13.0f, sm > 0.0f ? kRed : kInk.withAlpha (0.6f), true, 0.04f);
+            screenText (g, sm <= -59.0f ? juce::String ("--") : juce::String (sm, 0), cx, r.getY() + 32.0f, 13.0f, sm > 0.0f ? kPal.segRed : kPal.phosphorDim, true);
         }
     }
+    if (tab == 1) screenText (g, isOn ("imgSafe") ? "S/M dB / SAFE %" : "S/M dB", r.getX() + 8.0f, r.getY() + 16.0f, 13.0f, kPal.phosphorDim, false, juce::Justification::centredLeft);
     if (tab == 1)                                                                              // the 100 % line
     {
         const float dash[2] = { 4.0f, 4.0f };
-        g.setColour (kInk.withAlpha (0.35f));
+        g.setColour (kPal.phosphorDim.withAlpha (0.7f));
         g.drawDashedLine (juce::Line<float> (r.getX(), r.getCentreY(), r.getRight(), r.getCentreY()), dash, 2, 1.0f);
     }
-    for (int j = 1; j < nBands; ++j)                                                           // the crossovers: grip and frequency
+    for (int j = 1; j < nBands; ++j)                                                           // the crossovers: grip and frequency (under the screen)
     {
         const float x = xOf (edge[j]);
-        g.setColour (kInk.withAlpha (0.75f));
-        g.drawLine (x, r.getY(), x, r.getBottom(), 1.4f);
+        g.setColour (kPal.cream.withAlpha (0.8f));
+        g.drawLine (x, r.getY() + 3.0f, x, r.getBottom() - 3.0f, 1.4f);
         g.fillRoundedRectangle (juce::Rectangle<float> (8.0f, 22.0f).withCentre ({ x, r.getCentreY() }), 3.0f);
-        drawText (g, edge[j] >= 1000.0f ? juce::String (edge[j] * 0.001f, 2) + "k" : juce::String ((int) std::lround (edge[j])), x, panel.getY() + 236.0f, 13.0f, kInk.withAlpha (0.7f), true, 0.04f);
+        drawText (g, edge[j] >= 1000.0f ? juce::String (edge[j] * 0.001f, 2) + "k" : juce::String ((int) std::lround (edge[j])), x, panel.getY() + 226.0f, 14.0f, kPal.ink, true, 0.04f);
     }
     if (tab == 1)                                                                              // the goniometer: side to the sides, mid up (L = left diagonal)
     {
-        const auto gr = goniometerRect().reduced (4.0f);
+        const auto gr = goniometerRect().reduced (8.0f);
         const auto sq = juce::Rectangle<float> (std::min (gr.getWidth(), gr.getHeight()), std::min (gr.getWidth(), gr.getHeight())).withCentre (gr.getCentre());
-        g.setColour (kInk.withAlpha (0.14f));
+        g.setColour (kPal.phosphor.withAlpha (0.2f));
         g.drawRect (sq, 1.0f);
         g.drawLine (sq.getX(), sq.getCentreY(), sq.getRight(), sq.getCentreY(), 1.0f);
         g.drawLine (sq.getCentreX(), sq.getY(), sq.getCentreX(), sq.getBottom(), 1.0f);
         const float half = sq.getWidth() * 0.5f;
         juce::Graphics::ScopedSaveState ss (g);
         g.reduceClipRegion (sq.toNearestInt());
-        g.setColour (kBody.withAlpha (isOn ("imgOn") ? 0.55f : 0.3f));
+        g.setColour (kPal.accent.withAlpha (isOn ("imgOn") ? 0.7f : 0.35f));
         const int pos = proc.stereoMeter.scopePos.load (std::memory_order_relaxed);
         for (int k = 0; k < ms1::StereoMeter::kScope; ++k)
         {
@@ -479,18 +499,18 @@ void MS1AudioProcessorEditor::drawStageDisplay (juce::Graphics& g)
             g.fillRect (sq.getCentreX() + std::clamp (sx, -1.0f, 1.0f) * half * 0.95f - 0.8f, sq.getCentreY() - std::clamp (my, -1.0f, 1.0f) * half * 0.95f - 0.8f, 1.6f, 1.6f);
         }
     }
-    if (tab == 0) drawText (g, juce::String (kBandName[selMb]) + " BAND: CLICK A BAND, DRAG A CROSSOVER", panel.getCentreX(), panel.getY() + 264.0f, 13.0f, kInk.withAlpha (0.5f), true, 0.04f);
+    if (tab == 0) drawText (g, juce::String (kBandName[selMb]) + " BAND: CLICK A BAND, DRAG A CROSSOVER", panel.getCentreX(), panel.getY() + 256.0f, 14.0f, kPal.inkSoft, true, 0.04f);
     else
     {
         const float c = proc.stereoMeter.corrShort.load (std::memory_order_relaxed), ci = proc.stereoMeter.corrInt.load (std::memory_order_relaxed);
-        const auto bar = juce::Rectangle<float> (panel.getX() + 60.0f, panel.getY() + 254.0f, panel.getWidth() - 120.0f, 8.0f);
-        g.setColour (juce::Colours::black.withAlpha (0.5f));
+        const auto bar = juce::Rectangle<float> (panel.getX() + 60.0f, panel.getY() + 242.0f, panel.getWidth() - 120.0f, 8.0f);
+        g.setColour (kPal.ink.withAlpha (0.2f));
         g.fillRoundedRectangle (bar, 4.0f);
-        g.setColour (kInk.withAlpha (0.3f));
+        g.setColour (kPal.ink.withAlpha (0.6f));
         g.fillRect (bar.getCentreX() - 0.7f, bar.getY() - 3.0f, 1.4f, bar.getHeight() + 6.0f);
-        g.setColour (c < 0.0f ? kRed : kBody);
+        g.setColour (c < 0.0f ? kWarn : kPal.ink);
         g.fillEllipse (juce::Rectangle<float> (14.0f, 14.0f).withCentre ({ bar.getX() + bar.getWidth() * 0.5f * (c + 1.0f), bar.getCentreY() }));
-        drawText (g, "CORRELATION  SHORT-TERM " + juce::String::formatted ("%+.2f", (double) c) + "   INTEGRATED " + juce::String::formatted ("%+.2f", (double) ci), panel.getCentreX(), panel.getY() + 274.0f, 13.0f, kInk.withAlpha (0.6f), true, 0.12f);
+        drawText (g, "CORRELATION  SHORT-TERM " + juce::String::formatted ("%+.2f", (double) c) + "   INTEGRATED " + juce::String::formatted ("%+.2f", (double) ci), panel.getCentreX(), panel.getY() + 264.0f, 13.0f, kPal.inkSoft, true, 0.04f);
     }
 }
 

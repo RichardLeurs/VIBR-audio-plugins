@@ -2,20 +2,13 @@
 #pragma once
 
 #include "PluginProcessor.h"
-#include "ui/PedalLook.h"
-#include "ui/PedalEditor.h"
+#include "ui/VintagePedalEditor.h"
 #include "ClickZone.h"
 #include "MidiTarget.h"
-#include "WrapSlider.h"
 #include "ParamMemory.h"
 
-// Black knurled knob with a raised cap and a white pointer (same as the DM-1), drawn over the scales printed in the background.
-using OD2LookAndFeel = vibr::ui::PedalKnobLookAndFeel;
-
-
-
-
-class OD2AudioProcessorEditor : public vibr::ui::PedalEditor,
+// OD-2 in the default (Vintage Hardware) look: TYPE (a phosphor display and 12 flat buttons), DRIVE and TONE with their lower strips, drawn in code (no background image).
+class OD2AudioProcessorEditor : public vibr::ui::vintage::PedalEditor,
                                 private juce::Timer
 {
 public:
@@ -30,20 +23,25 @@ public:
 private:
     void timerCallback() override;
     void selectSlot (int s);
+    void setType (int t);
+    void toggleParam (const char* id);
 
     struct Knob
     {
-        WrapSlider slider;
+        const char* id;
+        const char* name;
+        juce::Slider slider;
         std::unique_ptr<juce::SliderParameterAttachment> attachment;
     };
 
     OD2AudioProcessor& proc;
-    OD2LookAndFeel laf;
-    MidiLearnUI midiUI { proc.midiMap };       // right-click a knob: MIDI learn
-    Knob type, param, level, drive, low, middle, high;
-    MidiTarget boostTarget;                        // over the BOOST slide switch (MIDI learn target)
+    MidiLearnUI midiUI { proc.midiMap };           // right-click a knob: MIDI learn
+    Knob param { "param", "PARAM", {}, {} }, level { "level", "LEVEL", {}, {} }, drive { "drive", "DRIVE", {}, {} },
+         low { "low", "LOW", {}, {} }, middle { "middle", "MIDDLE", {}, {} }, high { "high", "HIGH", {}, {} };
+    MidiTarget typeTarget;                         // over the type display: click = next type; right-click = MIDI learn of TYPE
+    MidiTarget boostTarget;                        // over the BOOST button (MIDI learn target)
     ClickZone paramZone, memoryZone;
-    ClickZone paramLedZone[5], memLedZone[5];       // click a lamp to select it
+    ClickZone paramLedZone[5], memLedZone[5];      // click a lamp to select it
 
     int slot = 0;                                  // what the PARAM knob edits: TYPE param, POST, PRE, DECAY, THRESH
     bool lastOn = true, lastBoost = false, valueShown = false, memHeld = false, memWritten = false, memFlashShown = false;

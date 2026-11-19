@@ -2,12 +2,12 @@
 #pragma once
 
 #include "PluginProcessor.h"
-#include "ui/LabEditor.h"
+#include "ui/VintageLabEditor.h"
 
-// SF-1 window (1200 x 890), on the shared UI of src/common/ui: header (name, preset chip, A / B, undo); row 1: HOLD (FREEZE, CAPTURE, four band switches, DRIFT, MORPH),
-// TEXTURE (SMEAR, BLUR, FEEDBACK), SHIFT (SHIFT, SPREAD, RING, RING FREQ); row 2: WINDOW (amount, centre, width, scan), OUTPUT (MIX, LEVEL, meters), STATE (value cards);
-// row 3: the SPECTRUM display (input, output, the snapshot, the frozen bands and the moving window).
-class SF1AudioProcessorEditor : public vibr::ui::LabEditor
+// SF-1 window (1120 x 872) in the "vintage hardware" look of src/common/ui/VintageUI.h: header (name, preset screen, undo / redo, A / B, power). FOLD: row 1 HOLD (DRIFT, MORPH, FREEZE and CAPTURE on the
+// top edge), TEXTURE (SMEAR, BLUR, FEEDBACK), SHIFT (SHIFT, SPREAD, RING, RING FREQ); row 2 WINDOW (amount, centre, width, scan), STATE (value cards), OUTPUT (MIX, LEVEL, meters); row 3 the SPECTRUM screen
+// with the four band switches under it. HARMONY: four VOICE panels, KEY, CHORDS, OUTPUT and the KEYBOARD. The FOLD / HARMONY tabs sit on the top edge of the bottom panel.
+class SF1AudioProcessorEditor : public vibr::ui::vintage::LabEditor
 {
 public:
     explicit SF1AudioProcessorEditor (SF1AudioProcessor&);

@@ -4,29 +4,32 @@
 
 namespace
 {
-using vibr::ui::drawText;
-namespace ui = vibr::ui;
+using vibr::ui::vintage::drawText;
+namespace ui = vibr::ui::vintage;
 
-constexpr float kW = 1200.0f, kH = 690.0f, kRow1Y = 134.0f, kRow1H = 247.0f, kRow2Y = 405.0f, kRow2H = 216.0f, kBarY = 39.0f;
-const ui::Palette kPal { juce::Colour (255, 152, 74), juce::Colour (46, 27, 13) };            // the Drive colour #FF984A and its print
+constexpr float kW = ui::kW, kH = ui::kH, kRow1Y = 114.0f, kRow1H = 244.0f, kRow2Y = 376.0f, kRow2H = 254.0f;
+const ui::Palette kPal { juce::Colour (255, 152, 74) };            // the Drive colour #FF984A: value rings, knob values and the plugin code
 
-// panels: 0 CONTROLS (with the mode tabs), 1 OUTPUT, 2 SHAPE (display)
-constexpr float kPanelX[3] = { 20.0f, 730.0f, 20.0f }, kPanelW[3] = { 700.0f, 450.0f, 1160.0f };
-juce::Rectangle<float> panelRect (int i) { return { kPanelX[i], i < 2 ? kRow1Y : kRow2Y, kPanelW[i], i < 2 ? kRow1H : kRow2H }; }
+// panels: 0 CONTROLS (with the mode tabs), 1 OUTPUT, 2 SHAPE (two screens)
+constexpr float kPanelX[3] = { 28.0f, 28.0f, 624.0f }, kPanelW[3] = { 1064.0f, 578.0f, 468.0f };
+juce::Rectangle<float> panelRect (int i) { return { kPanelX[i], i == 0 ? kRow1Y : kRow2Y, kPanelW[i], i == 0 ? kRow1H : kRow2H }; }
 juce::Point<float> knobCentre (int panel, int k, int n)
 {
     const auto r = panelRect (panel);
-    const float pitch = panel == 0 && n >= 8 ? 84.0f : panel == 0 && n >= 7 ? 94.0f : 108.0f;
-    const float cx = panel == 1 ? r.getX() + 175.0f : r.getCentreX();          // the output knobs left of the dB meters, the pair centred in the panel
-    return { cx + pitch * ((float) k - 0.5f * (float) (n - 1)), r.getY() + 92.0f };
+    if (panel == 1) return { r.getX() + 61.0f + 100.0f * (float) k, r.getY() + 112.0f };                  // BOOST, MIX, LEVEL left of the buttons and the meter
+    const float pitch = n == 2 ? 108.0f : juce::jmin (150.0f, (r.getWidth() - 136.0f) / (float) juce::jmax (1, n - 1));      // one or two knobs centred, more spread over the panel
+    return { r.getCentreX() + pitch * ((float) k - 0.5f * (float) (n - 1)), r.getY() + 86.0f };
 }
-juce::Point<float> meterOrigin() { const auto r = panelRect (1); return { r.getX() + 360.0f, r.getY() + 46.0f }; }       // 110 high: the bars end on the knob name row (y + 156), the peak values sit on the readout row (y + 182)
-juce::Rectangle<float> curveRect() { const auto r = panelRect (2); const float s = r.getHeight() - 94.0f; return { r.getX() + 70.0f, r.getY() + 32.0f, s, s }; }
-juce::Rectangle<float> waveRect() { const auto r = panelRect (2), c = curveRect(); return { c.getRight() + 60.0f, c.getY(), r.getRight() - c.getRight() - 90.0f, c.getHeight() }; }
-juce::Rectangle<float> buttonRect (int i) { const auto r = panelRect (0); return { r.getX() + 30.0f + (float) i * 130.0f, r.getY() + 204.0f, 120.0f, 30.0f }; }
+juce::Point<float> meterOrigin() { const auto r = panelRect (1); return { r.getRight() - 20.0f - ui::kMeterW, r.getY() + std::floor ((r.getHeight() - ui::kMeterH) * 0.5f) }; }
+juce::Rectangle<float> curveScreen() { const auto r = panelRect (2); return { r.getX() + 20.0f, r.getY() + 24.0f, 150.0f, 176.0f }; }
+juce::Rectangle<float> waveScreen() { const auto r = panelRect (2), c = curveScreen(); return { c.getRight() + 10.0f, c.getY(), r.getRight() - 20.0f - c.getRight() - 10.0f, c.getHeight() }; }
+juce::Rectangle<float> buttonRect (int i) { const auto r = panelRect (0); return { r.getX() + 20.0f + (float) i * 136.0f, r.getY() + 200.0f, 130.0f, 30.0f }; }
 juce::Rectangle<float> odButtonRect() { return buttonRect (0).withWidth (380.0f); }
-juce::Rectangle<float> outButtonRect (int i) { const auto r = panelRect (1); return { r.getX() + 25.0f + (float) i * 210.0f, r.getY() + 204.0f, 190.0f, 30.0f }; }
+juce::Rectangle<float> outButtonRect (int i) { const auto r = panelRect (1); return { r.getX() + 322.0f, r.getY() + 73.0f + (float) i * 48.0f, 120.0f, 30.0f }; }      // BOOST and AUTO LEVEL, centred on the knob row
 const std::vector<juce::String> kModeTabs { "OVERDRIVE", "DISTORTION", "TUBE", "TAPE", "FOLD", "CRUSH", "CHAIN", "HARMONICS" };
+constexpr float kTabsTop = -15.0f, kTabsFont = 16.0f;
+const float kTabsLeft = ui::titleEnd ("CONTROLS");
+std::vector<juce::Rectangle<float>> modeTabRects() { return ui::tabRects (panelRect (0), kModeTabs, kTabsTop, kTabsFont, kTabsLeft); }
 }
 
 // kinds: 0 percent, 2 boost dB, 3 value 0 .. 10, 4 bits, 5 rate, 6 level dB
@@ -64,17 +67,16 @@ DV1AudioProcessorEditor::~DV1AudioProcessorEditor() = default;
 
 void DV1AudioProcessorEditor::paintOverChildren (juce::Graphics& g)
 {
-    if (midiUI != nullptr) midiUI->paintMarks (g, kPal.body);
+    if (midiUI != nullptr) midiUI->paintMarks (g, kPal.accent);
 }
 
 void DV1AudioProcessorEditor::timerCallback()
 {
     meter.update (proc.outMeter);
     if (const int shown = mode() * 4 + variant(); shown != shownModeVariant) { shownModeVariant = shown; layoutKnobs(); repaint(); }       // a preset, undo, A / B or automation changed the mode
-    repaintDesign (panelRect (1).withTrimmedLeft (panelRect (1).getWidth() - 150.0f).expanded (2.0f));
+    repaintDesign (juce::Rectangle<float> (meterOrigin().x, meterOrigin().y, ui::kMeterW, ui::kMeterH).expanded (2.0f));
     if (midiUI != nullptr && midiUI->needsRepaint()) { midiUI->tick(); repaint(); }
     repaintDesign (panelRect (2).expanded (4.0f));
-    tickPresetBar();
 }
 
 bool DV1AudioProcessorEditor::knobShown (int i) const
@@ -115,7 +117,7 @@ void DV1AudioProcessorEditor::showOdMenu()
 }
 
 //==============================================================================
-// SHAPE: the transfer curve of the mode (input against output, with the live input as a dot) and a sine before (grey) and after (body colour) the drive.
+// SHAPE: the transfer curve of the mode (input against output, with the live input as a dot) and a sine before (dim) and after (bright) the drive, on two phosphor screens.
 void DV1AudioProcessorEditor::drawShape (juce::Graphics& g)
 {
     auto p = proc.readParams();
@@ -124,11 +126,12 @@ void DV1AudioProcessorEditor::drawShape (juce::Graphics& g)
     const bool power = isOn ("power");
 
     // the transfer curve
-    const auto c = curveRect();
-    g.setColour (juce::Colours::black.withAlpha (0.45f)); g.fillRoundedRectangle (c.expanded (8.0f), 10.0f);
-    g.setColour (kPal.ink.withAlpha (0.14f));
+    const auto cs = curveScreen();
+    ui::paintScope (g, kPal, cs, "TRANSFER", {});
+    const auto c = juce::Rectangle<float> (138.0f, 138.0f).withCentre (ui::scopePlotRect (cs).getCentre());
+    g.setColour (kPal.phosphor.withAlpha (0.22f));
     g.drawLine (c.getX(), c.getCentreY(), c.getRight(), c.getCentreY(), 1.0f); g.drawLine (c.getCentreX(), c.getY(), c.getCentreX(), c.getBottom(), 1.0f);
-    g.setColour (kPal.ink.withAlpha (0.3f)); g.drawLine (c.getX(), c.getBottom(), c.getRight(), c.getY(), 1.0f);                // the straight line: no distortion
+    g.setColour (kPal.phosphorDim.withAlpha (0.5f)); g.drawLine (c.getX(), c.getBottom(), c.getRight(), c.getY(), 1.0f);                // the straight line: no distortion
     const auto toXY = [&] (float x, float y) { return juce::Point<float> (c.getCentreX() + x * 0.5f * c.getWidth(), c.getCentreY() - juce::jlimit (-1.1f, 1.1f, y) * 0.5f * c.getHeight()); };
     juce::Path curve;
     for (int i = 0; i <= 240; ++i)
@@ -138,22 +141,23 @@ void DV1AudioProcessorEditor::drawShape (juce::Graphics& g)
     }
     {
         juce::Graphics::ScopedSaveState clip (g);
-        g.reduceClipRegion (c.expanded (4.0f).toNearestInt());
-        g.setColour (kPal.body); g.strokePath (curve, juce::PathStrokeType (2.2f));
+        g.reduceClipRegion (c.getSmallestIntegerContainer().getIntersection (cs.reduced (3.0f).toNearestInt()));
+        g.setColour (kPal.phosphor.withAlpha (0.18f)); g.strokePath (curve, juce::PathStrokeType (5.0f));
+        g.setColour (kPal.phosphor); g.strokePath (curve, juce::PathStrokeType (2.0f));
         if (power)
         {
             const float x = eng.dotIn.load (std::memory_order_relaxed), y = dv1::staticCurve (p, x * boost);
-            const auto d = toXY (x, y);
-            g.setColour (kPal.ink); g.fillEllipse (juce::Rectangle<float> (9.0f, 9.0f).withCentre (d));
+            g.setColour (kPal.cream); g.fillEllipse (juce::Rectangle<float> (9.0f, 9.0f).withCentre (toXY (x, y)));
         }
     }
-    drawText (g, "IN", c.getRight() - 12.0f, c.getCentreY() + 12.0f, 13.0f, kPal.ink.withAlpha (0.55f), true, 0.1f);
-    drawText (g, "OUT", c.getCentreX() + 20.0f, c.getY() + 10.0f, 13.0f, kPal.ink.withAlpha (0.55f), true, 0.1f);
+    drawText (g, "IN", c.getRight() - 12.0f, c.getCentreY() + 12.0f, 13.0f, kPal.phosphorDim, false, 0.08f, juce::Justification::centred, ui::Face::Mono);
+    drawText (g, "OUT", c.getCentreX() - 20.0f, c.getY() + 10.0f, 13.0f, kPal.phosphorDim, false, 0.08f, juce::Justification::centred, ui::Face::Mono);
 
     // a sine before and after
-    const auto w = waveRect();
-    g.setColour (juce::Colours::black.withAlpha (0.45f)); g.fillRoundedRectangle (w.expanded (8.0f), 10.0f);
-    g.setColour (kPal.ink.withAlpha (0.14f)); g.drawLine (w.getX(), w.getCentreY(), w.getRight(), w.getCentreY(), 1.0f);
+    const auto ws = waveScreen();
+    ui::paintScope (g, kPal, ws, "SINE IN / OUT", "SCALED");
+    const auto w = ui::scopePlotRect (ws);
+    g.setColour (kPal.phosphor.withAlpha (0.22f)); g.drawLine (w.getX(), w.getCentreY(), w.getRight(), w.getCentreY(), 1.0f);
     juce::Path in, out;
     float peak = 0.05f; std::vector<float> ys ((size_t) 400);
     for (int i = 0; i < 400; ++i) { const float x = 0.5f * std::sin (6.2831853f * 2.0f * (float) i / 400.0f); ys[(size_t) i] = dv1::staticCurve (p, x * boost * 2.0f); peak = std::max (peak, std::abs (ys[(size_t) i])); }
@@ -163,36 +167,42 @@ void DV1AudioProcessorEditor::drawShape (juce::Graphics& g)
         const juce::Point<float> a (xx, w.getCentreY() - x * 0.45f * w.getHeight()), b (xx, w.getCentreY() - ys[(size_t) i] / peak * 0.45f * w.getHeight());
         if (i == 0) { in.startNewSubPath (a); out.startNewSubPath (b); } else { in.lineTo (a); out.lineTo (b); }
     }
-    g.setColour (kPal.ink.withAlpha (0.45f)); g.strokePath (in, juce::PathStrokeType (1.4f));
-    g.setColour (kPal.body); g.strokePath (out, juce::PathStrokeType (2.2f));
-    drawText (g, "SINE IN (GREY) AND OUT, OUT SCALED TO THE PEAK", w.getX() + 6.0f, w.getBottom() + 22.0f, 13.0f, kPal.ink.withAlpha (0.55f), true, 0.1f, juce::Justification::centredLeft);
+    {
+        juce::Graphics::ScopedSaveState clip (g);
+        g.reduceClipRegion (ws.reduced (3.0f).toNearestInt());
+        g.setColour (kPal.phosphorDim.withAlpha (0.8f)); g.strokePath (in, juce::PathStrokeType (1.3f));
+        g.setColour (kPal.phosphor.withAlpha (0.18f)); g.strokePath (out, juce::PathStrokeType (5.0f));
+        g.setColour (kPal.phosphor); g.strokePath (out, juce::PathStrokeType (2.0f));
+    }
 
     const auto r = panelRect (2);
-    juce::String desc = p.mode == dv1::Overdrive ? juce::String (dv1::odTypeName (p.odType)) : juce::String (dv1::modeName (p.mode)) + " " + dv1::variantName (p.mode, p.variant);
-    drawText (g, desc + (p.mode == dv1::Chain ? "     HOST RATE (THE SA-1 CHAIN)     LATENCY " : p.mode == dv1::Harmonics ? "     HOST RATE (THE HM-2, THE CURVE IS THE SATURATOR ONLY)     LATENCY " : "     4X OVERSAMPLED     LATENCY ") + juce::String (eng.latency()) + " SAMPLES", r.getX() + 18.0f, r.getBottom() - 22.0f, 13.0f, kPal.ink.withAlpha (0.6f), true, 0.1f, juce::Justification::centredLeft);
+    const juce::String desc = p.mode == dv1::Overdrive ? juce::String (dv1::odTypeName (p.odType)) : juce::String (dv1::modeName (p.mode)) + " " + dv1::variantName (p.mode, p.variant);
+    const juce::String rate = p.mode == dv1::Chain || p.mode == dv1::Harmonics ? "HOST RATE" : "4X OVERSAMPLED";
+    drawText (g, desc + "  |  " + rate + "  |  LATENCY " + juce::String (eng.latency()) + " SAMPLES", r.getX() + 20.0f, r.getY() + 226.0f, 14.0f, kPal.inkSoft, false, 0.05f, juce::Justification::centredLeft);
 }
 
 //==============================================================================
 void DV1AudioProcessorEditor::paint (juce::Graphics& g)
 {
     g.addTransform (juce::AffineTransform::scale (scale()));
-    ui::paintBody (g, kPal, kW, kH, grain);
-    ui::paintHeader (g, kPal, "DV-1", "DRIVE LAB", "HARMONIC GRIT", isOn ("power"));
-    ui::paintPresetBar (g, kPal, proc.presets, proc.undoManager, kBarY, barState, false, 6.0f);
+    ui::paintBody (g, kPal, kW, kH);
+    ui::paintHeader (g, kPal, "DV-1", "DRIVE LAB", "HARMONIC GRIT");
+    ui::paintPresetBar (g, kPal, proc.presets, proc.undoManager, isOn ("power"));
+    ui::paintFooter (g, kPal, kH - 15.0f);
 
     const int m = mode();
-    ui::paintPanel (g, kPal, panelRect (0), {});
-    ui::paintTabs (g, kPal, panelRect (0), kModeTabs, m, 13.0f);
+    ui::paintPanel (g, kPal, panelRect (0), "CONTROLS");
+    ui::paintTabs (g, kPal, panelRect (0), kModeTabs, m, kTabsTop, kTabsFont, kTabsLeft);
     ui::paintPanel (g, kPal, panelRect (1), "OUTPUT");
     ui::paintPanel (g, kPal, panelRect (2), "SHAPE");
     drawShape (g);
 
-    if (m == 0) ui::paintFlatButton (g, kPal, odButtonRect(), juce::String (dv1::odTypeName (choice ("odType"))) + "  v   (12 OD-2 TYPES)", true, 13.0f);
-    else if (m == dv1::Harmonics) { static const char* nm[4] = { "TUBE", "TAPE", "TRANSISTOR", "FOLD" }; for (int v = 0; v < 4; ++v) ui::paintFlatButton (g, kPal, buttonRect (v), nm[v], choice ("character") == v, 13.0f); }
-    else if (m == dv1::Chain) { static const char* sw[3] = { "tubeOn", "tapeOn", "crushOn" }, *nm[3] = { "TUBE", "TAPE", "CRUSH" }; for (int v = 0; v < 3; ++v) ui::paintFlatButton (g, kPal, buttonRect (v), nm[v], isOn (sw[v]), 13.0f); }
-    else for (int v = 0; v < dv1::variantCount (m); ++v) ui::paintFlatButton (g, kPal, buttonRect (v), dv1::variantName (m, v), v == variant(), 13.0f);
-    ui::paintFlatButton (g, kPal, outButtonRect (0), "BOOST", isOn ("boostOn"), 13.0f);
-    ui::paintFlatButton (g, kPal, outButtonRect (1), "AUTO LEVEL", isOn ("autoLevel"), 13.0f);
+    if (m == 0) ui::paintFlatButton (g, kPal, odButtonRect(), juce::String (dv1::odTypeName (choice ("odType"))) + "  v   (12 OD-2 TYPES)", true, 17.0f);
+    else if (m == dv1::Harmonics) { static const char* nm[4] = { "TUBE", "TAPE", "TRANSISTOR", "FOLD" }; for (int v = 0; v < 4; ++v) ui::paintFlatButton (g, kPal, buttonRect (v), nm[v], choice ("character") == v, 17.0f); }
+    else if (m == dv1::Chain) { static const char* sw[3] = { "tubeOn", "tapeOn", "crushOn" }, *nm[3] = { "TUBE", "TAPE", "CRUSH" }; for (int v = 0; v < 3; ++v) ui::paintFlatButton (g, kPal, buttonRect (v), nm[v], isOn (sw[v]), 17.0f); }
+    else for (int v = 0; v < dv1::variantCount (m); ++v) ui::paintFlatButton (g, kPal, buttonRect (v), dv1::variantName (m, v), v == variant(), 17.0f);
+    ui::paintFlatButton (g, kPal, outButtonRect (0), "BOOST", isOn ("boostOn"), 17.0f);
+    ui::paintFlatButton (g, kPal, outButtonRect (1), "AUTO LEVEL", isOn ("autoLevel"), 17.0f);
 
     static const char* lo[7] = { "0", "", "0", "0", "1", "500", "-24" }, *hi[7] = { "100", "", "24", "10", "16", "48k", "+12" };
     for (int i = 0; i < (int) knobs.size(); ++i)
@@ -210,11 +220,9 @@ void DV1AudioProcessorEditor::paint (juce::Graphics& g)
             case 6: txt = juce::String::formatted ("%+.1f dB", v); break;
             default: txt = juce::String ((int) std::lround (v)) + " %"; break;
         }
-        const auto c = knobCentre (k.panel, k.index, k.count);
-        paintKnobCell (g, kPal, c, k.name, txt, lo[k.kind], hi[k.kind], panelRect (k.panel).getY() + 154.0f, panelRect (k.panel).getY() + 182.0f, k.slider);
+        ui::paintKnob (g, kPal, knobCentre (k.panel, k.index, k.count), k.name, txt, lo[k.kind], hi[k.kind], (float) k.slider.valueToProportionOfLength (v));
     }
-    meter.paint (g, meterOrigin().x, meterOrigin().y, isOn ("power"), kPal.body, kPal.ink, 110.0f, 26.0f, 13.0f);
-    ui::paintFooter (g, kPal, kRow2Y + kRow2H + 35.0f);
+    ui::paintMeter (g, kPal, meter, meterOrigin().x, meterOrigin().y, isOn ("power"));
 }
 
 void DV1AudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
@@ -222,8 +230,8 @@ void DV1AudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
     const auto p = e.position / scale();
     proc.undoManager.beginNewTransaction();
     if (ui::powerRect().contains (p)) { toggle ("power"); return; }
-    if (ui::presetBarMouseDown (p, *this, proc.presets, proc.undoManager, kBarY, scale(), barState, [this] { repaint(); }, false)) { layoutKnobs(); return; }
-    const auto tabs = ui::tabRects (panelRect (0), kModeTabs, 13.0f);
+    if (ui::presetBarMouseDown (p, *this, proc.presets, proc.undoManager, scale(), [this] { repaint(); })) { layoutKnobs(); return; }
+    const auto tabs = modeTabRects();
     for (int i = 0; i < (int) tabs.size(); ++i)
         if (tabs[(size_t) i].expanded (3.0f).contains (p)) { setChoice ("mode", i); setChoice ("variant", 0); layoutKnobs(); repaint(); return; }
     if (mode() == 0) { if (odButtonRect().expanded (3.0f).contains (p)) { showOdMenu(); return; } }

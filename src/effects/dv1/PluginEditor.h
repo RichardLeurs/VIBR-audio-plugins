@@ -3,13 +3,13 @@
 
 #include "PluginProcessor.h"
 #include "MidiTarget.h"
-#include "ui/LabEditor.h"
+#include "ui/VintageLabEditor.h"
 #include "ui/OutputMeter.h"
 
-// DV-1 window (1200 x 690), on the shared UI of src/common/ui: header (name, preset chip, A / B, undo), the CONTROLS panel with the mode tab pills on its top edge
-// (the knobs of the mode, and the flat buttons: the types, or the popup of the 12 OD-2 types), the OUTPUT panel (BOOST, MIX, LEVEL, BOOST and AUTO LEVEL switches)
-// and the SHAPE display (the transfer curve with the live input as a dot, and a sine before and after the drive).
-class DV1AudioProcessorEditor : public vibr::ui::LabEditor
+// DV-1 window (1120 x 660) in the "vintage hardware" look of ui/VintageUI.h: header (name, preset screen, undo / redo, A / B, power), the CONTROLS panel with the mode tabs on its
+// top edge (the knobs of the mode, and the flat buttons: the types, or the popup of the 12 OD-2 types), the OUTPUT panel (BOOST, MIX, LEVEL, the BOOST and AUTO LEVEL buttons,
+// L / R meters) and the SHAPE panel (two phosphor screens: the transfer curve with the live input as a dot, and a sine before and after the drive).
+class DV1AudioProcessorEditor : public vibr::ui::vintage::LabEditor
 {
 public:
     explicit DV1AudioProcessorEditor (DV1AudioProcessor&);

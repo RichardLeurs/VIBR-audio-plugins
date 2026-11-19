@@ -1,79 +1,87 @@
 // VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
 #include "PluginEditor.h"
-#include "BS1Data.h"
+
+namespace ui = vibr::ui::vintage;
 
 namespace
 {
-// Positions are in the 1786 x 1048 coordinates of the rendered background (make_background.py). The editor is resizable at a
-// fixed aspect ratio; paint() scales image pixels to the window.
-constexpr float kImgW = 1786.0f, kImgH = 1048.0f;
-constexpr int kBaseW = 893;
+const ui::Palette kPal { juce::Colour (137, 89, 213) };
 
-constexpr float kKnobRadius = 64.0f, kTypeRadius = 80.0f;
-struct KnobSpec { const char* id; float x, y; };
-const float kCols[4] = { 851.0f, 1101.0f, 1351.0f, 1601.0f };
-const float kRows[2] = { 400.0f, 715.0f };
-const KnobSpec kKnobs[8] = {
-    { "value", kCols[0], kRows[0] }, { "decay", kCols[1], kRows[0] }, { "predelay", kCols[2], kRows[0] }, { "mix", kCols[3], kRows[0] },
-    { "tone", kCols[0], kRows[1] }, { "param1", kCols[1], kRows[1] }, { "param2", kCols[2], kRows[1] }, { "mod", kCols[3], kRows[1] } };
-constexpr float kStartDeg = -135.0f, kEndDeg = 135.0f;
-const juce::Point<float> kTypeKnob { 363.0f, 624.0f };            // 12 positions, ROOM at the bottom, clockwise
-const juce::Rectangle<float> kDisplay { 203.0f, 308.0f, 320.0f, 64.0f };
-const juce::Point<float> kLed { 1711.0f, 87.0f };                 // power slide switch (top right, ball left = off) = bypass
+// Design space 1120 x 522 (margin 28, gap 18): header 0 to 100, one row of two panels y 114 to 492, footer centre 15 above the bottom.
+constexpr float kDesignW = 1120.0f, kDesignH = 522.0f;
+constexpr float kPanelY = 114.0f, kPanelH = 378.0f, kGap = 18.0f;
+constexpr float kTypeW = 598.0f, kCtlW = kDesignW - 2.0f * ui::kMargin - kGap - kTypeW;      // 448
+constexpr float kKnobDy = 86.0f, kRowPitch = 172.0f, kColPitch = 108.0f;
 
-} // namespace
+struct KnobSpec { const char* id; const char* name; };
+const KnobSpec kKnobs[8] = { { "value", "VALUE" }, { "decay", "DECAY" }, { "predelay", "PRE-DELAY" }, { "mix", "MIX" },
+                             { "tone", "TONE" }, { "param1", "PARAM 1" }, { "param2", "PARAM 2" }, { "mod", "MOD" } };
+const char* kTypeNames[bigsky::kNumTypes] = { "ROOM", "HALL", "PLATE", "SPRING", "SWELL", "BLOOM", "CLOUD", "CHORALE", "SHIMMER", "MAGNETO", "NONLINEAR", "REFLECTIONS" };
 
-//==============================================================================
+juce::Rectangle<float> typePanel() { return { ui::kMargin, kPanelY, kTypeW, kPanelH }; }
+juce::Rectangle<float> ctlPanel()  { return { ui::kMargin + kTypeW + kGap, kPanelY, kCtlW, kPanelH }; }
+juce::Rectangle<float> displayRect() { const auto p = typePanel(); return { p.getX() + 20.0f, p.getY() + 30.0f, p.getWidth() - 40.0f, 220.0f }; }
+juce::Rectangle<float> typeButton (int i)       // two rows of six, equal width, 6 apart
+{
+    const auto d = displayRect();
+    const float w = (d.getWidth() - 5.0f * 6.0f) / 6.0f;
+    return { d.getX() + (float) (i % 6) * (w + 6.0f), d.getBottom() + 24.0f + (float) (i / 6) * 40.0f, w, 34.0f };
+}
+juce::Point<float> knobCentre (int i)
+{
+    const auto p = ctlPanel();
+    return { p.getCentreX() + ((float) (i % 4) - 1.5f) * kColPitch, p.getY() + kKnobDy + (float) (i / 4) * kRowPitch };
+}
+}
+
 //==============================================================================
 BigSkyAudioProcessorEditor::BigSkyAudioProcessorEditor (BigSkyAudioProcessor& p)
-    : PedalEditor (p, BS1Data::background_png, (size_t) BS1Data::background_pngSize, kImgW, kImgH, kBaseW, 447), proc (p)
+    : PedalEditor (p, kDesignW, kDesignH), proc (p),
+      typeAtt (*p.apvts.getParameter ("type"), [this] (float v)
+               {
+                   const int t = juce::jlimit (0, bigsky::kNumTypes - 1, (int) std::lround (v));
+                   if (t != lastType) { lastType = t; shown = {}; shownUntil = 0; }
+                   repaint();
+               }, nullptr)
 {
-    setLookAndFeel (&laf);
-    
-    const auto setup = [this] (Knob& k, const char* id, float startDeg, float endDeg)
-    {
-        k.slider.setSliderStyle (juce::Slider::RotaryVerticalDrag);
-        k.slider.setTextBoxStyle (juce::Slider::NoTextBox, true, 0, 0);
-        k.slider.setRotaryParameters (juce::degreesToRadians (startDeg), juce::degreesToRadians (endDeg), true);
-        k.slider.setMouseDragSensitivity (180);
-        k.slider.setScrollWheelEnabled (false);
-        addAndMakeVisible (k.slider);
-        k.attachment = std::make_unique<juce::SliderParameterAttachment> (*proc.apvts.getParameter (id), k.slider, nullptr);
-    };
     for (int i = 0; i < 8; ++i)
     {
-        setup (knobs[i], kKnobs[i].id, kStartDeg, kEndDeg);
+        auto& s = knobs[i].slider;
+        s.setSliderStyle (juce::Slider::RotaryVerticalDrag);
+        s.setTextBoxStyle (juce::Slider::NoTextBox, true, 0, 0);
+        s.setRotaryParameters (juce::degreesToRadians (-135.0f), juce::degreesToRadians (135.0f), true);
+        s.setMouseDragSensitivity (180);
+        s.setScrollWheelEnabled (false);
+        s.setPopupDisplayEnabled (true, true, this);
+        s.onValueChange = [this] { repaint(); };
+        addAndMakeVisible (s);
+        knobs[i].attachment = std::make_unique<juce::SliderParameterAttachment> (*proc.apvts.getParameter (kKnobs[i].id), s, nullptr);
         lastVals[i] = proc.apvts.getRawParameterValue (kKnobs[i].id)->load();
     }
-    setup (typeKnob, "type", 180.0f, 510.0f);                    // ROOM at the bottom, 30 degrees per type, clockwise
-    typeKnob.slider.wrapSteps = bigsky::kNumTypes;               // turns endlessly
-    lastType = (int) std::lround (proc.apvts.getRawParameterValue ("type")->load());
-
+    typeAtt.sendInitialUpdate();
     resized();                                                       // place the knobs (the base class sized the window before they existed)
     startTimerHz (20);
 }
 
-BigSkyAudioProcessorEditor::~BigSkyAudioProcessorEditor() { setLookAndFeel (nullptr); }
+BigSkyAudioProcessorEditor::~BigSkyAudioProcessorEditor() = default;
 
 void BigSkyAudioProcessorEditor::resized()
 {
-    const float S = (float) getWidth() / kImgW;
-    for (int i = 0; i < 8; ++i)
-        knobs[i].slider.setBounds (juce::Rectangle<float> (2.0f * kKnobRadius * S, 2.0f * kKnobRadius * S)
-                                       .withCentre ({ kKnobs[i].x * S, kKnobs[i].y * S }).toNearestInt());
-    typeKnob.slider.setBounds (juce::Rectangle<float> (2.0f * kTypeRadius * S, 2.0f * kTypeRadius * S)
-                                   .withCentre ({ kTypeKnob.x * S, kTypeKnob.y * S }).toNearestInt());
+    for (int i = 0; i < 8; ++i) placeKnob (knobs[i].slider, knobCentre (i));
 }
 
 void BigSkyAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 {
-    // the power slide switch is the bypass switch
-    toggleBypassAt (e.position, kLed);
+    if (toggleBypassAt (e.position)) { repaint(); return; }           // the power switch is the bypass switch
+    if (e.mods.isPopupMenu()) return;
+    const auto pt = e.position / scale();
+    for (int i = 0; i < bigsky::kNumTypes; ++i)
+        if (typeButton (i).contains (pt)) { typeAtt.setValueAsCompleteGesture ((float) i); return; }
 }
 
 juce::String BigSkyAudioProcessorEditor::formatValue (int i) const
 {
-    const float v = proc.apvts.getRawParameterValue (kKnobs[i].id)->load();
+    const float v = (float) knobs[i].slider.getValue();
     const juce::String id (kKnobs[i].id);
     if (id == "decay")
     {
@@ -82,24 +90,21 @@ juce::String BigSkyAudioProcessorEditor::formatValue (int i) const
     }
     if (id == "predelay")
         return juce::String ((int) std::lround (bigsky::predelayMs (v * 0.1f))) + "mS";
-    static const char* lab[8] = { "VL", "", "", "MX", "TN", "P1", "P2", "MD" };
-    return juce::String (lab[i]) + " " + juce::String (v, 1);
+    return juce::String (v, 1);
 }
 
 void BigSkyAudioProcessorEditor::timerCallback()
 {
-    const int t = (int) std::lround (proc.apvts.getRawParameterValue ("type")->load());
-    const bool on = proc.apvts.getRawParameterValue ("bypass")->load() < 0.5f;
+    const bool on = powerOn();
     bool dirty = on != lastOn;
     lastOn = on;
-    if (t != lastType) { lastType = t; shown = {}; shownUntil = 0; dirty = true; }
     for (int i = 0; i < 8; ++i)
     {
         const float v = proc.apvts.getRawParameterValue (kKnobs[i].id)->load();
         if (std::fabs (v - lastVals[i]) > 1.0e-4f)
         {
             lastVals[i] = v;
-            shown = formatValue (i);
+            shown = juce::String (kKnobs[i].name) + "  " + formatValue (i);
             shownUntil = juce::Time::getMillisecondCounter() + 1500;
             dirty = true;
         }
@@ -113,32 +118,35 @@ void BigSkyAudioProcessorEditor::timerCallback()
 
 void BigSkyAudioProcessorEditor::paint (juce::Graphics& g)
 {
-    paintBackground (g);       // the image, then image pixels
+    g.addTransform (juce::AffineTransform::scale (scale()));
+    ui::paintBody (g, kPal, kDesignW, kDesignH);
+    ui::paintHeaderNoPresets (g, kPal, "BS-1", "REVERB MACHINE", "ENDLESS SPACES", powerOn());
 
-    // ---- display: six cells, green characters; the type name, or the value of the knob being turned ----
+    // TYPE: the display with the name of the current type, and the 12 types as buttons
+    ui::paintPanel (g, kPal, typePanel(), "TYPE");
+    const auto d = displayRect();
+    ui::paintScreen (g, kPal, d);
+    ui::drawText (g, "REVERB TYPE", d.getX() + 16.0f, d.getY() + 22.0f, 15.0f, kPal.phosphorDim, false, 0.08f, juce::Justification::centredLeft, ui::Face::Mono);
+    ui::drawText (g, juce::String (lastType + 1) + " / " + juce::String (bigsky::kNumTypes), d.getRight() - 16.0f, d.getY() + 22.0f, 15.0f,
+                  kPal.phosphorDim, false, 0.08f, juce::Justification::centredRight, ui::Face::Mono);
+    const juce::String name (kTypeNames[lastType]);
+    const float nameW = ui::textWidth (ui::font (64.0f, true, ui::Face::Mono).withExtraKerningFactor (0.05f), name);
+    const float nameSize = juce::jmin (64.0f, 64.0f * (d.getWidth() - 40.0f) / nameW);
+    ui::drawText (g, name, d.getCentreX(), d.getCentreY() - 8.0f, nameSize, kPal.phosphor, true, 0.05f, juce::Justification::centred, ui::Face::Mono);
+    const float decay = bigsky::decaySeconds (lastType, lastVals[1] * 0.1f), pre = bigsky::predelayMs (lastVals[2] * 0.1f);
+    const juce::String line = shown.isNotEmpty() ? shown.toUpperCase()
+        : "DECAY " + (decay < 1.0f ? juce::String ((int) std::lround (decay * 1000.0f)) + "mS" : juce::String (decay, 1) + "S") + "   PRE " + juce::String ((int) std::lround (pre)) + "mS";
+    ui::drawText (g, line, d.getCentreX(), d.getBottom() - 34.0f, 22.0f, shown.isNotEmpty() ? kPal.phosphor : kPal.phosphorDim, true, 0.05f, juce::Justification::centred, ui::Face::Mono);
+    for (int i = 0; i < bigsky::kNumTypes; ++i)
+        ui::paintFlatButton (g, kPal, typeButton (i), kTypeNames[i], i == lastType, 17.0f, 1.0f, 4.0f, 0.02f);
+
+    // CONTROLS: eight knobs in two rows of four
+    ui::paintPanel (g, kPal, ctlPanel(), "CONTROLS");
+    for (int i = 0; i < 8; ++i)
     {
-        const auto disp = kDisplay.reduced (6.0f);
-        const juce::String text = shown.isNotEmpty() ? shown : juce::String (bigsky::typeName (lastType));
-        const float cellW = disp.getWidth() / 6.0f;
-        juce::Font font (juce::FontOptions (juce::Font::getDefaultMonospacedFontName(), 44.0f, juce::Font::bold));
-        g.setFont (font);
-        const juce::String padded = text.paddedRight (' ', 6).substring (0, 6);
-        for (int i = 0; i < 6; ++i)
-        {
-            const auto cell = juce::Rectangle<float> (disp.getX() + cellW * (float) i, disp.getY(), cellW, disp.getHeight());
-            g.setColour (juce::Colour (0xff7cff2a).withAlpha (0.05f));
-            g.drawText ("8", cell, juce::Justification::centred, false);
-            const auto ch = padded.substring (i, i + 1);
-            if (ch.trim().isEmpty()) continue;
-            g.setColour (juce::Colour (0xff7cff2a).withAlpha (0.22f));
-            for (auto o : { juce::Point<float> (-1.5f, 0), juce::Point<float> (1.5f, 0), juce::Point<float> (0, -1.5f), juce::Point<float> (0, 1.5f) })
-                g.drawText (ch, cell.translated (o.x, o.y), juce::Justification::centred, false);
-            g.setColour (juce::Colour (0xffb8ff6a));
-            g.drawText (ch, cell, juce::Justification::centred, false);
-        }
+        auto& s = knobs[i].slider;
+        ui::paintKnob (g, kPal, knobCentre (i), kKnobs[i].name, formatValue (i), "0", "10", (float) s.valueToProportionOfLength (s.getValue()));
     }
 
-    // ---- power slide switch: chrome ball left = off, right = on; the slot lights up green when on ----
-    const bool on = proc.apvts.getRawParameterValue ("bypass")->load() < 0.5f;
-    vibr::ui::paintSlideSwitch (g, kLed, on);
+    ui::paintFooter (g, kPal, kDesignH - 15.0f);
 }

@@ -35,11 +35,29 @@ juce::AudioProcessorValueTreeState::ParameterLayout SU1AudioProcessor::createLay
     return layout;
 }
 
+namespace
+{
+std::vector<vibr::PresetManager::Factory> su1FactoryPresets()
+{
+    return {
+        { "Init", "Everything neutral: the signal passes unchanged", {} },
+        { "Wide Stereo", "A wider image with a little spread", { { "width", 150 }, { "spread", 30 } } },
+        { "Mono Bass", "Highs stay wide, the lows below 120 Hz are mono", { { "width", 130 }, { "bassMono", 120 } } },
+        { "Narrow", "A narrow image, close to the centre", { { "width", 40 } } },
+        { "Auto Pan", "The signal sweeps from left to right", { { "autoRate", 0.5f }, { "autoDepth", 100 } } },
+        { "Swap Channels", "Left and right exchanged", { { "swap", 1 } } },
+        { "Mid Only", "Listen to the centre of the image", { { "solo", 1 } } },
+        { "Side Only", "Listen to what is left and right of the centre", { { "solo", 2 } } },
+    };
+}
+}
+
 SU1AudioProcessor::SU1AudioProcessor()
-    : AudioProcessor (BusesProperties()
+    : vibr::LabProcessor (BusesProperties()
                           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
-                          .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts (*this, nullptr, "SU1", createLayout())
+                          .withOutput ("Output", juce::AudioChannelSet::stereo(), true),
+                          "SU1", createLayout(), "SU-1 Presets", su1FactoryPresets(),
+                          { "gain", "pan", "autoRate", "autoDepth", "width", "spread", "bassMono" })
 {
     const auto get = [this] (const char* id) { return apvts.getRawParameterValue (id); };
     pPower = get ("power"); pGain = get ("gain"); pPan = get ("pan"); pAutoRate = get ("autoRate"); pAutoDepth = get ("autoDepth");
@@ -60,8 +78,9 @@ void SU1AudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     dryBuf.setSize (2, juce::jmax (samplesPerBlock, 8192));
 }
 
-void SU1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
+void SU1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
+    midiMap.process (midi);
     juce::ScopedNoDenormals noDenormals;
     const int n = buffer.getNumSamples();
     if (n == 0 || buffer.getNumChannels() < 2 || n > dryBuf.getNumSamples()) return;
@@ -95,16 +114,5 @@ void SU1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
 }
 
 juce::AudioProcessorEditor* SU1AudioProcessor::createEditor() { return new SU1AudioProcessorEditor (*this); }
-
-void SU1AudioProcessor::getStateInformation (juce::MemoryBlock& dest)
-{
-    if (auto xml = apvts.copyState().createXml()) copyXmlToBinary (*xml, dest);
-}
-
-void SU1AudioProcessor::setStateInformation (const void* data, int size)
-{
-    if (auto xml = getXmlFromBinary (data, size))
-        if (xml->hasTagName (apvts.state.getType())) { auto st = juce::ValueTree::fromXml (*xml); vibr::BypassLink::normalise (st); apvts.replaceState (st); }
-}
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new SU1AudioProcessor(); }

@@ -29,7 +29,7 @@
 set -euo pipefail
 
 SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-OUT="$HOME/Developer/VIBR"
+OUT="${VIBR_OUT:-$HOME/Developer/VIBR}"      # VIBR_OUT=<dir> builds in another tree (parallel builds of different plugins)
 VERSION="0.2.0"      # the release version: the end of every zip name (keep it the same as project(... VERSION) in config/CMakeLists.txt and VERSION in website/script.js)
 HOST="$(uname -m)"
 IS_WIN=0 IS_LINUX=0

@@ -2,13 +2,12 @@
 #pragma once
 
 #include "PluginProcessor.h"
-#include "ui/OutputMeter.h"
-#include "ui/LabEditor.h"
+#include "ui/VintageLabEditor.h"
 
-// DN-1 window (1200 x 690), on the shared UI of src/common/ui: header (name, preset chip, A / B, undo), the CONTROLS panel with the mode tab pills on its top edge
+// DN-1 window (1120 x 660), in the "vintage hardware" look of src/common/ui/VintageUI.h: header (name, preset screen, undo / redo, A / B, power), the CONTROLS panel with the mode tabs on its top edge
 // (the knobs of the mode, and the flat buttons: the stage switches of the shaper, or the types), the SIDECHAIN panel (high-pass, stereo link), the ACTION display
-// (the input level and the gain of the chain over five seconds, with the thresholds) and OUTPUT (MIX, LEVEL, AUTO LEVEL).
-class DN1AudioProcessorEditor : public vibr::ui::LabEditor
+// (a phosphor scope: the input level and the gain of the chain over five seconds, with the thresholds) and OUTPUT (MIX, LEVEL, AUTO LEVEL).
+class DN1AudioProcessorEditor : public vibr::ui::vintage::LabEditor
 {
 public:
     explicit DN1AudioProcessorEditor (DN1AudioProcessor&);

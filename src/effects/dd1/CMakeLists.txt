@@ -1,12 +1,4 @@
 # VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
-juce_add_binary_data(DD1Assets
-  HEADER_NAME DD1Data.h
-  NAMESPACE DD1Data
-  SOURCES
-    assets/background.png      # tab DELAY
-    assets/background2.png     # tab EFFECTS
-)
-
 juce_add_plugin(DD-1
   COMPANY_NAME "VIBR"
   ICON_BIG "${RL_ICON}"
@@ -44,7 +36,6 @@ target_compile_definitions(DD-1
 target_link_libraries(DD-1
   PRIVATE
     rl_common
-    DD1Assets
     juce::juce_audio_utils
     juce::juce_dsp
   PUBLIC

@@ -1,10 +1,5 @@
 # VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
-juce_add_binary_data(CE1Assets
-  HEADER_NAME CE1Data.h
-  NAMESPACE CE1Data
-  SOURCES
-    assets/background.png
-)
+# The background image (assets/background.png, make_background.py) is no longer compiled in: the editor is drawn in code (Vintage Hardware look).
 
 juce_add_plugin(CE-1
   COMPANY_NAME "VIBR"
@@ -43,7 +38,6 @@ target_compile_definitions(CE-1
 target_link_libraries(CE-1
   PRIVATE
     rl_common
-    CE1Assets
     juce::juce_audio_utils
     juce::juce_dsp
   PUBLIC

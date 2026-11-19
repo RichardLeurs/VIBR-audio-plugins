@@ -2,18 +2,13 @@
 #pragma once
 
 #include "PluginProcessor.h"
-#include "ui/PedalLook.h"
+#include "ui/VintagePedalEditor.h"
 #include "ClickZone.h"
 #include "ParamMemory.h"
-#include "ui/VibrUI.h"
 
-//==============================================================================
-// Chrome knobs drawn over the knobs printed in the background photo.
-using DM1LookAndFeel = vibr::ui::PedalKnobLookAndFeel;
-
-//==============================================================================
-class DM1AudioProcessorEditor : public juce::AudioProcessorEditor,
-                                  private juce::Timer
+// DM-1 in the default (Vintage Hardware) look: MODULATION, MODE and DELAY panels, a MEMORY / TAP / DIVISION row below, all drawn in code (no background image).
+class DM1AudioProcessorEditor : public vibr::ui::vintage::PedalEditor,
+                                private juce::Timer
 {
 public:
     explicit DM1AudioProcessorEditor (DM1AudioProcessor&);
@@ -27,7 +22,6 @@ public:
 private:
     void syncChanged();
     void timerCallback() override;
-    void togglePower();
     void cycleDivision();
 
     struct Knob
@@ -38,13 +32,9 @@ private:
     void addKnob (Knob&, const juce::String& paramId);
 
     DM1AudioProcessor& proc;
-    DM1LookAndFeel laf;
-    juce::Image background;
-    juce::Colour panelColour { 0xff1c1d21 };      // sampled from the DELAY panel of the background; used to dim the printed legends
-
     MidiLearnUI midiUI { proc.midiMap };       // right-click a knob: MIDI learn
     Knob modRate, modDepth, variation, delayTime, intensity, delayVolume, mode;
-    ClickZone powerZone, tapZone, divisionZone, memoryZone;
+    ClickZone tapZone, divisionZone, memoryZone;
     ClickZone memLedZone[5], divLedZone[5];       // click a lamp to select it (memory slot / tap division)
     juce::ParameterAttachment syncAtt, divisionAtt;      // SYNC button (drawn in paint) and the division readout
     std::unique_ptr<juce::SliderParameterAttachment> divisionKnobAtt;      // the DELAY TIME knob while sync is on
@@ -57,7 +47,7 @@ private:
     int memShown = -1;
     bool memFlashShown = false;
 
-    bool powerOn = true, tapOn = false, syncShown = false;
+    bool powerShown = true, tapOn = false, syncShown = false;
     int division = 2;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DM1AudioProcessorEditor)

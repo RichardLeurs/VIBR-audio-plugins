@@ -2,12 +2,12 @@
 #pragma once
 
 #include "PluginProcessor.h"
-#include "ui/LabEditor.h"
+#include "ui/VintageLabEditor.h"
 
-// TF-1 window (1200 x 890), on the shared UI of src/common/ui: header (name, preset chip, A / B, undo); row 1: the SEQUENCER (16 steps, click a step to change its
-// operation, the division, the pattern length, HOLD, CLEAR, RANDOM); row 2: FRACTURE (CHANCE, LOOP, SCRAMBLE, PITCH, STRETCH), GLITCH (CRUSH, TEMPO), OUTPUT (MIX, LEVEL,
-// meters); row 3: the BUFFER display (the rolling recording, the step grid and the piece that plays now).
-class TF1AudioProcessorEditor : public vibr::ui::LabEditor
+// TF-1 window (1120 x 910) in the "vintage hardware" look of ui/VintageUI.h (cream plate, bakelite knobs, phosphor screens). STEPS: row 1 the SEQUENCER (mode tabs on its edge, 16 steps,
+// legend, division, LENGTH, HOLD BUFFER, CLEAR, RANDOM), row 2 FRACTURE (CHANCE, LOOP, SCRAMBLE, PITCH, STRETCH) and GLITCH (CRUSH, TEMPO), row 3 the BUFFER screen and OUTPUT (MIX, LEVEL, L / R meters).
+// SCRUB and GRAINS: row 1 CONTROLS (the knobs of the mode, SYNC, FREEZE), rows 2 and 3 the slice display or the grain cloud, TYPE (the sub-mode) and OUTPUT in the same place.
+class TF1AudioProcessorEditor : public vibr::ui::vintage::LabEditor
 {
 public:
     explicit TF1AudioProcessorEditor (TF1AudioProcessor&);
@@ -33,7 +33,7 @@ private:
     struct Knob
     {
         const char* id;
-        int panel, index, count;      // panel (1 fracture, 2 glitch, 3 output), position and number of knobs in the group
+        int panel, index, count;      // panel (0 controls of SCRUB / GRAINS, 1 fracture, 2 glitch, 3 output), position and number of knobs in the group
         const char* name;
         int kind;                     // 0 percent, 1 dB, 2 bpm, 3 scrub length, 4 speed, 5 grain size, 6 density, 7 position, 8 pitch, 9 random pitch, 10 the CHAOS knobs of SCRUB
         int modes;                    // the modes the knob belongs to (bit 0 STEPS, bit 1 SCRUB, bit 2 GRAINS)
@@ -46,7 +46,7 @@ private:
     juce::uint64 midiShown = 0;
     int shownMode = -1;
     float scroll = 0.0f;
-    std::array<Knob, 24> knobs;
+    std::array<Knob, 22> knobs;
     vibr::ui::OutputMeter meter;                                                                       // output dB meters
     juce::Random rng { 77 };
 

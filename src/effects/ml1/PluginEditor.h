@@ -2,13 +2,13 @@
 #pragma once
 
 #include "PluginProcessor.h"
-#include "ui/LabEditor.h"
+#include "ui/VintageLabEditor.h"
 #include "ui/OutputMeter.h"
 
-// ML-1 window (1200 x 690), on the shared UI of src/common/ui: header (name, preset chip, A / B, undo), the CONTROLS panel with the mode tab pills (CHORUS, VIBRATO,
-// FLANGER, PHASER, UNI-VIBE, ROTARY, RING MOD) on its top edge (RATE, DEPTH and the mode's third knob, the TYPE buttons and SYNC), OUTPUT (MIX, LEVEL) and the wide MOTION display (a live
-// picture of the effect: the voices, the LFO wave, the comb or the notches).
-class ML1AudioProcessorEditor : public vibr::ui::LabEditor
+// ML-1 window (1120 x 660) in the "vintage hardware" look of src/common/ui/VintageUI.h: header (name, preset screen, undo / redo, A / B, power), the MODE panel with the mode
+// tabs (CHORUS, VIBRATO, FLANGER, PHASER, UNI-VIBE, ROTARY, RING MOD) on its top edge (RATE, DEPTH and the mode's third knob, the TYPE buttons and SYNC), OUTPUT (MIX, LEVEL, L / R meters)
+// and the wide MOTION phosphor screen (a live picture of the effect: the voices, the LFO wave, the comb or the notches).
+class ML1AudioProcessorEditor : public vibr::ui::vintage::LabEditor
 {
 public:
     explicit ML1AudioProcessorEditor (ML1AudioProcessor&);
@@ -24,8 +24,8 @@ private:
     void layoutKnobs();
     struct Knob;
     int countOf (const Knob&) const;
-    int currentMode() const { return juce::jlimit (0, ml1::kNumModes - 1, (int) std::lround (proc.apvts.getRawParameterValue ("mode")->load())); }
-    int currentVariant() const { return juce::jlimit (0, ml1::variantCount (currentMode()) - 1, (int) std::lround (proc.apvts.getRawParameterValue ("variant")->load())); }
+    int currentMode() const { return juce::jlimit (0, ml1::kNumModes - 1, choice ("mode")); }
+    int currentVariant() const { return juce::jlimit (0, ml1::variantCount (currentMode()) - 1, choice ("variant")); }
     void drawMotion (juce::Graphics&, int mode, int variant);
 
     struct Knob

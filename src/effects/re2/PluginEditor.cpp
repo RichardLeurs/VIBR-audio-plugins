@@ -1,81 +1,116 @@
 // VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
 #include "PluginEditor.h"
-#include "RE2Data.h"
+
+namespace ui = vibr::ui::vintage;
 
 namespace
 {
-// Positions are in the coordinates of the rendered background (2610 x 1260, see make_background.py);
-// the editor shows it at 1305 x 630 and paint() scales them with S.
-constexpr int kW = 1305, kH = 630;
-constexpr float S = (float) kW / 2610.0f;
+const ui::Palette kPal { juce::Colour (49, 85, 181) };            // RE-2 #3155B5
 
-juce::Point<float> img (float x, float y) { return { x * S, y * S }; }
-
-const juce::Point<float> kSaturation { 250.0f, 790.0f }, kWow { 690.0f, 790.0f }, kMode { 1240.0f, 700.0f },
-                         kBass { 1775.0f, 458.0f }, kTreble { 2075.0f, 458.0f }, kReverb { 2375.0f, 458.0f },
-                         kRate { 1775.0f, 790.0f }, kIntensity { 2075.0f, 790.0f }, kEcho { 2375.0f, 790.0f };
-constexpr float kPad = 3.0f;
-constexpr float kKnobRadius = 72.0f, kModeRadius = 100.0f;
-
-const float kHeadLedX[4] = { 1075.0f, 1185.0f, 1295.0f, 1405.0f };
-constexpr float kHeadLedY = 422.0f;
-const juce::Point<float> kGuitarLed { 150.0f, 574.0f }, kLineLed { 260.0f, 574.0f },
-                         kNewLed { 550.0f, 574.0f }, kAgedLed { 660.0f, 574.0f };
-const juce::Point<float> kInputButton { 390.0f, 574.0f }, kTapeButton { 780.0f, 574.0f };
-const float kMemLedX[5] = { 150.0f, 260.0f, 370.0f, 480.0f, 590.0f };
-const juce::Point<float> kMemoryLed0 { 0.0f, 386.0f }, kMemoryButton { 780.0f, 386.0f };
+// Design space 1120 x 660 (margin 28, gap 18). Row 1 (y 114, 276 high): TAPE, MIXER, ECHO. Row 2 (y 408, 222 high): MODE (under TAPE and MIXER) and MEMORY (under ECHO).
+// The content area ends at y 630; the footer centre is 15 above the bottom.
+constexpr float kDesignW = 1120.0f, kDesignH = 660.0f, kGap = 18.0f;
+constexpr float kRow1Y = 114.0f, kRow1H = 276.0f, kRow2Y = kRow1Y + kRow1H + kGap, kRow2H = 222.0f;
+constexpr float kPanelW3 = 344.0f, kTapeW = kDesignW - 2.0f * ui::kMargin - 2.0f * kGap - 2.0f * kPanelW3;      // 340
+constexpr float kKnobDy = 82.0f, kDividerDy = 198.0f, kStripDy = 232.0f, kBtnH = 30.0f, kLampPitch = 74.0f, kBtnW = 110.0f, kKnobPitch = 108.0f;
+constexpr float kModeLegendR = 66.0f;
 constexpr juce::uint32 kHoldMs = 800;
-const juce::Point<float> kPowerSwitch { 2535.0f, 87.0f };      // power slide switch (top right)
-// SYNC button inside the ECHO panel, under REPEAT RATE, below the divider line drawn in the background (y 1012); the division readout sits to its right
-const juce::Rectangle<float> kSyncPill = juce::Rectangle<float> (116.0f, 46.0f).withCentre ({ 1680.0f, 1070.0f });
-const juce::Rectangle<float> kDivisionText = juce::Rectangle<float> (200.0f, 46.0f).withCentre ({ 1860.0f, 1070.0f });
-const juce::Colour kBody (0xff3155b5);      // the plugin's body colour (make_background.py BODY)
+const juce::Colour kRed (0xffFF4A2A), kRedOff (0xff5A2A20), kGreen (0xff7FD86A), kGreenOff (0xff253020);
 
-// lamp (flat, see style_guide.md "Flat style"): a plain disc inside the dark grey ring painted in the background; the colour when on (red by default,
-// green for the memory strip), a dark shade of it when off; no glow, no highlight
-void drawLamp (juce::Graphics& g, juce::Point<float> c, bool on, juce::Colour colour = juce::Colour (0xffe5432c))
+juce::Rectangle<float> tapeP()   { return { ui::kMargin, kRow1Y, kTapeW, kRow1H }; }
+juce::Rectangle<float> mixerP()  { return { tapeP().getRight() + kGap, kRow1Y, kPanelW3, kRow1H }; }
+juce::Rectangle<float> echoP()   { return { mixerP().getRight() + kGap, kRow1Y, kPanelW3, kRow1H }; }
+juce::Rectangle<float> modeP()   { return { ui::kMargin, kRow2Y, mixerP().getRight() - ui::kMargin, kRow2H }; }
+juce::Rectangle<float> memoryP() { return { echoP().getX(), kRow2Y, kPanelW3, kRow2H }; }
+
+// knob order: 0 saturation, 1 wow, 2 bass, 3 treble, 4 reverb, 5 rate, 6 intensity, 7 echo, 8 mode
+juce::Point<float> knobCentre (int i)
 {
-    g.setColour (on ? colour : colour.interpolatedWith (juce::Colour (0xff0c0d0f), 0.78f));
-    g.fillEllipse (juce::Rectangle<float> (22.0f, 22.0f).withCentre (c));
+    if (i == 8) return { modeP().getX() + 186.0f, modeP().getCentreY() };
+    if (i < 2)  return { tapeP().getCentreX() + (i == 0 ? -75.0f : 75.0f), tapeP().getY() + kKnobDy };
+    const auto p = i < 5 ? mixerP() : echoP();
+    return { p.getCentreX() + kKnobPitch * (float) ((i - 2) % 3 - 1), p.getY() + kKnobDy };
 }
 
+// lamps (two) and the push button of a strip in row 1
+juce::Point<float> stripLamp (juce::Rectangle<float> p, int i) { return { p.getX() + 66.0f + kLampPitch * (float) i, p.getY() + kStripDy }; }
+juce::Rectangle<float> stripButton (juce::Rectangle<float> p) { return { p.getX() + 188.0f, p.getY() + kStripDy - kBtnH * 0.5f, kBtnW, kBtnH }; }
+juce::Rectangle<float> syncRect() { return juce::Rectangle<float> (88.0f, kBtnH).withCentre ({ knobCentre (5).x, echoP().getY() + kStripDy }); }
+
+// MODE panel: dial on the left, a phosphor readout and the four head lamps on the right
+float modeRightCx() { return modeP().getX() + 470.0f; }
+juce::Rectangle<float> modeScreen() { return juce::Rectangle<float> (240.0f, 44.0f).withCentre ({ modeRightCx(), modeP().getY() + 80.0f }); }
+juce::Point<float> headLamp (int i) { return { modeRightCx() + 66.0f * ((float) i - 1.5f), modeP().getY() + 133.0f }; }
+
+// MEMORY panel: lamps row, divider, button row
+juce::Point<float> memLamp (int i) { return { memoryP().getX() + 50.0f + 66.0f * (float) i, memoryP().getY() + 45.0f }; }
+float memDividerY() { return memoryP().getY() + 115.0f; }
+juce::Rectangle<float> memButton() { return { memoryP().getX() + 64.0f, memoryP().getY() + 169.0f - kBtnH * 0.5f, kBtnW, kBtnH }; }
+
+juce::Rectangle<int> px (juce::Rectangle<float> r, float s) { return r.expanded (3.0f).transformedBy (juce::AffineTransform::scale (s)).toNearestInt(); }
+juce::Rectangle<int> lampZone (juce::Point<float> c, float s) { return juce::Rectangle<float> (50.0f, 50.0f).withCentre (c).transformedBy (juce::AffineTransform::scale (s)).toNearestInt(); }
+
+// flat lamp: a 14 disc with a 2 ink ring, a soft glow when lit; `caption` under it
+void drawLamp (juce::Graphics& g, juce::Point<float> c, bool on, juce::Colour lit, juce::Colour dark, const juce::String& caption)
+{
+    const auto d = juce::Rectangle<float> (14.0f, 14.0f).withCentre (c);
+    if (on) { g.setColour (lit.withAlpha (0.28f)); g.fillEllipse (d.expanded (6.0f)); }
+    g.setColour (on ? lit : dark);
+    g.fillEllipse (d);
+    g.setColour (kPal.ink);
+    g.drawEllipse (d.expanded (1.0f), 2.0f);
+    ui::drawText (g, caption, c.x, c.y + 24.0f, 14.0f, kPal.ink, true, 0.08f);
+}
+
+void drawDivider (juce::Graphics& g, juce::Rectangle<float> panel, float y)
+{
+    g.setColour (kPal.ink.withAlpha (0.35f));
+    g.drawLine (panel.getX() + 16.0f, y, panel.getRight() - 16.0f, y, 1.5f);
+}
+
+juce::String headText (int mode)
+{
+    const auto& m = re2::kModes[juce::jlimit (1, 12, mode) - 1];
+    juce::StringArray heads;
+    for (int i = 0; i < 3; ++i) if (m.headMask & (1 << i)) heads.add ("H" + juce::String (i + 1));
+    if (heads.isEmpty()) return "REVERB";
+    return heads.joinIntoString ("+") + (m.reverb ? " REV" : "");
+}
 } // namespace
 
 //==============================================================================
-//==============================================================================
 RE2AudioProcessorEditor::RE2AudioProcessorEditor (RE2AudioProcessor& p)
-    : AudioProcessorEditor (&p), proc (p),
+    : PedalEditor (p, kDesignW, kDesignH), proc (p),
       syncAtt (*p.apvts.getParameter ("sync"), [this] (float v) { syncOn = v > 0.5f; syncChanged(); }, nullptr),
       divisionAtt (*p.apvts.getParameter ("division"), [this] (float v) { division = (int) std::lround (v); repaint(); }, nullptr)
 {
-    setLookAndFeel (&laf);
-    background = juce::ImageFileFormat::loadFrom (RE2Data::background_png, (size_t) RE2Data::background_pngSize);
+    for (auto* k : { &saturation, &wowFlutter, &mode, &bass, &treble, &reverbVol, &repeatRate, &intensity, &echoVol })
+    {
+        auto& s = k->slider;
+        s.setSliderStyle (juce::Slider::RotaryVerticalDrag);
+        s.setTextBoxStyle (juce::Slider::NoTextBox, true, 0, 0);
+        s.setRotaryParameters (juce::degreesToRadians (-135.0f), juce::degreesToRadians (135.0f), true);
+        s.setMouseDragSensitivity (180);
+        s.setScrollWheelEnabled (false);
+        s.setPopupDisplayEnabled (true, true, this);
+        s.onValueChange = [this] { repaint(); };
+        addAndMakeVisible (s);
+        midiUI.add (s, k->id);
+        k->attachment = std::make_unique<juce::SliderParameterAttachment> (*proc.apvts.getParameter (k->id), s, nullptr);
+    }
 
-    addKnob (saturation, "saturation");
-    addKnob (wowFlutter, "wowFlutter");
-    addKnob (mode,       "mode");
-    addKnob (bass,       "bass");
-    addKnob (treble,     "treble");
-    addKnob (reverbVol,  "reverbVol");
-    addKnob (repeatRate, "repeatRate");
-    addKnob (intensity,  "intensity");
-    addKnob (echoVol,    "echoVol");
-    midiUI.add (saturation.slider, "saturation");  midiUI.add (wowFlutter.slider, "wowFlutter");  midiUI.add (mode.slider, "mode");
-    midiUI.add (bass.slider, "bass");              midiUI.add (treble.slider, "treble");          midiUI.add (reverbVol.slider, "reverbVol");
-    midiUI.add (repeatRate.slider, "repeatRate");  midiUI.add (intensity.slider, "intensity");    midiUI.add (echoVol.slider, "echoVol");
-
-    // the printed 1-12 dial: pointer on "1" at the lower left, sweeping clockwise round to "12"
+    // the 1-12 dial: pointer on "1" at the lower left, sweeping clockwise round to "12" at the bottom
     mode.slider.setRotaryParameters (juce::degreesToRadians (-150.0f), juce::degreesToRadians (180.0f), true);
     mode.slider.setRange (1.0, 12.0, 1.0);
-
-    addSwitch (inputSwitch, inputAttachment, "inputLine");
-    addSwitch (tapeSwitch,  tapeAttachment,  "tapeAged");
-    addSwitch (powerSwitch, powerAttachment, "power");
 
     memoryZone.onDown  = [this] { memHeld = true; memWritten = false; memDownAt = juce::Time::getMillisecondCounter(); };
     memoryZone.onUp    = [this] { memHeld = false; };
     memoryZone.onClick = [this] { if (! memWritten) memory.stepNext(); repaint(); };      // short press
     addAndMakeVisible (memoryZone);
+    inputZone.onClick = [this] { toggleParam ("inputLine"); };
+    tapeZone.onClick  = [this] { toggleParam ("tapeAged"); };
+    addAndMakeVisible (inputZone);
+    addAndMakeVisible (tapeZone);
     for (int i = 0; i < 5; ++i)      // clicking a lamp selects it: a memory slot (MANUAL, 1-4), GUITAR / LINE, NEW / AGED
     {
         memLedZone[i].onClick = [this, i] { memory.select (i); repaint(); };
@@ -83,73 +118,34 @@ RE2AudioProcessorEditor::RE2AudioProcessorEditor (RE2AudioProcessor& p)
     }
     for (int i = 0; i < 2; ++i)
     {
-        inputLedZone[i].onClick = [this, i] { inputSwitch.setToggleState (i == 1, juce::sendNotificationSync); repaint(); };      // GUITAR = off, LINE = on
-        tapeLedZone[i].onClick  = [this, i] { tapeSwitch.setToggleState  (i == 1, juce::sendNotificationSync); repaint(); };      // NEW = off, AGED = on
+        const auto set = [this] (const char* id, bool on) { auto* prm = proc.apvts.getParameter (id); prm->beginChangeGesture(); prm->setValueNotifyingHost (on ? 1.0f : 0.0f); prm->endChangeGesture(); repaint(); };
+        inputLedZone[i].onClick = [set, i] { set ("inputLine", i == 1); };      // GUITAR = off, LINE = on
+        tapeLedZone[i].onClick  = [set, i] { set ("tapeAged", i == 1); };       // NEW = off, AGED = on
         addAndMakeVisible (inputLedZone[i]);
         addAndMakeVisible (tapeLedZone[i]);
     }
 
-    setSize (kW, kH);
     syncAtt.sendInitialUpdate();
     divisionAtt.sendInitialUpdate();
-    timerCallback();      // initial LED state
+    resized();
+    timerCallback();
     startTimerHz (20);
 }
 
-RE2AudioProcessorEditor::~RE2AudioProcessorEditor()
-{
-    setLookAndFeel (nullptr);
-}
+RE2AudioProcessorEditor::~RE2AudioProcessorEditor() = default;
 
-void RE2AudioProcessorEditor::addKnob (Knob& k, const juce::String& paramId)
+void RE2AudioProcessorEditor::toggleParam (const char* id)
 {
-    k.slider.setSliderStyle (juce::Slider::RotaryVerticalDrag);
-    k.slider.setTextBoxStyle (juce::Slider::NoTextBox, true, 0, 0);
-    k.slider.setRotaryParameters (juce::degreesToRadians (-148.0f), juce::degreesToRadians (148.0f), true); // matches the printed min/max feet
-    k.slider.setMouseDragSensitivity (180);
-    k.slider.setScrollWheelEnabled (false);
-    addAndMakeVisible (k.slider);
-    k.attachment = std::make_unique<juce::SliderParameterAttachment> (*proc.apvts.getParameter (paramId), k.slider, nullptr);
-}
-
-void RE2AudioProcessorEditor::addSwitch (juce::ToggleButton& b, std::unique_ptr<juce::ButtonParameterAttachment>& att, const juce::String& paramId)
-{
-    addAndMakeVisible (b);
-    att = std::make_unique<juce::ButtonParameterAttachment> (*proc.apvts.getParameter (paramId), b);
-    b.onStateChange = [this] { repaint(); };
-}
-
-void RE2AudioProcessorEditor::resized()
-{
-    auto place = [] (Knob& k, juce::Point<float> imgCentre, float r = kKnobRadius)
-    {
-        const float d = 2.0f * (r * S + kPad);
-        k.slider.setBounds (juce::Rectangle<float> (d, d).withCentre (img (imgCentre.x, imgCentre.y)).toNearestInt());
-    };
-    place (saturation, kSaturation);
-    place (wowFlutter, kWow);
-    place (mode,       kMode, kModeRadius);
-    place (bass,       kBass);
-    place (treble,     kTreble);
-    place (reverbVol,  kReverb);
-    place (repeatRate, kRate);
-    place (intensity,  kIntensity);
-    place (echoVol,    kEcho);
-
-    const juce::Rectangle<float> buttonSize (124.0f * S, 70.0f * S);
-    inputSwitch.setBounds (buttonSize.withCentre (img (kInputButton.x, kInputButton.y)).toNearestInt());
-    tapeSwitch.setBounds  (buttonSize.withCentre (img (kTapeButton.x, kTapeButton.y)).toNearestInt());
-    memoryZone.setBounds (buttonSize.withCentre (img (kMemoryButton.x, kMemoryButton.y)).toNearestInt());
-    const auto lampZone = [] (juce::Point<float> d) { return juce::Rectangle<float> (50.0f * S, 50.0f * S).withCentre (img (d.x, d.y)).toNearestInt(); };
-    for (int i = 0; i < 5; ++i) memLedZone[i].setBounds (lampZone ({ kMemLedX[i], kMemoryLed0.y }));
-    inputLedZone[0].setBounds (lampZone (kGuitarLed)); inputLedZone[1].setBounds (lampZone (kLineLed));
-    tapeLedZone[0].setBounds  (lampZone (kNewLed));    tapeLedZone[1].setBounds  (lampZone (kAgedLed));
-    powerSwitch.setBounds (juce::Rectangle<float> (110.0f * S, 70.0f * S).withCentre (img (kPowerSwitch.x, kPowerSwitch.y)).toNearestInt());
+    auto* prm = proc.apvts.getParameter (id);
+    prm->beginChangeGesture();
+    prm->setValueNotifyingHost (prm->getValue() > 0.5f ? 0.0f : 1.0f);
+    prm->endChangeGesture();
+    repaint();
 }
 
 void RE2AudioProcessorEditor::syncChanged()
 {
-    // REPEAT RATE is the echo rate, or the note division while sync is on (the attachment sets the slider range from the parameter)
+    // RATE is the echo rate, or the note division while sync is on (the attachment sets the slider range from the parameter)
     auto& k = repeatRate;
     k.attachment.reset();
     divisionKnobAtt.reset();
@@ -158,15 +154,33 @@ void RE2AudioProcessorEditor::syncChanged()
     repaint();
 }
 
+void RE2AudioProcessorEditor::resized()
+{
+    Knob* ks[] = { &saturation, &wowFlutter, &bass, &treble, &reverbVol, &repeatRate, &intensity, &echoVol, &mode };
+    for (int i = 0; i < 9; ++i) placeKnob (ks[i]->slider, knobCentre (i));
+
+    const float s = scale();
+    inputZone.setBounds (px (stripButton (mixerP()), s));
+    tapeZone.setBounds  (px (stripButton (tapeP()), s));
+    memoryZone.setBounds (px (memButton(), s));
+    for (int i = 0; i < 5; ++i) memLedZone[i].setBounds (lampZone (memLamp (i), s));
+    for (int i = 0; i < 2; ++i)
+    {
+        inputLedZone[i].setBounds (lampZone (stripLamp (mixerP(), i), s));
+        tapeLedZone[i].setBounds  (lampZone (stripLamp (tapeP(), i), s));
+    }
+}
+
 void RE2AudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 {
-    if (kSyncPill.expanded (4.0f).transformedBy (juce::AffineTransform::scale (S)).contains (e.position))
+    if (toggleBypassAt (e.position)) { repaint(); return; }          // the power switch is the bypass switch
+    if (syncRect().expanded (3.0f).contains (e.position / scale()))
         syncAtt.setValueAsCompleteGesture (syncOn ? 0.0f : 1.0f);
 }
 
 void RE2AudioProcessorEditor::paintOverChildren (juce::Graphics& g)
 {
-    midiUI.paintMarks (g, kBody);
+    midiUI.paintMarks (g, kPal.accent);
 }
 
 void RE2AudioProcessorEditor::timerCallback()
@@ -181,85 +195,86 @@ void RE2AudioProcessorEditor::timerCallback()
         memFlashUntil = now + 500;
     }
     memory.revertIfEdited();
-    const bool flashing = now < memFlashUntil;
-    if (memory.current() != memShown || flashing || flashing != memFlashShown)
-    {
-        memShown = memory.current();
-        memFlashShown = flashing;
-        repaint (juce::Rectangle<float> (60.0f * S, 296.0f * S, 820.0f * S, 100.0f * S).toNearestInt());
-    }
 
-    // head LEDs follow the Mode Selector
-    const int m = juce::jlimit (1, 12, (int) std::round (proc.apvts.getRawParameterValue ("mode")->load()));
-    const int mask = re2::kModes[m - 1].headMask;
-    if (mask != lastHeadMask)
+    const int m = juce::jlimit (1, 12, (int) std::lround (proc.apvts.getRawParameterValue ("mode")->load()));
+    lastHeadMask = re2::kModes[m - 1].headMask;
+    const bool flashing = now < memFlashUntil;
+    const int state = lastHeadMask | (paramOn ("inputLine") ? 16 : 0) | (paramOn ("tapeAged") ? 32 : 0) | (powerOn() ? 64 : 0) | (memory.current() << 8) | (m << 12);
+    if (state != shownState || flashing || flashing != memFlashShown)
     {
-        lastHeadMask = mask;
-        repaint (juce::Rectangle<float> (1020.0f * S, 380.0f * S, 440.0f * S, 90.0f * S).toNearestInt());
+        shownState = state;
+        memFlashShown = flashing;
+        repaint();
     }
 }
 
 void RE2AudioProcessorEditor::paint (juce::Graphics& g)
 {
-    g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
-    g.drawImage (background, 0, 0, kW, kH, 0, 0, background.getWidth(), background.getHeight());
-    g.addTransform (juce::AffineTransform::scale (S));      // from here on: background pixels
+    g.addTransform (juce::AffineTransform::scale (scale()));
+    ui::paintBody (g, kPal, kDesignW, kDesignH);
+    ui::paintHeaderNoPresets (g, kPal, "RE-2", "TAPE ECHO", "MAGNETIC WARMTH", powerOn());
 
-    // head LEDs (heads 1-3 from the Mode Selector; this engine has three heads)
-    const int mask = juce::jmax (0, lastHeadMask);
-    for (int i = 0; i < 4; ++i)
-        drawLamp (g, { kHeadLedX[i], kHeadLedY }, i < 3 && (mask & (1 << i)) != 0);
+    ui::paintPanel (g, kPal, tapeP(), "TAPE");
+    ui::paintPanel (g, kPal, mixerP(), "MIXER");
+    ui::paintPanel (g, kPal, echoP(), "ECHO");
+    ui::paintPanel (g, kPal, modeP(), "MODE");
+    ui::paintPanel (g, kPal, memoryP(), "MEMORY");
 
-    // memory LEDs: MANUAL, 1-4; all five flash green after a write
-    const bool memFlashing = juce::Time::getMillisecondCounter() < memFlashUntil;
-    const bool blinkOff = juce::Time::getMillisecondCounter() < memFlashUntil && ((juce::Time::getMillisecondCounter() / 100) % 2) == 1;
-    for (int i = 0; i < 5; ++i)
-        drawLamp (g, { kMemLedX[i], kMemoryLed0.y }, (memFlashing ? ! blinkOff : memory.current() == i), juce::Colour (0xff40d070));
-
-    // input select + tape type
-    const bool line = inputSwitch.getToggleState(), aged = tapeSwitch.getToggleState();
-    drawLamp (g, kGuitarLed, ! line);
-    drawLamp (g, kLineLed,    line);
-    drawLamp (g, kNewLed,   ! aged);
-    drawLamp (g, kAgedLed,    aged);
-
-    // SYNC: a flat rounded button, dark with a body-colour border when off, filled body colour when on
-    const float rad = kSyncPill.getHeight() * 0.5f;
-    g.setColour (syncOn ? kBody : juce::Colour (0xff131417));
-    g.fillRoundedRectangle (kSyncPill, rad);
-    g.setColour (kBody);
-    g.drawRoundedRectangle (kSyncPill.reduced (1.0f), rad, 2.0f);
-    g.setFont (juce::Font (juce::FontOptions ("Avenir Next", 24.0f, juce::Font::bold)));
-    g.setColour (syncOn ? juce::Colours::white : kBody);
-    g.drawText ("SYNC", kSyncPill, juce::Justification::centred, false);
-
-    // the chosen note division (REPEAT RATE sets it) next to the button while sync is on
-    if (syncOn)
+    // knobs (RATE shows the note division while sync is on)
+    Knob* ks[] = { &saturation, &wowFlutter, &bass, &treble, &reverbVol, &repeatRate, &intensity, &echoVol };
+    for (int i = 0; i < 8; ++i)
     {
-        g.setColour (juce::Colours::white);
-        g.setFont (juce::Font (juce::FontOptions ("Avenir Next", 34.0f, juce::Font::bold)));
-        g.drawText (vibr::sync::divisionNames()[juce::jlimit (0, vibr::sync::kNumDivisions - 1, division)], kDivisionText, juce::Justification::centredLeft, false);
+        auto& s = ks[i]->slider;
+        const float prop = (float) s.valueToProportionOfLength (s.getValue());
+        if (ks[i] == &repeatRate)
+            ui::paintKnob (g, kPal, knobCentre (i), ks[i]->name, syncOn ? vibr::sync::divisionNames()[juce::jlimit (0, vibr::sync::kNumDivisions - 1, division)] : juce::String (s.getValue(), 1),
+                           syncOn ? "" : "SLOW", syncOn ? "" : "FAST", prop);
+        else
+            ui::paintKnob (g, kPal, knobCentre (i), ks[i]->name, juce::String (s.getValue(), 1), "0", "10", prop);
     }
 
-    // power slide switch: chrome ball left = off, right = on; the slot lights up green when on
-    const bool on = powerSwitch.getToggleState();
-    if (on)
+    // row 1 strips under a divider: TAPE (NEW / AGED lamps + button), INPUT (GUITAR / LINE lamps + button), SYNC under RATE
+    for (const auto& p : { tapeP(), mixerP(), echoP() }) drawDivider (g, p, p.getY() + kDividerDy);
+    const bool line = paramOn ("inputLine"), aged = paramOn ("tapeAged");
+    drawLamp (g, stripLamp (tapeP(), 0), ! aged, kRed, kRedOff, "NEW");
+    drawLamp (g, stripLamp (tapeP(), 1),   aged, kRed, kRedOff, "AGED");
+    ui::paintFlatButton (g, kPal, stripButton (tapeP()), "TAPE", tapeZone.isDown());
+    drawLamp (g, stripLamp (mixerP(), 0), ! line, kRed, kRedOff, "GUITAR");
+    drawLamp (g, stripLamp (mixerP(), 1),   line, kRed, kRedOff, "LINE");
+    ui::paintFlatButton (g, kPal, stripButton (mixerP()), "INPUT", inputZone.isDown());
+    ui::paintFlatButton (g, kPal, syncRect(), "SYNC", syncOn);
+
+    // MODE: the 12-position dial with its legends, the readout and the head lamps (heads 1-3 from the mode; this engine has three heads)
     {
-        const auto slot = juce::Rectangle<float> (66.0f, 34.0f).withCentre (kPowerSwitch);
-        g.setColour (juce::Colour (0xff40d070).withAlpha (0.05f));
-        g.fillRoundedRectangle (slot.expanded (16.0f), 30.0f);
-        g.setColour (juce::Colour (0xff40d070).withAlpha (0.08f));
-        g.fillRoundedRectangle (slot.expanded (8.0f), 24.0f);
-        g.setGradientFill (juce::ColourGradient (juce::Colour (0xff2f8a4c), slot.getX(), slot.getY(),
-                                                 juce::Colour (0xff17512b), slot.getX(), slot.getBottom(), false));
-        g.fillRoundedRectangle (slot, 17.0f);
-        g.setColour (juce::Colours::white.withAlpha (0.10f));
-        g.fillRoundedRectangle (slot.withHeight (slot.getHeight() * 0.40f).reduced (8.0f, 3.0f), 6.0f);
+        const int cur = juce::jlimit (1, 12, (int) std::lround (mode.slider.getValue()));
+        const auto c = knobCentre (8);
+        for (int i = 0; i < 12; ++i)
+        {
+            const float a = juce::degreesToRadians (-150.0f + 30.0f * (float) i), sn = std::sin (a), co = -std::cos (a);
+            const bool sel = i + 1 == cur;
+            g.setColour (sel ? kPal.accent : kPal.track);
+            g.fillEllipse (juce::Rectangle<float> (6.0f, 6.0f).withCentre ({ c.x + sn * 50.0f, c.y + co * 50.0f }));
+            ui::drawText (g, juce::String (i + 1), c.x + sn * kModeLegendR, c.y + co * kModeLegendR, 17.0f, sel ? kPal.accent : kPal.inkSoft, sel, 0.0f,
+                          juce::Justification::centred, ui::Face::Mono);
+        }
+        const auto sc = modeScreen();
+        ui::paintScreen (g, kPal, sc);
+        ui::drawText (g, headText (cur), sc.getCentreX(), sc.getCentreY(), 22.0f, kPal.phosphor, true, 0.04f, juce::Justification::centred, ui::Face::Mono);
+        for (int i = 0; i < 4; ++i)
+            drawLamp (g, headLamp (i), i < 3 && (lastHeadMask & (1 << i)) != 0, kRed, kRedOff, "HEAD " + juce::String (i + 1));
     }
-    const juce::Point<float> ball (kPowerSwitch.x + (on ? 17.0f : -17.0f), kPowerSwitch.y);
-    g.setColour (juce::Colours::black.withAlpha (0.55f));
-    g.fillEllipse (juce::Rectangle<float> (30.0f, 30.0f).withCentre (ball + juce::Point<float> (2.0f, 4.0f)));
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xfffafbfd), ball.x - 6.0f, ball.y - 8.0f,
-                                             juce::Colour (0xff6b6f7a), ball.x + 9.0f, ball.y + 11.0f, true));
-    g.fillEllipse (juce::Rectangle<float> (28.0f, 28.0f).withCentre (ball));
+
+    // MEMORY: MANUAL, 1-4 lamps (all five flash green after a write), divider, MEMORY button with its hint
+    {
+        const auto now = juce::Time::getMillisecondCounter();
+        const bool flashing = now < memFlashUntil, blinkOff = flashing && ((now / 100) % 2) == 1;
+        for (int i = 0; i < 5; ++i)
+            drawLamp (g, memLamp (i), flashing ? ! blinkOff : memory.current() == i, kGreen, kGreenOff, i == 0 ? juce::String ("MANUAL") : juce::String (i));
+        drawDivider (g, memoryP(), memDividerY());
+        const auto b = memButton();
+        ui::paintFlatButton (g, kPal, b, "MEMORY", memoryZone.isDown());
+        ui::drawText (g, "HOLD = WRITE", b.getRight() + 14.0f, b.getCentreY(), 14.0f, kPal.inkSoft, true, 0.08f, juce::Justification::centredLeft);
+    }
+
+    ui::paintFooter (g, kPal, kDesignH - 15.0f);
 }

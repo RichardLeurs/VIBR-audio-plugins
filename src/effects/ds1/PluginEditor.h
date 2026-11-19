@@ -2,13 +2,10 @@
 #pragma once
 
 #include "PluginProcessor.h"
-#include "ui/PedalLook.h"
-#include "ui/PedalEditor.h"
+#include "ui/VintagePedalEditor.h"
 
-// Black knurled knob with a raised cap and a white pointer (same as the DM-1), drawn over the scales printed in the background.
-using DS1LookAndFeel = vibr::ui::PedalKnobLookAndFeel;
-
-class DS1AudioProcessorEditor : public vibr::ui::PedalEditor,
+// DS-1 in the default (Vintage Hardware) look: three one-knob panels FILTER / OUTPUT / DRIVE, drawn in code (no background image).
+class DS1AudioProcessorEditor : public vibr::ui::vintage::PedalEditor,
                                 private juce::Timer
 {
 public:
@@ -25,14 +22,15 @@ private:
 
     struct Knob
     {
+        const char* id;
+        const char* name;
         juce::Slider slider;
         std::unique_ptr<juce::SliderParameterAttachment> attachment;
     };
 
     DS1AudioProcessor& proc;
-    DS1LookAndFeel laf;
     MidiLearnUI midiUI { proc.midiMap };       // right-click a knob: MIDI learn
-    Knob tone, level, dist;
+    Knob tone { "tone", "TONE", {}, {} }, level { "level", "LEVEL", {}, {} }, dist { "dist", "DIST", {}, {} };
     bool lastOn = true;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DS1AudioProcessorEditor)

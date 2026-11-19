@@ -3,11 +3,13 @@
 
 #include "PluginProcessor.h"
 #include "MidiTarget.h"
-#include "ui/LabEditor.h"
+#include "ui/VintageLabEditor.h"
+#include "ui/OutputMeter.h"
 
-// AL-1 window (1200 x 690), on the shared UI of src/common/ui: header (name, preset chip, undo, OFF / ON), the CONTROLS panel with four tab pills on its top edge
-// (GATE / BOOST, AMP, CABINET, EQ / OUTPUT) and the DISPLAY panel with three (CURVE, CABINET, METERS). The display redraws at 30 Hz from the engine's atomics.
-class AL1AudioProcessorEditor : public vibr::ui::LabEditor
+// AL-1 window (1120 x 660) in the "vintage hardware" look of ui/VintageUI.h: header (name, preset screen, undo / redo, A / B, power), the CONTROLS panel with four tabs on its top
+// edge (GATE / BOOST, AMP, CABINET, EQ), the DISPLAY panel with two tabs (CURVE: transfer curve and sine in / out, CABINET: the response of the cabinet or the impulse responses) and
+// the OUTPUT panel (OUTPUT knob, LIMITER button, gate and limiter readouts, L / R meters). The display redraws at 30 Hz from the engine's atomics.
+class AL1AudioProcessorEditor : public vibr::ui::vintage::LabEditor
 {
 public:
     explicit AL1AudioProcessorEditor (AL1AudioProcessor&);
@@ -23,20 +25,20 @@ private:
     void layoutKnobs();
     int ampType() const { return juce::jlimit (0, al1::kNumTypes - 1, (int) std::lround (value ("ampType"))); }
     int tab() const { return juce::jlimit (0, 3, proc.uiTab.load()); }
-    int displayTab() const { return juce::jlimit (0, 2, proc.uiDisplayTab.load()); }
+    int displayTab() const { return juce::jlimit (0, 1, proc.uiDisplayTab.load()); }
     void showIrMenu (int slot);
     void loadIr (int slot, const juce::File& f);
     void updateDisplay();
     void drawCurve (juce::Graphics&);
     void drawCabinet (juce::Graphics&);
-    void drawMeters (juce::Graphics&);
+    void drawOutput (juce::Graphics&);
     void paintSwitches (juce::Graphics&);
 
     struct Knob
     {
         const char* id;
-        int tab;
-        float x, y;                   // centre in the CONTROLS panel (layout units, from the panel's top left)
+        int tab;                      // 0 .. 3 = the CONTROLS tab, -1 = the OUTPUT panel (always shown)
+        int index;                    // position in the knob row of the tab
         const char* name;
         const char* lo;
         const char* hi;
@@ -46,8 +48,7 @@ private:
     struct Switch
     {
         const char* id;
-        int tab;
-        juce::Rectangle<float> r;     // in the CONTROLS panel
+        int tab;                      // as Knob::tab
         const char* label;
         MidiTarget target;
     };

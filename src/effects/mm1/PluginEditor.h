@@ -2,17 +2,11 @@
 #pragma once
 
 #include "PluginProcessor.h"
+#include "ui/VintagePedalEditor.h"
 
-// Black knurled knob with a raised cap and a white pointer (same as the DM-1), drawn over the scales printed in the background.
-class MemoryManLookAndFeel : public juce::LookAndFeel_V4
-{
-public:
-    void drawRotarySlider (juce::Graphics&, int x, int y, int w, int h, float pos,
-                           float startAngle, float endAngle, juce::Slider&) override;
-};
-
-class MemoryManAudioProcessorEditor : public juce::AudioProcessorEditor,
-                                private juce::Timer
+// MM-1 in the default (Vintage Hardware) look: MIX (BLEND, LEVEL), ECHO (FEEDBACK, DELAY, SYNC) and MODULATION (CHRS/VIBR, DEPTH), drawn in code (no background image).
+class MemoryManAudioProcessorEditor : public vibr::ui::vintage::PedalEditor,
+                                      private juce::Timer
 {
 public:
     explicit MemoryManAudioProcessorEditor (MemoryManAudioProcessor&);
@@ -25,7 +19,7 @@ public:
 
 private:
     void timerCallback() override;
-    void syncChanged();
+    void syncChanged (bool on);
 
     struct Knob
     {
@@ -34,17 +28,14 @@ private:
     };
 
     MemoryManAudioProcessor& proc;
-    MemoryManLookAndFeel laf;
-    juce::ComponentBoundsConstrainer constrainer;
-    juce::Image background;
     MidiLearnUI midiUI { proc.midiMap };       // right-click a knob: MIDI learn
-    Knob knobs[6];
+    Knob knobs[6];                             // blend, level, feedback, delay, chrsVibr, depth
     bool lastOn = true;
-    // SYNC button under the DELAY knob (drawn in code over the background)
-    juce::ParameterAttachment syncAtt, divisionAtt;
     bool syncOn = false;
     int division = 4;
     std::unique_ptr<juce::SliderParameterAttachment> divisionKnobAtt;      // the DELAY knob while sync is on
+    // declared last so they are destroyed first (their callbacks touch the members above)
+    juce::ParameterAttachment syncAtt, divisionAtt;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MemoryManAudioProcessorEditor)
 };

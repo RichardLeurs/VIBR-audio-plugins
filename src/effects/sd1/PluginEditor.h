@@ -2,14 +2,11 @@
 #pragma once
 
 #include "PluginProcessor.h"
-#include "ui/PedalLook.h"
-#include "ui/PedalEditor.h"
-#include "ui/VibrUI.h"
+#include "ui/VintagePedalEditor.h"
 
-// Black knurled knob with a raised cap and a white pointer (same as the DM-1), drawn over the scales printed in the background.
-using SDD1000LookAndFeel = vibr::ui::PedalKnobLookAndFeel;
-
-class SDD1000AudioProcessorEditor : public vibr::ui::PedalEditor,
+// SD-1 in the default (Vintage Hardware) look, drawn in code (no background image): INPUT (headroom screen, LEVEL), DELAY TIME (TIME, FACTOR, SYNC),
+// REGENERATION (FEEDBACK, HI-CUT), MODULATION (INTENSITY, FREQUENCY) and OUTPUT (DIRECT, EFFECT).
+class SDD1000AudioProcessorEditor : public vibr::ui::vintage::PedalEditor,
                                     private juce::Timer
 {
 public:
@@ -32,19 +29,18 @@ private:
     };
 
     SDD1000AudioProcessor& proc;
-    SDD1000LookAndFeel laf;
     MidiLearnUI midiUI { proc.midiMap };       // right-click a knob: MIDI learn
     Knob knobs[9];
 
-    // tempo sync pills in the DELAY TIME panel (code-drawn over the background)
     bool syncOn = false;
     int division = 4;
-    juce::ParameterAttachment syncAtt, divisionAtt;
     std::unique_ptr<juce::SliderParameterAttachment> divisionKnobAtt;      // the TIME knob while sync is on
 
     float meterDb = -60.0f;
     int lastSegs = -1;
     bool lastPower = true;
+    // declared last so they are destroyed first (their callbacks touch the members above)
+    juce::ParameterAttachment syncAtt, divisionAtt;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SDD1000AudioProcessorEditor)
 };

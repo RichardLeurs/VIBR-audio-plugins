@@ -1,109 +1,163 @@
 // VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
 #include "PluginEditor.h"
-#include "SL2Data.h"
+
+namespace ui = vibr::ui::vintage;
 
 namespace
 {
-// Positions are in the 2380 x 890 coordinates of the rendered background (make_background.py). The editor is resizable at a
-// fixed aspect ratio; paint() scales image pixels to the window.
-constexpr float kImgW = 2380.0f, kImgH = 890.0f;
-constexpr int kBaseW = 1190;
+const ui::Palette kPal { juce::Colour (165, 201, 67) };
 
-constexpr float kKnobRadius = 100.0f;                      // black knob; the printed scale sits outside it
-constexpr float kKnobY = 532.0f;
-struct KnobSpec { const char* id; float x; float startDeg, endDeg; };
-const KnobSpec kBalance { "balance", 185.0f, -154.0f, 154.0f }, kTempo { "tempo", 475.0f, -154.0f, 154.0f },
-               kAttack { "attack", 785.0f, -154.0f, 154.0f }, kDuty { "duty", 1075.0f, -154.0f, 154.0f },
-               kVariation { "variation", 1460.0f, -150.0f, 150.0f },      // 11 patterns, 30 degrees apart
-               kMode { "mode", 2020.0f, -90.0f, 90.0f };                 // 5 positions: SINGLE, DUAL, TREMOLO, SFX, HARMONIC
+// Design space: 1120 wide (margin 28, gap 18). Row 1 (y 114, 230 high): OUTPUT 330 / SLICE 330 / MODE 368. Row 2 (y 362, 76 high): VARIATION 678 / TEMPO SOURCE 368.
+constexpr float kDesignW = 1120.0f, kDesignH = 468.0f;
+constexpr float kRow1Y = 114.0f, kRow1H = 230.0f, kRow2Y = 362.0f, kRow2H = 76.0f, kKnobDy = 86.0f, kGap = 18.0f;
+constexpr float kWKnobs = 330.0f, kWMode = 368.0f, kWVar = 678.0f;
+constexpr int kNumVariations = 11, kNumModes = 5;
+const char* const kModeNames[kNumModes] = { "SINGLE", "DUAL", "TREMOLO", "SFX", "HARMONIC" };
 
-const juce::Point<float> kLed { 2305.0f, 87.0f };          // power slide switch (top right, ball left = off) = bypass
-const juce::Point<float> kSync { 2020.0f, 702.0f };        // tempo source slide switch: ball left = KNOB, right = HOST
-
+juce::Rectangle<float> panelRect (int i)       // 0 OUTPUT, 1 SLICE, 2 MODE, 3 VARIATION, 4 TEMPO SOURCE
+{
+    const float x2 = ui::kMargin + 2.0f * (kWKnobs + kGap);
+    switch (i)
+    {
+        case 0:  return { ui::kMargin, kRow1Y, kWKnobs, kRow1H };
+        case 1:  return { ui::kMargin + kWKnobs + kGap, kRow1Y, kWKnobs, kRow1H };
+        case 2:  return { x2, kRow1Y, kWMode, kRow1H };
+        case 3:  return { ui::kMargin, kRow2Y, kWVar, kRow2H };
+        default: return { x2, kRow2Y, kWMode, kRow2H };
+    }
+}
+juce::Point<float> knobCentre (int k)          // 0 BALANCE, 1 TEMPO (OUTPUT), 2 ATTACK, 3 DUTY (SLICE)
+{
+    const auto p = panelRect (k / 2);
+    return { p.getCentreX() + (k % 2 == 0 ? -75.0f : 75.0f), kRow1Y + kKnobDy };
+}
+juce::Rectangle<float> variationButton (int i)  // 11 buttons of 52 with a gap of 6, centred in the VARIATION panel
+{
+    const auto p = panelRect (3);
+    const float total = 52.0f * kNumVariations + 6.0f * (kNumVariations - 1), x0 = p.getCentreX() - total * 0.5f;
+    return { x0 + 58.0f * (float) i, p.getCentreY() - 14.0f, 52.0f, 30.0f };   // -14: the panel line is 2 thick, so the visual middle is 1 below the centre
+}
+juce::Rectangle<float> modeButton (int i)       // a column of 5 buttons (30 high, 8 apart), centred in the MODE panel
+{
+    const auto p = panelRect (2);
+    const float total = 5.0f * 30.0f + 4.0f * 8.0f;
+    return juce::Rectangle<float> (200.0f, 30.0f).withCentre ({ p.getCentreX(), p.getY() + 1.0f + (p.getHeight() - 1.0f) * 0.5f - total * 0.5f + 15.0f + 38.0f * (float) i });
+}
+juce::Rectangle<float> sourceButton (int i)     // KNOB / HOST: two buttons that share their middle border
+{
+    const auto p = panelRect (4);
+    return { p.getCentreX() - 140.0f + 140.0f * (float) i - 1.0f * (float) i, p.getCentreY() - 14.0f, 141.0f, 30.0f };
+}
 } // namespace
 
-//==============================================================================
-//==============================================================================
 SL2AudioProcessorEditor::SL2AudioProcessorEditor (SL2AudioProcessor& p)
-    : PedalEditor (p, SL2Data::background_png, (size_t) SL2Data::background_pngSize, kImgW, kImgH, kBaseW, 595), proc (p)
+    : PedalEditor (p, kDesignW, kDesignH), proc (p)
 {
-    setLookAndFeel (&laf);
-    
-    const auto add = [this] (Knob& k, const KnobSpec& spec)
+    for (auto* k : { &balance, &tempo, &attack, &duty })
     {
-        k.slider.setSliderStyle (juce::Slider::RotaryVerticalDrag);
-        k.slider.setTextBoxStyle (juce::Slider::NoTextBox, true, 0, 0);
-        k.slider.setRotaryParameters (juce::degreesToRadians (spec.startDeg), juce::degreesToRadians (spec.endDeg), true);
-        k.slider.setMouseDragSensitivity (180);
-        k.slider.setScrollWheelEnabled (false);
-        addAndMakeVisible (k.slider);
-        k.attachment = std::make_unique<juce::SliderParameterAttachment> (*proc.apvts.getParameter (spec.id), k.slider, nullptr);
-    };
-    add (balance, kBalance);
-    add (tempo, kTempo);
-    add (attack, kAttack);
-    add (duty, kDuty);
-    add (variation, kVariation);
-    add (mode, kMode);
+        auto& s = k->slider;
+        s.setSliderStyle (juce::Slider::RotaryVerticalDrag);
+        s.setTextBoxStyle (juce::Slider::NoTextBox, true, 0, 0);
+        s.setRotaryParameters (juce::degreesToRadians (-135.0f), juce::degreesToRadians (135.0f), true);
+        s.setMouseDragSensitivity (180);
+        s.setScrollWheelEnabled (false);
+        s.setPopupDisplayEnabled (true, true, this);
+        s.onValueChange = [this] { repaint(); };
+        addAndMakeVisible (s);
+        k->attachment = std::make_unique<juce::SliderParameterAttachment> (*proc.apvts.getParameter (k->id), s, nullptr);
+    }
 
-    resized();                                                       // place the knobs (the base class sized the window before they existed)
+    resized();
     startTimerHz (20);
 }
 
-SL2AudioProcessorEditor::~SL2AudioProcessorEditor() { setLookAndFeel (nullptr); }
+SL2AudioProcessorEditor::~SL2AudioProcessorEditor() = default;
 
 void SL2AudioProcessorEditor::resized()
 {
-    const float S = (float) getWidth() / kImgW;
-    const auto place = [S] (Knob& k, const KnobSpec& spec)
-    {
-        k.slider.setBounds (juce::Rectangle<float> (2.0f * kKnobRadius * S, 2.0f * kKnobRadius * S)
-                                .withCentre ({ spec.x * S, kKnobY * S }).toNearestInt());
-    };
-    place (balance, kBalance);
-    place (tempo, kTempo);
-    place (attack, kAttack);
-    place (duty, kDuty);
-    place (variation, kVariation);
-    place (mode, kMode);
+    placeKnob (balance.slider, knobCentre (0));
+    placeKnob (tempo.slider, knobCentre (1));
+    placeKnob (attack.slider, knobCentre (2));
+    placeKnob (duty.slider, knobCentre (3));
+}
+
+void SL2AudioProcessorEditor::setParam (const char* id, float value01)
+{
+    auto* prm = proc.apvts.getParameter (id);
+    prm->beginChangeGesture();
+    prm->setValueNotifyingHost (value01);
+    prm->endChangeGesture();
+    repaint();
 }
 
 void SL2AudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 {
-    // the power slide switch is the bypass switch; the small slide switch under the mode knob chooses the tempo source
-    const float S = (float) getWidth() / kImgW;
-    const auto toggle = [this] (const char* id)
-    {
-        auto* prm = proc.apvts.getParameter (id);
-        prm->beginChangeGesture();
-        prm->setValueNotifyingHost (prm->getValue() > 0.5f ? 0.0f : 1.0f);
-        prm->endChangeGesture();
-    };
-    if (juce::Rectangle<float> (110.0f * S, 70.0f * S).withCentre (kLed * S).contains (e.position)) toggle ("bypass");
-    else if (juce::Rectangle<float> (100.0f * S, 60.0f * S).withCentre (kSync * S).contains (e.position)) toggle ("hostSync");
+    if (toggleBypassAt (e.position)) { repaint(); return; }       // the power switch is the bypass switch
+
+    const auto p = e.position / scale();
+    for (int i = 0; i < kNumVariations; ++i)
+        if (variationButton (i).expanded (3.0f).contains (p))
+        {
+            setParam ("variation", proc.apvts.getParameter ("variation")->convertTo0to1 ((float) (i + 1)));
+            return;
+        }
+    for (int i = 0; i < kNumModes; ++i)
+        if (modeButton (i).expanded (3.0f).contains (p))
+        {
+            setParam ("mode", proc.apvts.getParameter ("mode")->convertTo0to1 ((float) i));
+            return;
+        }
+    for (int i = 0; i < 2; ++i)                                    // 0 = KNOB, 1 = HOST
+        if (sourceButton (i).expanded (3.0f).contains (p))
+        {
+            setParam ("hostSync", (float) i);
+            return;
+        }
 }
 
 void SL2AudioProcessorEditor::timerCallback()
 {
-    const bool on = proc.apvts.getRawParameterValue ("bypass")->load() < 0.5f;
+    const bool on = powerOn();
     const bool host = proc.apvts.getRawParameterValue ("hostSync")->load() > 0.5f;
-    if (on != lastOn || host != lastHost) { lastOn = on; lastHost = host; repaint(); }
+    const int variation = (int) std::lround (proc.apvts.getRawParameterValue ("variation")->load());
+    const int mode = (int) std::lround (proc.apvts.getRawParameterValue ("mode")->load());
+    if (on != lastOn || host != lastHost || variation != lastVariation || mode != lastMode)
+    {
+        lastOn = on; lastHost = host; lastVariation = variation; lastMode = mode;
+        repaint();
+    }
 }
 
 void SL2AudioProcessorEditor::paint (juce::Graphics& g)
 {
-    paintBackground (g);       // the image, then image pixels
+    g.addTransform (juce::AffineTransform::scale (scale()));
+    ui::paintBody (g, kPal, kDesignW, kDesignH);
+    ui::paintHeaderNoPresets (g, kPal, "SL-2", "RHYTHMIC SLICER", "RHYTHMIC PATTERNS", powerOn());
 
-    // power slide switch: chrome ball left = off, right = on; the slot lights up green when on
-    const bool on = proc.apvts.getRawParameterValue ("bypass")->load() < 0.5f;
-    vibr::ui::paintSlideSwitch (g, kLed, on);
+    ui::paintPanel (g, kPal, panelRect (0), "OUTPUT");
+    ui::paintPanel (g, kPal, panelRect (1), "SLICE");
+    ui::paintPanel (g, kPal, panelRect (2), "MODE");
+    ui::paintPanel (g, kPal, panelRect (3), "VARIATION");
+    ui::paintPanel (g, kPal, panelRect (4), "TEMPO SOURCE");
 
-    // tempo source: chrome ball in the slot, left = KNOB, right = HOST
+    Knob* knobs[] = { &balance, &tempo, &attack, &duty };
+    for (int k = 0; k < 4; ++k)
+    {
+        auto& s = knobs[k]->slider;
+        ui::paintKnob (g, kPal, knobCentre (k), knobs[k]->name, juce::String (s.getValue(), 1), "0", "10", (float) s.valueToProportionOfLength (s.getValue()));
+    }
+
+    const int variation = (int) std::lround (proc.apvts.getRawParameterValue ("variation")->load());
+    for (int i = 0; i < kNumVariations; ++i)
+        ui::paintFlatButton (g, kPal, variationButton (i), juce::String (i + 1), variation == i + 1, 20.0f);
+
+    const int mode = (int) std::lround (proc.apvts.getRawParameterValue ("mode")->load());
+    for (int i = 0; i < kNumModes; ++i)
+        ui::paintFlatButton (g, kPal, modeButton (i), kModeNames[i], mode == i);
+
     const bool host = proc.apvts.getRawParameterValue ("hostSync")->load() > 0.5f;
-    const juce::Point<float> ball (kSync.x + (host ? 17.0f : -17.0f), kSync.y);
-    g.setColour (juce::Colours::black.withAlpha (0.55f));
-    g.fillEllipse (juce::Rectangle<float> (30.0f, 30.0f).withCentre (ball + juce::Point<float> (2.0f, 4.0f)));
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xfffafbfd), ball.x - 6.0f, ball.y - 8.0f,
-                                             juce::Colour (0xff6b6f7a), ball.x + 9.0f, ball.y + 11.0f, true));
-    g.fillEllipse (juce::Rectangle<float> (28.0f, 28.0f).withCentre (ball));
+    for (const int i : { host ? 0 : 1, host ? 1 : 0 })                  // the lit one last: it keeps its whole border
+        ui::paintFlatButton (g, kPal, sourceButton (i), i == 0 ? "KNOB" : "HOST", (i == 1) == host);
+
+    ui::paintFooter (g, kPal, kDesignH - 15.0f);
 }

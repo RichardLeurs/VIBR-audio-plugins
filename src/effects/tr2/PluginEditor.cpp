@@ -1,72 +1,58 @@
 // VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
 #include "PluginEditor.h"
-#include "TR2Data.h"
+
+namespace ui = vibr::ui::vintage;
 
 namespace
 {
-// Positions are in the 1840 x 890 coordinates of the rendered background (make_background.py). The editor is resizable at a
-// fixed aspect ratio; paint() scales image pixels to the window.
-constexpr float kImgW = 1840.0f, kImgH = 968.0f;
-constexpr int kBaseW = 920;
+const ui::Palette kPal { juce::Colour (21, 156, 112) };
 
-constexpr float kKnobRadius = 100.0f;                      // black knob; the printed scale sits outside it
-constexpr float kKnobY = 532.0f;
-struct KnobSpec { const char* id; float x; float startDeg, endDeg; };
-const KnobSpec kRate { "rate", 326.0f, -154.0f, 154.0f }, kWave { "wave", 920.0f, -154.0f, 154.0f }, kDepth { "depth", 1514.0f, -154.0f, 154.0f };
-const juce::Point<float> kLed { 1765.0f, 87.0f };          // power slide switch (top right, ball left = off) = bypass
+// Design space: 1120 wide (margin 28, gap 18), one row of three equal panels, y 114 to 360, footer centre 15 above the bottom.
+constexpr float kDesignW = 1120.0f, kDesignH = 390.0f;
+constexpr float kPanelY = 114.0f, kPanelH = 246.0f, kKnobDy = 86.0f, kButtonDy = 200.0f;
+constexpr float kPanelW = (kDesignW - 2.0f * ui::kMargin - 2.0f * 18.0f) / 3.0f;
 
-// tempo sync: a SYNC button in the SPEED panel under the RATE knob, below a divider line (drawn in the background). While sync is on the
-// RATE knob selects the note division (it is attached to "division") and the division is shown right of the button.
-const juce::Rectangle<float> kSyncPill = juce::Rectangle<float> (116.0f, 46.0f).withCentre ({ 255.0f, 776.0f });
-const juce::Rectangle<float> kDivisionText = juce::Rectangle<float> (130.0f, 46.0f).withCentre ({ 397.0f, 776.0f });
-const juce::Colour kBody (0xff159c70);                          // body colour (BODY in make_background.py)
-const juce::Colour kPanel (0xff1b1c1f);
+juce::Rectangle<float> panelRect (int i) { return { ui::kMargin + (float) i * (kPanelW + 18.0f), kPanelY, kPanelW, kPanelH }; }
+juce::Point<float> knobCentre (int i) { return { panelRect (i).getCentreX(), kPanelY + kKnobDy }; }
+juce::Rectangle<float> syncRect() { return juce::Rectangle<float> (110.0f, 30.0f).withCentre ({ panelRect (0).getCentreX(), kPanelY + kButtonDy + 15.0f }); }
+}
 
-} // namespace
-
-//==============================================================================
 //==============================================================================
 TR2AudioProcessorEditor::TR2AudioProcessorEditor (TR2AudioProcessor& p)
-    : PedalEditor (p, TR2Data::background_png, (size_t) TR2Data::background_pngSize, kImgW, kImgH, kBaseW, 460), proc (p),
+    : PedalEditor (p, kDesignW, kDesignH), proc (p),
       syncAtt (*p.apvts.getParameter ("sync"), [this] (float v) { syncChanged (v > 0.5f); }, nullptr),
       divisionAtt (*p.apvts.getParameter ("division"), [this] (float v) { division = juce::jlimit (0, vibr::sync::kNumDivisions - 1, (int) std::lround (v)); repaint(); }, nullptr)
 {
-    setLookAndFeel (&laf);
-    
-    const auto add = [this] (Knob& k, const KnobSpec& spec)
+    const auto add = [this] (Knob& k, const char* id)
     {
         k.slider.setSliderStyle (juce::Slider::RotaryVerticalDrag);
         k.slider.setTextBoxStyle (juce::Slider::NoTextBox, true, 0, 0);
-        k.slider.setRotaryParameters (juce::degreesToRadians (spec.startDeg), juce::degreesToRadians (spec.endDeg), true);
+        k.slider.setRotaryParameters (juce::degreesToRadians (-135.0f), juce::degreesToRadians (135.0f), true);
         k.slider.setMouseDragSensitivity (180);
         k.slider.setScrollWheelEnabled (false);
+        k.slider.setPopupDisplayEnabled (true, true, this);
+        k.slider.onValueChange = [this] { repaint(); };
         addAndMakeVisible (k.slider);
-        k.attachment = std::make_unique<juce::SliderParameterAttachment> (*proc.apvts.getParameter (spec.id), k.slider, nullptr);
+        k.attachment = std::make_unique<juce::SliderParameterAttachment> (*proc.apvts.getParameter (id), k.slider, nullptr);
     };
-    add (rate, kRate);
-    add (wave, kWave);
-    add (depth, kDepth);
+    add (rate, "rate");
+    add (wave, "wave");
+    add (depth, "depth");
     midiUI.add (rate.slider, "rate");  midiUI.add (wave.slider, "wave");  midiUI.add (depth.slider, "depth");
 
     syncAtt.sendInitialUpdate();
     divisionAtt.sendInitialUpdate();
-    resized();                                                       // place the knobs (the base class sized the window before they existed)
+    resized();
     startTimerHz (20);
 }
 
-TR2AudioProcessorEditor::~TR2AudioProcessorEditor() { setLookAndFeel (nullptr); }
+TR2AudioProcessorEditor::~TR2AudioProcessorEditor() = default;
 
 void TR2AudioProcessorEditor::resized()
 {
-    const float S = (float) getWidth() / kImgW;
-    const auto place = [S] (Knob& k, const KnobSpec& spec)
-    {
-        k.slider.setBounds (juce::Rectangle<float> (2.0f * kKnobRadius * S, 2.0f * kKnobRadius * S)
-                                .withCentre ({ spec.x * S, kKnobY * S }).toNearestInt());
-    };
-    place (rate, kRate);
-    place (wave, kWave);
-    place (depth, kDepth);
+    placeKnob (rate.slider, knobCentre (0));
+    placeKnob (wave.slider, knobCentre (1));
+    placeKnob (depth.slider, knobCentre (2));
 }
 
 void TR2AudioProcessorEditor::syncChanged (bool on)
@@ -82,55 +68,44 @@ void TR2AudioProcessorEditor::syncChanged (bool on)
 
 void TR2AudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 {
-    const float S = (float) getWidth() / kImgW;
-    const auto pos = e.position / S;
-    if (kSyncPill.expanded (4.0f).contains (pos)) { syncAtt.setValueAsCompleteGesture (syncOn ? 0.0f : 1.0f); return; }
-
-    // the power slide switch is the bypass switch
-    if (juce::Rectangle<float> (110.0f * S, 70.0f * S).withCentre (kLed * S).contains (e.position))
-    {
-        auto* prm = proc.apvts.getParameter ("bypass");
-        prm->beginChangeGesture();
-        prm->setValueNotifyingHost (prm->getValue() > 0.5f ? 0.0f : 1.0f);
-        prm->endChangeGesture();
-    }
+    if (syncRect().expanded (3.0f).contains (e.position / scale())) { syncAtt.setValueAsCompleteGesture (syncOn ? 0.0f : 1.0f); return; }
+    if (toggleBypassAt (e.position)) repaint();                       // the power switch is the bypass switch
 }
 
 void TR2AudioProcessorEditor::paintOverChildren (juce::Graphics& g)
 {
-    midiUI.paintMarks (g, kBody);
+    g.addTransform (juce::AffineTransform::scale (scale()));
+    midiUI.paintMarks (g, kPal.accent);
 }
 
 void TR2AudioProcessorEditor::timerCallback()
 {
     if (midiUI.needsRepaint()) { midiUI.tick(); repaint(); }
-    const bool on = proc.apvts.getRawParameterValue ("bypass")->load() < 0.5f;
+    const bool on = powerOn();
     if (on != lastOn) { lastOn = on; repaint(); }
 }
 
 void TR2AudioProcessorEditor::paint (juce::Graphics& g)
 {
-    paintBackground (g);       // the image, then image pixels
+    g.addTransform (juce::AffineTransform::scale (scale()));
+    ui::paintBody (g, kPal, kDesignW, kDesignH);
+    ui::paintHeaderNoPresets (g, kPal, "TR-2", "TREMOLO", "PULSING MOTION", powerOn());
 
-    // SYNC: a flat rounded button, dark with a body-colour border when off, filled body colour when on
-    const float rad = kSyncPill.getHeight() * 0.5f;
-    g.setColour (syncOn ? kBody : kPanel.darker (0.4f));
-    g.fillRoundedRectangle (kSyncPill, rad);
-    g.setColour (kBody);
-    g.drawRoundedRectangle (kSyncPill.reduced (1.0f), rad, 2.0f);
-    g.setFont (juce::Font (juce::FontOptions ("Avenir Next", 24.0f, juce::Font::bold)));
-    g.setColour (syncOn ? juce::Colours::white : kBody);
-    g.drawText ("SYNC", kSyncPill, juce::Justification::centred, false);
-
-    // the chosen note division (the RATE knob sets it) next to the button while sync is on
-    if (syncOn)
+    const char* titles[] = { "SPEED", "SHAPE", "AMOUNT" };
+    const char* names[]  = { "RATE", "WAVE", "DEPTH" };
+    Knob* knobs[] = { &rate, &wave, &depth };
+    for (int i = 0; i < 3; ++i)
     {
-        g.setColour (juce::Colours::white);
-        g.setFont (juce::Font (juce::FontOptions ("Avenir Next", 34.0f, juce::Font::bold)));
-        g.drawText (vibr::sync::divisionNames()[juce::jlimit (0, vibr::sync::kNumDivisions - 1, division)], kDivisionText, juce::Justification::centredLeft, false);
+        ui::paintPanel (g, kPal, panelRect (i), titles[i]);
+        auto& s = knobs[i]->slider;
+        const bool divisionShown = (i == 0 && syncOn);
+        const juce::String value = divisionShown ? vibr::sync::divisionNames()[juce::jlimit (0, vibr::sync::kNumDivisions - 1, division)]
+                                                 : juce::String (s.getValue(), 1);
+        const char* lo = i == 1 ? "SINE" : (divisionShown ? "" : "0");
+        const char* hi = i == 1 ? "SQR"  : (divisionShown ? "" : "10");
+        ui::paintKnob (g, kPal, knobCentre (i), names[i], value, lo, hi, (float) s.valueToProportionOfLength (s.getValue()));
     }
 
-    // power slide switch: chrome ball left = off, right = on; the slot lights up green when on
-    const bool on = proc.apvts.getRawParameterValue ("bypass")->load() < 0.5f;
-    vibr::ui::paintSlideSwitch (g, kLed, on);
+    ui::paintFlatButton (g, kPal, syncRect(), "SYNC", syncOn);
+    ui::paintFooter (g, kPal, kDesignH - 15.0f);
 }

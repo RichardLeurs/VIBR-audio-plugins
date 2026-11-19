@@ -2,14 +2,10 @@
 #pragma once
 
 #include "PluginProcessor.h"
-#include "ui/PedalLook.h"
-#include "ui/PedalEditor.h"
-#include "ui/VibrUI.h"
+#include "ui/VintagePedalEditor.h"
 
-// Black knurled knob with a raised cap and a white pointer (same as the DM-1), drawn over the scales printed in the background.
-using BF3LookAndFeel = vibr::ui::PedalKnobLookAndFeel;
-
-class BF3AudioProcessorEditor : public vibr::ui::PedalEditor,
+// BF-3 in the default Vintage Hardware look: cream plate, bakelite knobs, outlined panels FLANGE / SWEEP / MODE, all drawn in code.
+class BF3AudioProcessorEditor : public vibr::ui::vintage::PedalEditor,
                                 private juce::Timer
 {
 public:
@@ -24,6 +20,7 @@ public:
 private:
     void timerCallback() override;
     void syncChanged();
+    int stateKey() const;
 
     struct Knob
     {
@@ -32,15 +29,13 @@ private:
     };
 
     BF3AudioProcessor& proc;
-    BF3LookAndFeel laf;
     MidiLearnUI midiUI { proc.midiMap };       // right-click a knob: MIDI learn
-    Knob manual, res, depth, rate, mode;
-    bool lastOn = true;
+    Knob manual, res, depth, rate;
+    int lastKey = -1;
 
-    // tempo sync pills under the SWEEP panel (code-drawn); declared after the knobs because their callbacks dim the RATE knob
     bool syncOn = false;
-    int division = 3;
-    juce::ParameterAttachment syncAtt, divisionAtt;
+    int division = 3, mode = 1;
+    juce::ParameterAttachment syncAtt, divisionAtt, modeAtt;
     std::unique_ptr<juce::SliderParameterAttachment> divisionKnobAtt;      // the RATE knob while sync is on
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BF3AudioProcessorEditor)

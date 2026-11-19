@@ -2,13 +2,12 @@
 #pragma once
 
 #include "PluginProcessor.h"
-#include "ui/LabEditor.h"
-#include "ui/OutputMeter.h"
+#include "ui/VintageLabEditor.h"
 
-// RB-1 window (1200 x 690), on the shared UI of src/common/ui: header (name, preset chip, A / B, undo), the CONTROLS panel with the mode tab pills on its top edge (the
+// RB-1 window (1120 x 660), in the "vintage hardware" look of src/common/ui/VintageUI.h: header (name, preset screen, undo / redo, A / B, power), the CONTROLS panel with the mode tabs on its top edge (the
 // knobs of the mode and its types: a popup of the 12 classic types, the 5 space modes, or the texture, root and scale of the strings), the OUTPUT panel (PRE-DELAY, DUCK,
-// MIX, LEVEL, FREEZE) and the TAIL display (the wet level over five seconds, or the strings with their notes and how strongly they ring).
-class RB1AudioProcessorEditor : public vibr::ui::LabEditor
+// MIX, LEVEL, FREEZE) and the TAIL screen (the wet level over five seconds, or the strings with their notes and how strongly they ring).
+class RB1AudioProcessorEditor : public vibr::ui::vintage::LabEditor
 {
 public:
     explicit RB1AudioProcessorEditor (RB1AudioProcessor&);

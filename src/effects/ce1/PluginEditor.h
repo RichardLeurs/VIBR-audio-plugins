@@ -2,21 +2,10 @@
 #pragma once
 
 #include "PluginProcessor.h"
-#include "ui/PedalLook.h"
-#include "ui/VibrUI.h"
+#include "ui/VintagePedalEditor.h"
 
-//==============================================================================
-// Black ribbed knobs on a silver skirt, drawn over the scale printed in the background.
-class CE1LookAndFeel : public vibr::ui::PedalKnobLookAndFeel
-{
-public:
-
-    // switches are painted by the editor; the buttons are only click targets
-    void drawToggleButton (juce::Graphics&, juce::ToggleButton&, bool, bool) override {}
-};
-
-//==============================================================================
-class CE1AudioProcessorEditor : public juce::AudioProcessorEditor,
+// CE-1 in the default Vintage Hardware look: cream plate, bakelite knobs, outlined panels INPUT / CHORUS / VIBRATO / EFFECT, all drawn in code.
+class CE1AudioProcessorEditor : public vibr::ui::vintage::PedalEditor,
                                 private juce::Timer
 {
 public:
@@ -31,36 +20,27 @@ public:
 private:
     void timerCallback() override;
     void syncChanged();
+    int stateKey() const;
 
     struct Knob
     {
         juce::Slider slider;
         std::unique_ptr<juce::SliderParameterAttachment> attachment;
     };
-    struct Switch
-    {
-        juce::ToggleButton button;
-        std::unique_ptr<juce::ButtonParameterAttachment> attachment;
-    };
-
-    void addKnob (Knob&, const juce::String& paramId);
-    void addSwitch (Switch&, const juce::String& paramId);
 
     CE1AudioProcessor& proc;
-    CE1LookAndFeel laf;
-    juce::Image background;   // rendered panel (make_background.py); switches, lamps and knobs are drawn live on top
-
     MidiLearnUI midiUI { proc.midiMap };       // right-click a knob: MIDI learn
     Knob level, chorus, depth, rate;
-    Switch inputSwitch, effectSwitch, powerSwitch;
+    int lastKey = -1;
 
+    bool inputHigh = true, vibrato = false;
     bool peakLit = false;
     int peakHold = 0;
 
-    // SYNC button in the VIBRATO panel (code-drawn); declared after the knobs because their callbacks dim the RATE knob
+    // SYNC button in the VIBRATO panel; declared after the knobs because their callbacks touch the RATE knob
     bool syncOn = false;
     int division = 3;
-    juce::ParameterAttachment syncAtt, divisionAtt;
+    juce::ParameterAttachment inputAtt, vibratoAtt, syncAtt, divisionAtt;
     std::unique_ptr<juce::SliderParameterAttachment> divisionKnobAtt;      // the RATE knob while sync is on
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CE1AudioProcessorEditor)
