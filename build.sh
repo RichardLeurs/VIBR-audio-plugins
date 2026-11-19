@@ -6,7 +6,7 @@
 # VST3 / AU / Standalone bundles are collected in
 #   ~/Developer/VIBR/releases/<arch>/{new,vintage,experimental,mastering,multieffect,drumcomputer}/{VST3,AU,Standalone}     (<arch> = arm64 or x86_64; on Windows win64 or winarm64, on Linux linux64 or linuxarm64, both without AU)
 # 
-# After each build every releases/<arch>/<group>/<format> folder is zipped to ~/Developer/VIBR/zip/VIBR-<group>-<format>-<arch>-<version>.zip (e.g. VIBR-new-AU-arm64-0.2.0.zip). The group of each plugin is set in config/plugins.conf.
+# After each build every releases/<arch>/<group>/<format> folder is zipped to ~/Developer/VIBR/zip/VIBR-<group>-<OS>-<format>-<arch>-<version>.zip (e.g. VIBR-new-macOS-AU-arm64-0.2.0.zip; <OS> = macOS, Windows or Linux). The group of each plugin is set in config/plugins.conf.
 # Linux (linux64 = x86_64): run this script on a Linux machine with a C++20 compiler, CMake and the JUCE dependencies (see INSTALL.md): VST3 and Standalone, no AU.
 # Windows (win64 = x64, winarm64 = ARM64): run this script on a Windows machine in Git Bash with Visual Studio 2022 (C++ desktop workload; for ARM64 also the "MSVC ARM64 build tools" component) and CMake installed. A Mac cannot build the Windows plugins.
 #   winarm64 can be cross-compiled on an x64 PC (the result runs on Windows on ARM only) or built natively on a Windows ARM PC.
@@ -150,10 +150,11 @@ build_arch() {
   fi
   if [ "$zip" = 1 ]; then
     mkdir -p "$OUT/zip"
-    local g f d z
+    local g f d z OSNAME=macOS
+    [ "$IS_WIN" = 1 ] && OSNAME=Windows; [ "$IS_LINUX" = 1 ] && OSNAME=Linux      # the OS name in the zip names
     for g in new vintage experimental mastering multieffect drumcomputer; do
       for f in VST3 AU Standalone; do                # (win64 has no AU folder: it is skipped)
-        d="$OUT/releases/$a/$g/$f"; z="$OUT/zip/VIBR-$g-$f-$a-$VERSION.zip"
+        d="$OUT/releases/$a/$g/$f"; z="$OUT/zip/VIBR-$g-$OSNAME-$f-$a-$VERSION.zip"
         [ -d "$d" ] || continue
         cp "$SRC/INSTALL.md" "$d/INSTALL.md"; cp "$SRC/LICENSE" "$d/LICENSE"      # every zip holds the install notes and the license (INSTALL.md links to LICENSE)
         rm -f "$z"

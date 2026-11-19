@@ -1,0 +1,45 @@
+name: Windows arm64 build
+
+# VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
+
+# Builds all VIBR plugins (VST3 + Standalone) for Windows on ARM (./build.sh --arch winarm64) on a native GitHub Windows ARM runner (free for public repositories), using the groups in config/plugins.conf.
+# Start it from the Actions tab, or push a tag like v1.0: the zips (VIBR-<group>-<OS>-<format>-<arch>-<version>.zip) are then also uploaded to the GitHub release of that tag.
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  winarm64:
+    runs-on: windows-11-arm
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build (VST3 + Standalone)
+        shell: bash
+        env:
+          JOBS: 4
+        run: ./build.sh --arch winarm64
+
+      - name: Collect zips
+        shell: bash
+        run: |
+          mkdir -p dist
+          ls -l ~/Developer/VIBR/zip
+          cp ~/Developer/VIBR/zip/*-Windows-*-winarm64-*.zip dist/
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: vibr-winarm64
+          path: dist/*.zip
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.zip

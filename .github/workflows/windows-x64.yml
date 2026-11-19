@@ -1,0 +1,46 @@
+name: Windows x64 build
+
+# VIBR audio plugins | Copyright © Richard Leurs 2026 | GPL3.0 License
+
+# Builds all VIBR plugins (VST3 + Standalone) for 64-bit Windows, x64 (./build.sh --arch win64), using the groups in config/plugins.conf.
+# windows-2022 has Visual Studio 2022; windows-latest may move to a newer Visual Studio. The website download links use the latest release.
+# Start it from the Actions tab, or push a tag like v1.0: the zips (VIBR-<group>-<OS>-<format>-<arch>-<version>.zip) are then also uploaded to the GitHub release of that tag.
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  win64:
+    runs-on: windows-2022
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build (VST3 + Standalone)
+        shell: bash
+        env:
+          JOBS: 4
+        run: ./build.sh --arch win64
+
+      - name: Collect zips
+        shell: bash
+        run: |
+          mkdir -p dist
+          ls -l ~/Developer/VIBR/zip
+          cp ~/Developer/VIBR/zip/*-Windows-*-win64-*.zip dist/
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: vibr-win64
+          path: dist/*.zip
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.zip

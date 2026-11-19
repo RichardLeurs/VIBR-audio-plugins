@@ -1,6 +1,6 @@
 # Installing the VIBR audio plugins
 
-VIBR plugins come as **VST3**, **AU** (macOS only) and **Standalone** apps. The zips are named `VIBR-<group>-<format>-<arch>-<version>.zip`:
+VIBR plugins come as **VST3**, **AU** (macOS only) and **Standalone** apps. The zips are named `VIBR-<group>-<OS>-<format>-<arch>-<version>.zip` (`<OS>` = `macOS`, `Windows` or `Linux`):
 
 - `<group>`: `vintage`, `new`, `experimental`, `mastering`.
 - `<format>`: `VST3`, `AU` or `Standalone`.
@@ -29,7 +29,7 @@ Pick the plugins that match your DAW: use the **AU** build in Logic Pro and Gara
 
 ## Windows (10 or 11, 64-bit)
 
-There is no AU on Windows. Use `VIBR-<group>-VST3-win64-<version>.zip` (and `Standalone` if you want the stand-alone apps). On a Windows on ARM PC use the `winarm64` zips: they are native ARM64 plugins and load in ARM64 hosts only (an x64 DAW, running under emulation, needs the `win64` plugins).
+There is no AU on Windows. Use `VIBR-<group>-Windows-VST3-win64-<version>.zip` (and `Standalone` if you want the stand-alone apps). On a Windows on ARM PC use the `winarm64` zips: they are native ARM64 plugins and load in ARM64 hosts only (an x64 DAW, running under emulation, needs the `win64` plugins).
 
 | Format | Copy to |
 |---|---|

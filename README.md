@@ -1,7 +1,9 @@
-[![Windows build](https://github.com/RichardLeurs/VIBR-audio-plugins/actions/workflows/windows.yml/badge.svg)](https://github.com/RichardLeurs/VIBR-audio-plugins/actions/workflows/windows.yml)
-[![macOS build](https://github.com/RichardLeurs/VIBR-audio-plugins/actions/workflows/macos.yml/badge.svg)](https://github.com/RichardLeurs/VIBR-audio-plugins/actions/workflows/macos.yml)
-[![Linux build](https://github.com/RichardLeurs/VIBR-audio-plugins/actions/workflows/linux.yml/badge.svg)](https://github.com/RichardLeurs/VIBR-audio-plugins/actions/workflows/linux.yml)
-[![Linux build](https://github.com/RichardLeurs/VIBR-audio-plugins/actions/workflows/linux.yml/badge.svg)](https://github.com/RichardLeurs/VIBR-audio-plugins/actions/workflows/linux.yml)
+[![Windows x64 build](https://github.com/RichardLeurs/VIBR-audio-plugins/actions/workflows/windows-x64.yml/badge.svg)](https://github.com/RichardLeurs/VIBR-audio-plugins/actions/workflows/windows-x64.yml)
+[![Windows arm64 build](https://github.com/RichardLeurs/VIBR-audio-plugins/actions/workflows/windows-arm64.yml/badge.svg)](https://github.com/RichardLeurs/VIBR-audio-plugins/actions/workflows/windows-arm64.yml)
+[![macOS arm64 build](https://github.com/RichardLeurs/VIBR-audio-plugins/actions/workflows/macos-arm64.yml/badge.svg)](https://github.com/RichardLeurs/VIBR-audio-plugins/actions/workflows/macos-arm64.yml)
+[![macOS x86_64 build](https://github.com/RichardLeurs/VIBR-audio-plugins/actions/workflows/macos-x86_64.yml/badge.svg)](https://github.com/RichardLeurs/VIBR-audio-plugins/actions/workflows/macos-x86_64.yml)
+[![Linux x86_64 build](https://github.com/RichardLeurs/VIBR-audio-plugins/actions/workflows/linux-x86_64.yml/badge.svg)](https://github.com/RichardLeurs/VIBR-audio-plugins/actions/workflows/linux-x86_64.yml)
+[![Linux arm64 build](https://github.com/RichardLeurs/VIBR-audio-plugins/actions/workflows/linux-arm64.yml/badge.svg)](https://github.com/RichardLeurs/VIBR-audio-plugins/actions/workflows/linux-arm64.yml)
 
 Are you interested in audio plugins and want to help improving and expanding the plugins then send me a message.
 You can find the web page for the project on this [`website`](https://vibr.richardleurs.nl).
