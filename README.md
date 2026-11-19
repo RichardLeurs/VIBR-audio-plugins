@@ -14,7 +14,7 @@ A collection of guitar effects inspired by iconic vintage pedals and original ex
 
 VIBR is open source by design. Every plugin, its code and artwork are free to explore, modify and share. Made for creativity, collaboration and a shared passion for audio.
 
-![DM-1 Delay Machine front panel](src/effects/dm1/assets/dm-1.png)
+![DM-1 Delay Machine front panel](src/effects/dm1/assets/dm-1.webp)
 
 ### Delay & Echo
 

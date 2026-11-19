@@ -27,6 +27,14 @@ jobs:
           JOBS: 4
         run: ./build.sh --arch win64
 
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-x86_64-build-log
+          path: C:/Users/runneradmin/Developer/VIBR-win64/build.log
+          if-no-files-found: ignore
+
       - name: Collect zips
         shell: bash
         run: |

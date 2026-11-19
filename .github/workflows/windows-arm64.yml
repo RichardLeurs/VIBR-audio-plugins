@@ -33,13 +33,20 @@ jobs:
           ls -l ~/Developer/VIBR/zip
           cp ~/Developer/VIBR/zip/*-Windows-*-winarm64-*.zip dist/
 
-      - uses: actions/upload-artifact@v5
+      - name: Upload Windows ARM64 build log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: winarm64-build-log
+          path: C:/Users/runneradmin/Developer/VIBR-winarm64/build.log
+
+      - uses: actions/upload-artifact@v7
         with:
           name: vibr-winarm64
           path: dist/*.zip
 
       - name: Attach to release
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: dist/*.zip

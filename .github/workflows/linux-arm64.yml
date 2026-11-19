@@ -34,19 +34,27 @@ jobs:
           JOBS: 4
         run: ./build.sh --arch linuxarm64
 
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: linux-arm64-build-log
+          path: ~/Developer/VIBR-linuxarm64/build.log
+          if-no-files-found: ignore
+
       - name: Collect zips
         run: |
           mkdir -p dist
           ls -l ~/Developer/VIBR/zip
           cp ~/Developer/VIBR/zip/*-Linux-*-linuxarm64-*.zip dist/
 
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
           name: vibr-linuxarm64
           path: dist/*.zip
 
       - name: Attach to release
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: dist/*.zip

@@ -27,6 +27,14 @@ jobs:
           JOBS: 4
         run: ./build.sh --arch x86_64
 
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: macos-x86_64-build-log
+          path: ~/Developer/VIBR-macos-x86/build.log
+          if-no-files-found: ignore
+
       - name: Collect zips
         run: |
           mkdir -p dist
