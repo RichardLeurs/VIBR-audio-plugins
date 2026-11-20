@@ -39,7 +39,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: linux-arm64-build-log
-          path: ~/Developer/VIBR-linuxarm64/build.log
+          path: ~/Developer/VIBR/build.log
           if-no-files-found: ignore
 
       - name: Collect zips

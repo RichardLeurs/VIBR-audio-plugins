@@ -31,7 +31,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: macos-arm64-build-log
-          path: ~/Developer/VIBR-macarm64/build.log
+          path: ~/Developer/VIBR/build.log
           if-no-files-found: ignore
 
       - name: Collect zips

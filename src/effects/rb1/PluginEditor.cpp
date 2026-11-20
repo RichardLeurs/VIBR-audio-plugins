@@ -30,7 +30,8 @@ juce::Rectangle<float> typeChipRect() { const auto r = panelRect (0); return { r
 juce::Rectangle<float> textureRect (int i) { return buttonRect (i); }
 juce::Rectangle<float> rootRect() { return buttonRect (3); }
 juce::Rectangle<float> scaleRect() { return buttonRect (4); }
-juce::Rectangle<float> freezeRect() { const auto r = panelRect (1); return { r.getX() + 20.0f, r.getY() + 200.0f, 400.0f, 30.0f }; }     // under the four knobs, ring edge to ring edge
+juce::Rectangle<float> syncRect() { const auto r = panelRect (1); return { r.getX() + 20.0f, r.getY() + 200.0f, 92.0f, 30.0f }; }          // SYNC of the pre-delay, under its knob
+juce::Rectangle<float> freezeRect() { const auto r = panelRect (1); return { r.getX() + 118.0f, r.getY() + 200.0f, 302.0f, 30.0f }; }     // the rest of the row under the four knobs, to the ring edge
 juce::Rectangle<float> extRect() { const auto r = panelRect (1); return { r.getRight() - 88.0f, r.getY() - 12.0f, 72.0f, 24.0f }; }      // the EXT lamp on the top edge of OUTPUT
 juce::Rectangle<float> scopeRect() { const auto r = panelRect (2); return { r.getX() + 20.0f, r.getY() + 22.0f, r.getWidth() - 40.0f, r.getHeight() - 42.0f }; }
 const std::vector<juce::String> kModeTabs { "CLASSIC", "SPACE", "RESONATE" };
@@ -39,6 +40,32 @@ const float kTabsLeft = ui::titleEnd ("CONTROLS");
 }
 
 // kinds: 0 percent, 1 ms, 2 level dB, 3 cents, 4 strings
+
+// the two type knobs of CLASSIC (the engine's PARAM 1 and PARAM 2) by what they do in each of the 12 types
+namespace
+{
+const char* classicP1Name (int t)
+{
+    static const char* n[bigsky::kNumTypes] = { "SIZE", "SIZE", "SIZE", "DRIP", "RISE", "RISE", "SIZE", "VOWEL", "SHIMMER", "TIME", "SHAPE", "SIZE" };
+    return n[juce::jlimit (0, bigsky::kNumTypes - 1, t)];
+}
+const char* classicP2Name (int t)
+{
+    static const char* n[bigsky::kNumTypes] = { "DAMPING", "DAMPING", "DAMPING", "DAMPING", "DAMPING", "DAMPING", "DAMPING", "BLEND", "INTERVAL", "REPEATS", "THRESHOLD", "SLOPE" };
+    return n[juce::jlimit (0, bigsky::kNumTypes - 1, t)];
+}
+// the value text where a percent says little: the SHIMMER interval and the NONLINEAR shape
+juce::String classicP1Text (int t, double v)
+{
+    if (t == bigsky::Nonlinear) return v < 34.0 ? "GATE" : v < 67.0 ? "REVERSE" : "DECAY";
+    return juce::String ((int) std::lround (v)) + " %";
+}
+juce::String classicP2Text (int t, double v)
+{
+    if (t == bigsky::Shimmer) { static const char* n[5] = { "-OCT", "+5TH", "+OCT", "+OCT +5", "+2 OCT" }; return n[juce::jlimit (0, 4, (int) (v * 0.05))]; }
+    return juce::String ((int) std::lround (v)) + " %";
+}
+}
 //==============================================================================
 RB1AudioProcessorEditor::RB1AudioProcessorEditor (RB1AudioProcessor& p)
     : LabEditor (p, kW, kH), proc (p),
@@ -50,15 +77,23 @@ RB1AudioProcessorEditor::RB1AudioProcessorEditor (RB1AudioProcessor& p)
                 { "tension", 0, 3, 7, "TENSION", 0, 2, {}, {} },    { "motion", 0, 4, 7, "MOTION", 0, 2, {}, {} },      { "fine", 0, 5, 7, "FINE", 3, 2, {}, {} },
                 { "blend", 0, 6, 7, "BLEND", 0, 2, {}, {} },
                 { "preDelay", 1, 0, 4, "PRE-DELAY", 1, -1, {}, {} },{ "duck", 1, 1, 4, "DUCK", 0, -1, {}, {} },        { "mix", 1, 2, 4, "MIX", 0, -1, {}, {} },
-                { "level", 1, 3, 4, "LEVEL", 2, -1, {}, {} } } }
+                { "level", 1, 3, 4, "LEVEL", 2, -1, {}, {} } } },
+      syncAtt (*p.apvts.getParameter ("preSync"), [this] (float v) { preSyncOn = v > 0.5f; rebindPre(); repaint(); }, nullptr)
 {
     for (auto& k : knobs)
     {
         attachKnob (k.slider, k.att, k.id);
         midiUI.add (k.slider, k.id);
     }
+    syncAtt.sendInitialUpdate();
     layoutKnobs();
     startTimerHz (30);
+}
+
+void RB1AudioProcessorEditor::rebindPre()
+{
+    for (auto& k : knobs)
+        if (juce::String (k.id) == "preDelay") { k.att.reset(); attachKnob (k.slider, k.att, preSyncOn ? "preDivision" : "preDelay"); }
 }
 
 RB1AudioProcessorEditor::~RB1AudioProcessorEditor() { stopTimer(); }
@@ -103,8 +138,9 @@ void RB1AudioProcessorEditor::drawTail (juce::Graphics& g)
     const bool power = isOn ("power");
     const auto sc = scopeRect();
     const bool frozen = isOn ("freeze");
-    const juce::String hint = mode() == 2 ? juce::String ("ENERGY") : frozen ? juce::String ("FROZEN")
-                            : mode() == 0 ? "RT60 ABOUT " + juce::String (bigsky::decaySeconds (variant(), value ("decay") * 0.01f) * 0.85f, 1) + " S" : juce::String();
+    const float secs = bigsky::decaySeconds (variant(), value ("decay") * 0.01f);
+    const juce::String hint = frozen ? juce::String ("FROZEN") : mode() == 2 ? juce::String ("ENERGY")
+                            : mode() == 0 ? juce::String (variant() == bigsky::Nonlinear ? "GATE " : variant() == bigsky::Reflections ? "SPAN " : "RT60 ") + juce::String (secs, 1) + " S" : juce::String();
     ui::paintScope (g, kPal, sc, mode() == 2 ? "STRINGS" : "WET LEVEL, 5 SECONDS", hint);
     const auto r = ui::scopePlotRect (sc);
     g.saveState();
@@ -196,6 +232,7 @@ void RB1AudioProcessorEditor::paint (juce::Graphics& g)
         ui::paintFlatButton (g, kPal, rootRect(), "ROOT " + juce::String (sr1::noteName (choice ("root"))) + " v", false);
         ui::paintFlatButton (g, kPal, scaleRect(), juce::String (sr1::scaleName (choice ("scale"))) + " v", false);
     }
+    ui::paintFlatButton (g, kPal, syncRect(), "SYNC", preSyncOn);
     ui::paintFlatButton (g, kPal, freezeRect(), "FREEZE", isOn ("freeze"));
 
     static const char* lo[5] = { "0", "0", "-24", "-50", "1" }, *hi[5] = { "100", "250", "+12", "+50", "12" };
@@ -213,8 +250,13 @@ void RB1AudioProcessorEditor::paint (juce::Graphics& g)
             case 4: txt = juce::String (sr1::stringCount ((float) v * 0.01f)) + " STRINGS"; break;
             default: txt = juce::String ((int) std::lround (v)) + " %"; break;
         }
-        ui::paintKnob (g, kPal, knobCentre (k.panel, k.index, k.count), (k.onlyMode == 1 && juce::String (k.id) == "texture") ? sp1::textureName (variant()) : k.name, txt, lo[k.kind], hi[k.kind],
-                       (float) k.slider.valueToProportionOfLength (v));
+        juce::String name = k.name, lowText = lo[k.kind], highText = hi[k.kind];
+        const juce::String kid (k.id);
+        if (k.onlyMode == 1 && kid == "texture") name = sp1::textureName (variant());
+        else if (k.onlyMode == 0 && kid == "size") { name = classicP1Name (variant()); txt = classicP1Text (variant(), v); }        // CLASSIC: each type names its two knobs
+        else if (k.onlyMode == 0 && kid == "param2") { name = classicP2Name (variant()); txt = classicP2Text (variant(), v); }
+        else if (kid == "preDelay" && preSyncOn) { txt = vibr::sync::divisionNames()[juce::jlimit (0, vibr::sync::kNumDivisions - 1, (int) std::lround (v))]; lowText = "LONG"; highText = "SHORT"; }
+        ui::paintKnob (g, kPal, knobCentre (k.panel, k.index, k.count), name, txt, lowText, highText, (float) k.slider.valueToProportionOfLength (v));
     }
     ui::paintMeter (g, kPal, meter, meterOrigin().x, meterOrigin().y, isOn ("power"));
 }
@@ -228,6 +270,7 @@ void RB1AudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
     const auto tabs = ui::tabRects (panelRect (0), kModeTabs, kTabsTop, kTabsFont, kTabsLeft);
     for (int i = 0; i < (int) tabs.size(); ++i)
         if (tabs[(size_t) i].expanded (3.0f).contains (p)) { setChoice ("mode", i); setChoice ("variant", 0); layoutKnobs(); repaint(); return; }
+    if (syncRect().expanded (3.0f).contains (p)) { toggle ("preSync"); repaint(); return; }
     if (freezeRect().expanded (3.0f).contains (p)) { toggle ("freeze"); repaint(); return; }
     if (mode() == 0)
     {

@@ -7,11 +7,12 @@
 #include "MidiMap.h"
 #include "plugin/LabProcessor.h"
 #include "ReverbLabEngine.h"
+#include "TempoSync.h"
 #include "ui/Presets.h"
 #include "ui/OutputMeter.h"
 
 // RB-1 Reverb Lab: CLASSIC (BS-1, 12 types), SPACE (SP-1, 5 modes) and RESONATE (SR-1, strings) in one plugin (see ReverbLabEngine.h and .claude/lab_specs.md).
-// Host parameters: power, mode, variant, decay, size, tone, motion, preDelay, duck, mix, level, freeze, param2, value (CLASSIC), diffusion, texture (SPACE),
+// Host parameters: power, mode, variant, decay, size, tone, motion, preDelay, preSync, preDivision, duck, mix, level, freeze, param2, value (CLASSIC), diffusion, texture (SPACE),
 // root, scale, damping, tension, fine, blend (RESONATE). There is no latency; the tail rings after the input stops.
 class RB1AudioProcessor : public vibr::LabProcessor
 {
@@ -39,7 +40,7 @@ private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
 
     rb1::Engine engine;
-    std::atomic<float> *pPower {}, *pMode {}, *pVariant {}, *pDecay {}, *pSize {}, *pTone {}, *pMotion {}, *pPreDelay {}, *pDuck {}, *pMix {}, *pLevel {}, *pFreeze {}, *pParam2 {}, *pValue {},
+    std::atomic<float> *pPower {}, *pMode {}, *pVariant {}, *pDecay {}, *pSize {}, *pTone {}, *pMotion {}, *pPreDelay {}, *pPreSync {}, *pPreDivision {}, *pDuck {}, *pMix {}, *pLevel {}, *pFreeze {}, *pParam2 {}, *pValue {},
                        *pDiffusion {}, *pTexture {}, *pRoot {}, *pScale {}, *pDamping {}, *pTension {}, *pFine {}, *pBlend {};
     juce::SmoothedValue<float> powerSmooth;
     juce::AudioBuffer<float> dryBuf, keyBuf;

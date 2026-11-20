@@ -73,6 +73,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout RB1AudioProcessor::createLay
     flt ("tone", "Tone", 0.0f, 100.0f, 1.0f, 55.0f);
     flt ("motion", "Motion", 0.0f, 100.0f, 1.0f, 35.0f);
     flt ("preDelay", "Pre-delay (ms)", 0.0f, 250.0f, 1.0f, 15.0f, 60.0f);
+    flag ("preSync", "Pre-delay Sync", false);
+    layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "preDivision", 1 }, "Pre-delay Note Length (with Sync)", vibr::sync::divisionNames(), 5));
     flt ("duck", "Duck", 0.0f, 100.0f, 1.0f, 0.0f);
     flt ("mix", "Mix", 0.0f, 100.0f, 1.0f, 35.0f);
     flt ("level", "Level", -24.0f, 12.0f, 0.1f, 0.0f);
@@ -105,13 +107,14 @@ RB1AudioProcessor::RB1AudioProcessor()
                           { "decay", "size", "tone", "motion", "preDelay", "duck", "mix", "level", "freeze", "param2", "value", "diffusion", "texture", "damping", "tension", "blend" })
 {
     const auto get = [this] (const char* id) { return apvts.getRawParameterValue (id); };
-    pPower = get ("power"); pMode = get ("mode"); pVariant = get ("variant"); pDecay = get ("decay"); pSize = get ("size"); pTone = get ("tone"); pMotion = get ("motion"); pPreDelay = get ("preDelay");
+    pPower = get ("power"); pMode = get ("mode"); pVariant = get ("variant"); pDecay = get ("decay"); pSize = get ("size"); pTone = get ("tone"); pMotion = get ("motion"); pPreDelay = get ("preDelay"); pPreSync = get ("preSync"); pPreDivision = get ("preDivision");
     pDuck = get ("duck"); pMix = get ("mix"); pLevel = get ("level"); pFreeze = get ("freeze"); pParam2 = get ("param2"); pValue = get ("value"); pDiffusion = get ("diffusion"); pTexture = get ("texture");
     pRoot = get ("root"); pScale = get ("scale"); pDamping = get ("damping"); pTension = get ("tension"); pFine = get ("fine"); pBlend = get ("blend");
 
     midiMap.setDefault ("motion", 1);
     midiMap.setDefault ("decay", 11);
     midiMap.setDefault ("freeze", 64);
+    midiMap.setSyncAlias ("preDelay", "preSync", "preDivision");          // with sync on, a learned CC moves the note length
 }
 
 bool RB1AudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -170,7 +173,9 @@ void RB1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     p.variant = juce::jlimit (0, p.mode == 0 ? bigsky::kNumTypes - 1 : p.mode == 1 ? sp1::kNumModes - 1 : sr1::kNumTextures - 1, (int) std::lround (pVariant->load()));
     p.freeze = pFreeze->load() > 0.5f;
     p.decay = pDecay->load() * 0.01f; p.size = pSize->load() * 0.01f; p.tone = pTone->load() * 0.01f; p.motion = pMotion->load() * 0.01f;
-    p.preDelayMs = pPreDelay->load(); p.duck = pDuck->load() * 0.01f; p.mix = pMix->load() * 0.01f;
+    // PRE-DELAY: the knob in ms, or with SYNC one note length at the host tempo (120 bpm without a host), up to 1 s
+    p.preDelayMs = pPreSync->load() > 0.5f ? (float) juce::jlimit (0.0, 1000.0, vibr::sync::ms (vibr::sync::hostBpm (*this, 120.0), (int) std::lround (pPreDivision->load()))) : pPreDelay->load();
+    p.duck = pDuck->load() * 0.01f; p.mix = pMix->load() * 0.01f;
     p.param2 = pParam2->load() * 0.01f; p.value = pValue->load() * 0.01f; p.diffusion = pDiffusion->load() * 0.01f; p.texture = pTexture->load() * 0.01f;
     p.root = (int) std::lround (pRoot->load()); p.scale = (int) std::lround (pScale->load());
     p.damping = pDamping->load() * 0.01f; p.tension = pTension->load() * 0.01f; p.fine = pFine->load() * 0.01f; p.blend = pBlend->load() * 0.01f;

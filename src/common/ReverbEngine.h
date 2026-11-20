@@ -34,10 +34,20 @@ inline float decaySeconds (int type, float d)
 }
 inline float predelayMs (float x) { return 300.0f * x * x; }
 
+// The limit inside a held (frozen) loop: exactly transparent below 0.7, a smooth knee above it that never passes 1.0.
+inline float holdLimit (float x)
+{
+    const float a = std::fabs (x);
+    if (a < 0.7f) return x;
+    return std::copysign (0.7f + 0.3f * std::tanh ((a - 0.7f) / 0.3f), x);
+}
+
 struct Params
 {
     int type = 0;
     float decay = 0.5f, predelay = 0.0f, mix = 0.5f, tone = 0.5f, p1 = 0.5f, p2 = 0.5f, mod = 0.5f, value = 0.5f;   // 0..1
+    float rtScale = 1.0f;     // multiplies the RT60 the decay knob asks for (RB-1 calibrates the types with it; 1 = as the BS-1 always was)
+    bool hold = false;        // a true freeze: the loop gain is 1 and the damping is off, so the tail neither decays nor brightens (the caller mutes the input)
 };
 
 //==============================================================================
@@ -185,14 +195,14 @@ private:
             lenT[k] = std::clamp (baseMs[k] * 0.001f * fs * scale, 12.0f, maxLen - 8.0f);
             len[k] = snap ? lenT[k] : len[k] + 0.1f * (lenT[k] - len[k]);
         }
-        const float rt = (type == Nonlinear) ? 0.8f : decaySeconds (type, p.decay);
+        const float rt = (type == Nonlinear) ? 0.8f : decaySeconds (type, p.decay) * p.rtScale;
         rtS = snap ? rt : rtS + 0.1f * (rt - rtS);
         for (int k = 0; k < N; ++k)
-            g[k] = std::pow (10.0f, -3.0f * len[k] / (fs * std::max (0.05f, rtS)));
+            g[k] = p.hold ? 1.0f : std::pow (10.0f, -3.0f * len[k] / (fs * std::max (0.05f, rtS)));
 
         const bool p2Damps = type <= Bloom || type == Cloud;
         const float fc = p2Damps ? dampHi * std::pow (dampLo / dampHi, p.p2) : fixedDamp;
-        dampA = coef (fc > 0.0f ? fc : 8000.0f, fs);
+        dampA = p.hold ? 0.0f : coef (fc > 0.0f ? fc : 8000.0f, fs);
         for (auto& a : ap) a.g = diff;
         modDepth = p.mod * modMs * 0.001f * fs;
         modDepth = std::min (modDepth, 0.4f * std::min (len[0], 0.2f * fs));
@@ -219,7 +229,7 @@ private:
         {
             static const float ratios[5] = { 0.5f, 1.4983f, 2.0f, 2.9966f, 4.0f };
             shRatio = ratios[std::min (4, (int) (p.p2 * 5.0f))];
-            shAmt = 0.05f + 0.4f * p.p1;
+            shAmt = p.hold ? 0.0f : 0.05f + 0.4f * p.p1;                 // frozen: no new shimmer is fed into the held tail
         }
         if (type == Magneto)
         {
@@ -338,9 +348,9 @@ private:
             float z[N], sum = 0.0f;
             for (int k = 0; k < N; ++k)
             {
-                const float m = modDepth * std::sin (ph[k]);
+                const float m = p.hold ? 0.0f : modDepth * std::sin (ph[k]);          // frozen: no modulation, and whole-sample delays: an interpolated read low-passes the loop a little on every pass
                 ph[k] += inc[k]; if (ph[k] > 2.0f * kPi) ph[k] -= 2.0f * kPi;
-                const float y = fdn[k].read (std::max (1.0f, len[k] - 1.0f + m));
+                const float y = fdn[k].read (std::max (1.0f, (p.hold ? std::floor (len[k]) : len[k]) - 1.0f + m));
                 lp[k] = y + dampA * (lp[k] - y);
                 z[k] = lp[k];
                 sum += z[k];
@@ -348,7 +358,12 @@ private:
                 yr += sR[k] * z[k];
             }
             const float s2 = sum * (2.0f / (float) N);
-            for (int k = 0; k < N; ++k) fdn[k].push (0.35f * inj[k] * xf + g[k] * (z[k] - s2));
+            for (int k = 0; k < N; ++k)
+            {
+                float v = g[k] * (z[k] - s2);
+                if (p.hold) v = holdLimit (v);                           // a held loop has no loss to keep it in check: a limit that does nothing below 0.7
+                fdn[k].push (0.35f * inj[k] * xf + v);
+            }
             yl *= 0.35f; yr *= 0.35f;
         }
         wetPrev = 0.5f * (yl + yr);
@@ -367,6 +382,7 @@ private:
                 else                   target = u < 1.0f ? std::exp (-4.0f * u) : 0.0f;  // decay
                 if (u > 1.2f) gateActive = false;
             }
+            if (p.hold) target = 1.0f;                                   // frozen: the gate stays open on the held tail
             gateG += 0.004f * (target - gateG);
             yl *= gateG; yr *= gateG;
         }

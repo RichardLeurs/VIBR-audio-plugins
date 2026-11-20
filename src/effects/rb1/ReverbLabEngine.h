@@ -5,8 +5,9 @@
 //   CLASSIC    the BS-1 Reverb: 12 types (room, hall, plate, spring, swell, bloom, cloud, chorale, shimmer, magneto, nonlinear, reflections), the engine of src/common
 //   SPACE      the SP-1 Space Engine: SHIMMER, INFINITE, SPECTRAL, MODULATED, ROOMS (DECAY, SIZE, DIFFUSION, TONE, MOTION, TEXTURE, FREEZE)
 //   RESONATE   the SR-1 Sympathetic Resonator: up to 12 virtual strings tuned to a scale that ring along with the playing (WOOD, METAL, GLASS)
-// Shared by the modes: PRE-DELAY (0 .. 250 ms), DUCK (the wet level dips while the input plays), FREEZE (SPACE holds its tail; CLASSIC and RESONATE mute the input and
-// set the decay to its maximum, so the tail dies very slowly), MIX and LEVEL. Header-only, no JUCE dependency, no allocation after prepare(). No latency.
+// Shared by the modes: PRE-DELAY (0 .. 250 ms, or a note length up to 1 s when synced), DUCK (the wet level dips while the input plays), FREEZE (a true freeze in every
+// mode: the input is muted and the tail is held, SPACE by its own freeze, CLASSIC and RESONATE by a loop gain of 1 with no damping; REFLECTIONS has no loop, so
+// there it only stops the input), MIX and LEVEL. Header-only, no JUCE dependency, no allocation after prepare(). No latency.
 #include <algorithm>
 #include <atomic>
 #include <cmath>
@@ -23,6 +24,14 @@ enum Mode { Classic, Space, Resonate };
 inline int clampMode (int m) { return std::clamp (m, 0, kNumModes - 1); }
 inline const char* modeName (int m) { static const char* n[kNumModes] = { "CLASSIC", "SPACE", "RESONATE" }; return n[clampMode (m)]; }
 inline const char* classicName (int t) { return bigsky::typeName (t); }
+// The RT60 the DECAY knob asks for (bigsky::decaySeconds) against the one measured (a Schroeder T20 of an impulse response, 3 decay settings per type): the network came out
+// 17 - 23 % short for most types, the same at every setting, so each type's decay time is stretched by the inverse. SWELL, SHIMMER and MAGNETO are shaped by their
+// own feedback (an envelope, a pitch-shifted return, tape repeats) and measure right, NONLINEAR and REFLECTIONS are a gate time and a span, not an RT60.
+inline float classicRtScale (int t)
+{
+    static const float s[bigsky::kNumTypes] = { 1.28f, 1.22f, 1.21f, 1.30f, 1.0f, 1.22f, 1.22f, 1.21f, 1.02f, 1.0f, 1.0f, 1.0f };
+    return s[std::clamp (t, 0, bigsky::kNumTypes - 1)];
+}
 inline const char* classicLongName (int t)
 {
     static const char* n[bigsky::kNumTypes] = { "ROOM", "HALL", "PLATE", "SPRING", "SWELL", "BLOOM", "CLOUD", "CHORALE", "SHIMMER", "MAGNETO", "NONLINEAR", "REFLECTIONS" };
@@ -55,7 +64,7 @@ public:
     {
         fs = sampleRate;
         classic.prepare (fs); space.prepare (fs); res.prepare (fs);
-        size_t n = 1; while ((float) n < 0.26f * fs + 8.0f) n <<= 1;
+        size_t n = 1; while ((float) n < 1.02f * fs + 8.0f) n <<= 1;                       // up to 1 s (a synced pre-delay), the knob itself stops at 250 ms
         for (auto& d : pre) d.assign (n, 0.0f);
         preMask = (int) n - 1;
         histWindow = std::max (1, (int) (0.02f * fs));
@@ -116,10 +125,9 @@ private:
         wpos += n;
 
         // the reverb, wet only (mix 1)
-        const float full = p.freeze && mode != Space ? 1.0f : p.decay;
         if (mode == Classic)
         {
-            bigsky::Params q; q.type = std::clamp (p.variant, 0, bigsky::kNumTypes - 1); q.decay = full; q.predelay = 0.0f; q.mix = 1.0f; q.tone = p.tone; q.p1 = p.size; q.p2 = p.param2; q.mod = p.motion; q.value = p.value;
+            bigsky::Params q; q.type = std::clamp (p.variant, 0, bigsky::kNumTypes - 1); q.decay = p.decay; q.hold = p.freeze; q.rtScale = classicRtScale (q.type); q.predelay = 0.0f; q.mix = 1.0f; q.tone = p.tone; q.p1 = p.size; q.p2 = p.param2; q.mod = p.motion; q.value = p.value;
             classic.process (l, r, n, q);
         }
         else if (mode == Space)
@@ -130,7 +138,7 @@ private:
         else
         {
             sr1::Params q; q.root = std::clamp (p.root, 0, 11); q.scale = std::clamp (p.scale, 0, sr1::kNumScales - 1); q.texture = std::clamp (p.variant, 0, sr1::kNumTextures - 1);
-            q.strings = p.size; q.decay = full; q.damping = p.damping; q.tension = p.tension; q.motion = p.motion; q.fine = p.fine;
+            q.strings = p.size; q.decay = p.decay; q.hold = p.freeze; q.damping = p.damping; q.tension = p.tension; q.motion = p.motion; q.fine = p.fine;
             res.process (l, r, n, q, std::clamp (p.blend, 0.0f, 1.0f), 1.0f);
         }
 

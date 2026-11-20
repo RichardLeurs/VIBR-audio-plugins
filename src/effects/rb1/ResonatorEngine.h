@@ -54,6 +54,7 @@ struct Params
 {
     int root = 0, scale = 2, texture = 1;
     float strings = 0.6f, decay = 0.55f, damping = 0.4f, tension = 0.25f, motion = 0.3f, fine = 0.5f;     // 0..1
+    bool hold = false;        // a true freeze: loop gain 1, no damping, a soft limit in the loop (the caller mutes the input)
 };
 
 class Engine
@@ -76,7 +77,7 @@ public:
         {
             auto& s = str[i];
             std::fill (s.buf.begin(), s.buf.end(), 0.0f);
-            s.w = 0; s.lp = 0.0f; s.ap1 = s.ap2 = s.x1 = s.x2 = 0.0f; s.env = 0.0f; s.L = 100.0f;
+            s.w = 0; s.lp = 0.0f; s.apY = 0.0f; s.ap1 = s.ap2 = s.x1 = s.x2 = 0.0f; s.env = 0.0f; s.L = 100.0f;
             s.phase = (float) i * 0.37f; s.rate = 0.11f + 0.05f * (float) ((i * 7) % 5);
             energy[i].store (0.0f);
         }
@@ -99,13 +100,27 @@ public:
                 s.phase += s.rate / fs; if (s.phase > 1.0f) s.phase -= 1.0f;
                 const float L = s.Lbase * (1.0f + motionDepth * std::sin (2.0f * kPi * s.phase));
                 s.L += (L - s.L) * 0.05f;
-                const float y = read (s, std::max (4.0f, s.L));
+                float y;
+                if (p.hold)
+                {
+                    // held: a first-order all-pass fractional delay in place of the linear read (the same delay, N + 1 + f samples, but no loss at the high partials)
+                    const float D = std::max (4.0f, s.L);
+                    int Ni = (int) D; float f = D - (float) Ni;
+                    if (f < 0.5f) { Ni -= 1; f += 1.0f; }
+                    const float eta = (1.0f - f) / (1.0f + f);
+                    const float xa = s.buf[(size_t) ((s.w - 1 - Ni) & mask)], xb = s.buf[(size_t) ((s.w - 2 - Ni) & mask)];
+                    y = eta * (xa - s.apY) + xb;
+                    s.apY = y;
+                }
+                else y = read (s, std::max (4.0f, s.L));
                 s.lp += s.damp * (y - s.lp);                                         // damping: one-pole low pass
                 const float a = s.disp;                                              // dispersion: two first-order all-passes
                 float v = s.lp;
                 float o = -a * v + s.x1 + a * s.ap1; s.x1 = v; s.ap1 = o; v = o;
                 o = -a * v + s.x2 + a * s.ap2; s.x2 = v; s.ap2 = o; v = o;
-                s.buf[(size_t) (s.w & mask)] = x * s.inG + s.g * v;
+                float fb = s.g * v;
+                if (p.hold) { const float mag = std::fabs (fb); if (mag > 0.7f) fb = std::copysign (0.7f + 0.3f * std::tanh ((mag - 0.7f) / 0.3f), fb); }      // held: no loss keeps the loop in check: a limit that does nothing below 0.7
+                s.buf[(size_t) (s.w & mask)] = x * s.inG + fb;
                 ++s.w;
                 s.env += (std::fabs (y) - s.env) * 0.0015f;
                 wl += y * s.gl; wr += y * s.gr;
@@ -124,7 +139,7 @@ private:
     {
         std::vector<float> buf;
         int64_t w = 0;
-        float lp = 0, ap1 = 0, ap2 = 0, x1 = 0, x2 = 0, env = 0, L = 100, Lbase = 100, damp = 0.5f, disp = 0, g = 0.99f, inG = 0.05f, gl = 0.7f, gr = 0.7f;
+        float apY = 0, lp = 0, ap1 = 0, ap2 = 0, x1 = 0, x2 = 0, env = 0, L = 100, Lbase = 100, damp = 0.5f, disp = 0, g = 0.99f, inG = 0.05f, gl = 0.7f, gr = 0.7f;
         float phase = 0, rate = 0.1f;
     };
 
@@ -142,10 +157,10 @@ private:
         static const float texFc[kNumTextures] = { 1800.0f, 9000.0f, 4500.0f }, texDisp[kNumTextures] = { 0.0f, 0.25f, 0.06f }, texDecay[kNumTextures] = { 0.4f, 1.0f, 2.2f }, texGain[kNumTextures] = { 1.0f, 0.8f, 1.3f };   // texGain evens out the level (the tuned, stiffer strings ring harder)
         const int t = std::clamp (p.texture, 0, kNumTextures - 1);
         const float fc = std::min (texFc[t] * std::pow (0.08f, p.damping), 0.45f * fs);
-        const float damp = 1.0f - std::exp (-2.0f * kPi * fc / fs);
+        const float damp = p.hold ? 1.0f : 1.0f - std::exp (-2.0f * kPi * fc / fs);
         const float disp = std::clamp (texDisp[t] + p.tension * 0.6f, 0.0f, 0.82f);
         const float T = decaySeconds (p.decay) * texDecay[t];
-        motionDepth = p.motion * 0.0075f;                                              // up to about 13 cents
+        motionDepth = p.hold ? 0.0f : p.motion * 0.0075f;                              // up to about 13 cents; none while frozen
         for (int k = 0; k < N; ++k)
         {
             String& s = str[k];
@@ -160,7 +175,7 @@ private:
             const float lpDelay = -std::arg (lpH) / w, apDelay = -2.0f * std::arg (apH) / w;
             s.Lbase = std::clamp (period - lpDelay - apDelay, 4.0f, (float) (size - 8));
             s.damp = damp; s.disp = disp;
-            s.g = std::min (0.9995f, std::pow (10.0f, -3.0f * period / (fs * T)));
+            s.g = p.hold ? 1.0f : std::min (0.9995f, std::pow (10.0f, -3.0f * period / (fs * T)));
             s.inG = ((1.0f - s.g) * 3.0f + 0.004f) * texGain[t];                                   // the string is a narrow resonator: drive it hard so the wet level is useful
             const float pan = ((float) k / (float) std::max (1, N - 1) * 2.0f - 1.0f) * 0.8f * (N > 1 ? 1.0f : 0.0f);
             s.gl = std::cos ((pan + 1.0f) * kPi * 0.25f); s.gr = std::sin ((pan + 1.0f) * kPi * 0.25f);

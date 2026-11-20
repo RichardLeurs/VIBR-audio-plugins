@@ -6,7 +6,7 @@
 
 // RB-1 window (1120 x 660), in the "vintage hardware" look of src/common/ui/VintageUI.h: header (name, preset screen, undo / redo, A / B, power), the CONTROLS panel with the mode tabs on its top edge (the
 // knobs of the mode and its types: a popup of the 12 classic types, the 5 space modes, or the texture, root and scale of the strings), the OUTPUT panel (PRE-DELAY, DUCK,
-// MIX, LEVEL, FREEZE) and the TAIL screen (the wet level over five seconds, or the strings with their notes and how strongly they ring).
+// MIX, LEVEL, SYNC for the pre-delay, FREEZE) and the TAIL screen (the wet level over five seconds, or the strings with their notes and how strongly they ring).
 class RB1AudioProcessorEditor : public vibr::ui::vintage::LabEditor
 {
 public:
@@ -45,6 +45,9 @@ private:
     MidiLearnUI midiUI { proc.midiMap };       // right-click a knob: MIDI learn
     std::array<Knob, 23> knobs;
     int shownKey = -1;
+    bool preSyncOn = false;                   // PRE-DELAY follows the host tempo: the knob then picks the note length
+    void rebindPre();                         // the PRE-DELAY knob is on the time in ms, or on the note length while SYNC is on
+    juce::ParameterAttachment syncAtt;        // declared last: its callback touches the members above
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (RB1AudioProcessorEditor)
 };

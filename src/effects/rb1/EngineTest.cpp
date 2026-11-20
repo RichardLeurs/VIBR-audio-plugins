@@ -66,10 +66,10 @@ int main()
     {
         rb1::Params p; p.mode = rb1::Classic; p.variant = 1; p.decay = 0.4f; p.size = 0.6f; p.tone = 0.5f; p.motion = 0.3f; p.param2 = 0.4f; p.value = 0.5f; p.preDelayMs = 0.0f; p.mix = 1.0f;
         const auto o = run (p, in, in);
-        bigsky::Reverb e; e.prepare (fs); auto l = in, r = in; bigsky::Params q; q.type = 1; q.decay = 0.4f; q.predelay = 0.0f; q.mix = 1.0f; q.tone = 0.5f; q.p1 = 0.6f; q.p2 = 0.4f; q.mod = 0.3f; q.value = 0.5f;
+        bigsky::Reverb e; e.prepare (fs); auto l = in, r = in; bigsky::Params q; q.type = 1; q.decay = 0.4f; q.predelay = 0.0f; q.mix = 1.0f; q.tone = 0.5f; q.p1 = 0.6f; q.p2 = 0.4f; q.mod = 0.3f; q.value = 0.5f; q.rtScale = rb1::classicRtScale (1);        // the BS-1 engine with RB-1's calibrated decay time
         for (size_t pos = 0; pos < l.size(); pos += 480) { const int n = (int) std::min<size_t> (480, l.size() - pos); e.process (l.data() + pos, r.data() + pos, n, q); }
-        const double d = diffDb (o, l, 2000); std::printf ("  CLASSIC hall against the BS-1: %.1f dB\n", d);
-        check (d < -70.0, "CLASSIC equals the BS-1 engine");
+        const double d = diffDb (o, l, 2000); std::printf ("  CLASSIC hall against the BS-1 engine (same calibration): %.1f dB\n", d);
+        check (d < -70.0, "CLASSIC equals the BS-1 engine (with the calibrated decay time)");
     }
     {
         rb1::Params p; p.mode = rb1::Space; p.variant = 0; p.decay = 0.5f; p.size = 0.5f; p.diffusion = 0.6f; p.tone = 0.5f; p.motion = 0.4f; p.texture = 0.5f; p.preDelayMs = 0.0f; p.mix = 1.0f;
@@ -89,7 +89,7 @@ int main()
     }
 
     std::printf ("decay, pre-delay, duck, freeze\n");
-    for (int type : { 0, 1, 2 })
+    for (int type : { 0, 1, 2, 3, 5, 6, 7 })
     {
         for (float decay : { 0.3f, 0.6f })
         {
@@ -98,7 +98,7 @@ int main()
             auto h = run (p, click, click); h.erase (h.begin(), h.begin() + (int) (0.5f * fs));
             const double rt = rt60 (h), want = (double) bigsky::decaySeconds (type, decay);
             std::printf ("  %s decay %.1f: RT60 %.2f s (the knob says %.2f s)\n", rb1::classicLongName (type), (double) decay, rt, want);
-            check (rt > 0 && std::abs (rt - want) / want < 0.35, "CLASSIC: the RT60 follows DECAY (within 35 %)");
+            check (rt > 0 && std::abs (rt - want) / want < 0.10, "CLASSIC: the measured RT60 is what the DECAY knob says (within 10 %)");
         }
     }
     {
@@ -110,6 +110,11 @@ int main()
         for (int sh = 4000; sh <= 5600; sh += 4) { std::vector<float> s2 (a.size(), 0.0f); for (size_t i = 0; i + (size_t) sh < a.size(); ++i) s2[i + (size_t) sh] = a[i]; const double d = -diffDb (b, s2, (int) (0.4f * fs)); if (d > best) { best = d; bestShift = sh; } }
         std::printf ("  pre-delay: the best match is the 0 ms tail shifted by %d samples (%.1f ms), %.1f dB\n", bestShift, bestShift * 1000.0 / fs, -best);
         check (std::abs (bestShift * 1000.0 / fs - 100.0) < 1.0 && best > 30.0, "PRE-DELAY 100 ms delays the tail by 100 ms");
+        // a synced pre-delay reaches 1 s: 500 ms (a quarter note at 120 bpm is 500 ms) shifts it by 500 ms
+        p.preDelayMs = 500.0f; const auto c500 = run (p, click, click); double best5 = -1e9; int shift5 = 0;
+        for (int sh = 23000; sh <= 25000; sh += 4) { std::vector<float> s2 (a.size(), 0.0f); for (size_t i = 0; i + (size_t) sh < a.size(); ++i) s2[i + (size_t) sh] = a[i]; const double d = -diffDb (c500, s2, (int) (0.9f * fs)); if (d > best5) { best5 = d; shift5 = sh; } }
+        std::printf ("  pre-delay 500 ms (synced length): the best match is a shift of %d samples (%.1f ms), %.1f dB\n", shift5, shift5 * 1000.0 / fs, -best5);
+        check (std::abs (shift5 * 1000.0 / fs - 500.0) < 1.0 && best5 > 30.0, "PRE-DELAY 500 ms (a synced note length) delays the tail by 500 ms");
     }
     {
         const auto loud = noise ((int) (2.0f * fs), 0.5f, 9);
@@ -133,6 +138,30 @@ int main()
         rb1::Params c; c.mode = rb1::Classic; c.variant = 0; c.mix = 1.0f; c.preDelayMs = 0.0f; c.freeze = true;
         std::vector<float> loud = noise ((int) fs, 0.5f, 4); const auto o = run (c, loud, loud);
         check (rms (o, (int) (0.5f * fs), (int) fs) < 1e-6, "FREEZE mutes the input of CLASSIC (nothing new enters the tail)");
+    }
+    {
+        // a true freeze in CLASSIC and RESONATE: noise plays for 3 s, the freeze goes on at 1.5 s, the held tail must keep its level for 20 s
+        struct Case { int mode, variant; const char* name; };
+        std::vector<Case> cases; for (int t : { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 }) cases.push_back ({ rb1::Classic, t, rb1::classicLongName (t) }); for (int t : { 0, 1, 2 }) cases.push_back ({ rb1::Resonate, t, sr1::textureName (t) });
+        bool ok = true; double worst = 0.0; std::mt19937 rng (5); std::uniform_real_distribution<float> u (-1.0f, 1.0f);
+        for (const auto& c : cases)
+        {
+            rb1::Engine e; e.prepare (fs);
+            rb1::Params p; p.mode = c.mode; p.variant = c.variant; p.decay = 0.4f; p.mix = 1.0f; p.motion = 0.35f; p.preDelayMs = 0.0f;
+            const size_t total = (size_t) (24.0f * fs); std::vector<float> out (total);
+            for (size_t pos = 0; pos < total; pos += 480)
+            {
+                const int n = (int) std::min<size_t> (480, total - pos); std::vector<float> l ((size_t) n, 0.0f), r ((size_t) n, 0.0f);
+                if (pos < (size_t) (3.0f * fs)) for (int i = 0; i < n; ++i) l[(size_t) i] = r[(size_t) i] = 0.3f * u (rng);
+                p.freeze = pos >= (size_t) (1.5f * fs); e.process (l.data(), r.data(), n, p, 1.0f);
+                for (int i = 0; i < n; ++i) out[pos + (size_t) i] = l[(size_t) i];
+            }
+            const double a = rms (out, (int) (2.5f * fs), (int) (3.5f * fs)), b = rms (out, (int) (22.5f * fs), (int) (23.5f * fs)), d = 20.0 * std::log10 (std::max (1e-9, b / std::max (1e-9, a)));
+            if (a < 1e-4 || std::abs (d) > 2.0) { ok = false; std::printf ("    %s: %.4f then %.2f dB\n", c.name, a, d); }
+            worst = std::max (worst, std::abs (d));
+        }
+        std::printf ("  FREEZE (CLASSIC and RESONATE): the held tail changes by at most %.2f dB over 20 s\n", worst);
+        check (ok, "FREEZE is a true freeze in CLASSIC and RESONATE (the held tail stays within 2 dB over 20 s)");
     }
     std::printf ("resonator, robustness\n");
     {

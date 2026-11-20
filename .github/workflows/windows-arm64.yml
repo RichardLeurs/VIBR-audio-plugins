@@ -38,7 +38,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: winarm64-build-log
-          path: C:/Users/runneradmin/Developer/VIBR-winarm64/build.log
+          path: C:/Users/runneradmin/Developer/VIBR/build.log
 
       - uses: actions/upload-artifact@v7
         with:
