@@ -204,7 +204,7 @@ cmake -S config -B ~/Developer/VIBR -DRL_ARCH=arm64 -DRELEASES_DIR=~/Developer/V
 cmake --build ~/Developer/VIBR --config Release -j8
 ```
 
-One plugin: `--target DD-1_All` (or `CE-1_All`, `RE-2_All`, `DS-1_All`, `BF-3_All`, `CS-3_All`, `LM-2_All`, `PH-2_All`, `TR-2_All`, `EH-2_All`, `ME-1_All`, `TR-8_All`, `SL-2_All`, `OD-2_All`, `OC-5_All`, `BS-1_All`, `SP-1_All`, `RV-1_All`, `MF-1_All`, `HM-2_All`, `GR-1_All`, `SR-1_All`, `VC-1_All`, `PT-1_All`, `DY-1_All`, `SA-1_All`, `SF-1_All`, `TF-1_All`, `IC-1_All`, `SU-1_All`, `EQ-1_All`, `ML-1_All`, `DL-1_All`, `DN-1_All`, `DV-1_All`, `AL-1_All`, `RH-1_All`, `RB-1_All`, `MS-1_All`, ...).
+One plugin: `--target DD-1_All` (or `CE-1_All`, `RE-2_All`, `DS-1_All`, `BF-3_All`, `CS-3_All`, `LM-2_All`, `PH-2_All`, `TR-2_All`, `EH-2_All`, `ME-1_All`, `TR-8_All`, `SL-2_All`, `OD-2_All`, `OC-5_All`, `BS-1_All`, `SP-1_All`, `RV-1_All`, `MF-1_All`, `HM-2_All`, `GR-1_All`, `SR-1_All`, `VC-1_All`, `PT-1_All`, `DY-1_All`, `SA-1_All`, `SF-1_All`, `TF-1_All`, `IC-1_All`, `SU-1_All`, `EQ-1_All`, `ML-1_All`, `DN-1_All`, `DV-1_All`, `AL-1_All`, `RH-1_All`, `RB-1_All`, `MS-1_All`, ...).
 
 ### Screenshots for the website
 
