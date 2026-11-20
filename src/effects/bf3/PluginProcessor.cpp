@@ -24,11 +24,25 @@ juce::AudioProcessorValueTreeState::ParameterLayout BF3AudioProcessor::createLay
     return layout;
 }
 
+std::vector<vibr::PresetManager::Factory> BF3AudioProcessor::factoryPresets()
+{
+    return {
+        { "Init", "Default settings: standard mode, slow sweep", {} },
+        { "Slow Jet", "Slow deep sweep, high resonance", { { "manual", 5.0f }, { "res", 6.5f }, { "depth", 7.0f }, { "rate", 1.5f } } },
+        { "Subtle Shimmer", "Gentle, light movement for clean guitar", { { "manual", 6.0f }, { "res", 2.5f }, { "depth", 3.5f }, { "rate", 3.5f } } },
+        { "Ultra Tunnel", "Ultra mode, intense metallic whoosh", { { "mode", 2 }, { "manual", 4.0f }, { "res", 7.0f }, { "depth", 8.0f }, { "rate", 2.5f } } },
+        { "Gate Pan", "Rhythmic gated panning", { { "mode", 0 }, { "manual", 5.0f }, { "res", 4.0f }, { "depth", 7.5f }, { "rate", 5.0f } } },
+        { "Tempo Sweep", "Synced to the host tempo, 1/4", { { "sync", 1 }, { "division", 3 }, { "manual", 5.0f }, { "res", 5.0f }, { "depth", 6.0f } } },
+        { "Fast Vibe", "Quick wobble, shallow depth", { { "manual", 7.0f }, { "res", 3.0f }, { "depth", 4.0f }, { "rate", 7.0f } } },
+        { "Bass Jet", "Low manual, thick sweep for bass", { { "manual", 2.5f }, { "res", 5.5f }, { "depth", 6.0f }, { "rate", 2.0f } } },
+    };
+}
+
 BF3AudioProcessor::BF3AudioProcessor()
     : AudioProcessor (BusesProperties()
                           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts (*this, nullptr, "BF3", createLayout())
+      apvts (*this, &undoManager, "BF3", createLayout())
 {
     pManual = apvts.getRawParameterValue ("manual");
     pRes    = apvts.getRawParameterValue ("res");

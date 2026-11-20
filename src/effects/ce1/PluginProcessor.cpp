@@ -34,11 +34,34 @@ juce::AudioProcessorValueTreeState::ParameterLayout CE1AudioProcessor::createLay
     return l;
 }
 
+// The factory presets of the preset manager (plain values; ids not listed keep their default). Bypass / power are never touched.
+// vibrato: off = chorus, on = vibrato; inputHigh: on = High input.
+std::vector<vibr::PedalPresets::Factory> CE1AudioProcessor::factoryPresets()
+{
+    return {
+        { "Init", "All controls at their defaults", {} },
+        { "Classic Chorus", "The familiar shimmering chorus",
+          { { "vibrato", 0 }, { "chorusIntensity", 6.0f }, { "level", 6.0f } } },
+        { "Light Shimmer", "Subtle widening, barely there",
+          { { "vibrato", 0 }, { "chorusIntensity", 3.0f }, { "level", 6.0f } } },
+        { "Deep Chorus", "Thick, swirling chorus",
+          { { "vibrato", 0 }, { "chorusIntensity", 9.0f }, { "level", 5.5f } } },
+        { "Slow Vibrato", "Gentle pitch wave, vintage amp feel",
+          { { "vibrato", 1 }, { "vibratoDepth", 4.0f }, { "vibratoRate", 3.0f }, { "level", 6.0f } } },
+        { "Fast Vibrato", "Quick pulsing pitch wobble",
+          { { "vibrato", 1 }, { "vibratoDepth", 5.5f }, { "vibratoRate", 7.0f }, { "level", 6.0f } } },
+        { "Seasick", "Deep, slow pitch swells",
+          { { "vibrato", 1 }, { "vibratoDepth", 9.0f }, { "vibratoRate", 1.5f }, { "level", 5.5f } } },
+        { "Synced Vibrato", "Pitch wave locked to the host tempo",
+          { { "vibrato", 1 }, { "vibratoDepth", 5.0f }, { "sync", 1 }, { "division", 3 }, { "level", 6.0f } } },
+    };
+}
+
 CE1AudioProcessor::CE1AudioProcessor()
     : AudioProcessor (BusesProperties()
                           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts (*this, nullptr, "STATE", createLayout())
+      apvts (*this, &undoManager, "STATE", createLayout())
 {
     pLevel     = apvts.getRawParameterValue ("level");
     pChorus    = apvts.getRawParameterValue ("chorusIntensity");

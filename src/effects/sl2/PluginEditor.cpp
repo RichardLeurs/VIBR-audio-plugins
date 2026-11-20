@@ -92,6 +92,7 @@ void SL2AudioProcessorEditor::setParam (const char* id, float value01)
 
 void SL2AudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 {
+    if (ui::presetBarMouseDown (e.position / scale(), *this, proc.presets, proc.undoManager, scale(), [this] { repaint(); })) return;
     if (toggleBypassAt (e.position)) { repaint(); return; }       // the power switch is the bypass switch
 
     const auto p = e.position / scale();
@@ -132,7 +133,8 @@ void SL2AudioProcessorEditor::paint (juce::Graphics& g)
 {
     g.addTransform (juce::AffineTransform::scale (scale()));
     ui::paintBody (g, kPal, kDesignW, kDesignH);
-    ui::paintHeaderNoPresets (g, kPal, "SL-2", "RHYTHMIC SLICER", "RHYTHMIC PATTERNS", powerOn());
+    ui::paintHeader (g, kPal, "SL-2", "RHYTHMIC SLICER", "RHYTHMIC PATTERNS");
+    ui::paintPresetBar (g, kPal, proc.presets, proc.undoManager, powerOn());
 
     ui::paintPanel (g, kPal, panelRect (0), "OUTPUT");
     ui::paintPanel (g, kPal, panelRect (1), "SLICE");

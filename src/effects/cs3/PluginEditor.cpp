@@ -9,7 +9,7 @@ const ui::Palette kPal { juce::Colour (216, 190, 53) };
 
 // Design space: 1120 wide (margin 28, gap 18), two equal panels OUTPUT / COMPRESSION, y 114 to 344.
 constexpr float kDesignW = 1120.0f, kDesignH = 374.0f;
-constexpr float kPanelY = 114.0f, kPanelH = 230.0f, kKnobDy = 86.0f, kGap = 18.0f, kKnobSpread = 130.0f;
+constexpr float kPanelY = 114.0f, kPanelH = 230.0f, kKnobDy = 96.0f, kBigR = 44.0f, kLabelUp = 12.0f, kGap = 18.0f, kKnobSpread = 130.0f;
 constexpr float kPanelW = (kDesignW - 2.0f * ui::kMargin - kGap) / 2.0f;
 
 juce::Rectangle<float> panelRect (int i) { return { ui::kMargin + (float) i * (kPanelW + kGap), kPanelY, kPanelW, kPanelH }; }
@@ -45,14 +45,15 @@ CS3AudioProcessorEditor::~CS3AudioProcessorEditor() = default;
 
 void CS3AudioProcessorEditor::resized()
 {
-    placeKnob (level.slider, knobCentre (0));
-    placeKnob (tone.slider, knobCentre (1));
-    placeKnob (attack.slider, knobCentre (2));
-    placeKnob (sustain.slider, knobCentre (3));
+    placeKnob (level.slider, knobCentre (0), kBigR);
+    placeKnob (tone.slider, knobCentre (1), kBigR);
+    placeKnob (attack.slider, knobCentre (2), kBigR);
+    placeKnob (sustain.slider, knobCentre (3), kBigR);
 }
 
 void CS3AudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 {
+    if (ui::presetBarMouseDown (e.position / scale(), *this, proc.presets, proc.undoManager, scale(), [this] { repaint(); })) return;
     if (toggleBypassAt (e.position)) repaint();       // the power switch is the bypass switch
 }
 
@@ -73,7 +74,8 @@ void CS3AudioProcessorEditor::paint (juce::Graphics& g)
 {
     g.addTransform (juce::AffineTransform::scale (scale()));
     ui::paintBody (g, kPal, kDesignW, kDesignH);
-    ui::paintHeaderNoPresets (g, kPal, "CS-3", "COMPRESSION SUSTAINER", "SMOOTH SUSTAIN", powerOn());
+    ui::paintHeader (g, kPal, "CS-3", "COMPRESSION SUSTAINER", "SMOOTH SUSTAIN");
+    ui::paintPresetBar (g, kPal, proc.presets, proc.undoManager, powerOn());
 
     ui::paintPanel (g, kPal, panelRect (0), "OUTPUT");
     ui::paintPanel (g, kPal, panelRect (1), "COMPRESSION");
@@ -83,7 +85,7 @@ void CS3AudioProcessorEditor::paint (juce::Graphics& g)
     {
         auto& s = knobs[k]->slider;
         ui::paintKnob (g, kPal, knobCentre (k), knobs[k]->name, juce::String (s.getValue(), 1), knobs[k]->lo, knobs[k]->hi,
-                       (float) s.valueToProportionOfLength (s.getValue()));
+                       (float) s.valueToProportionOfLength (s.getValue()), kBigR, kLabelUp);
     }
     ui::paintFooter (g, kPal, kDesignH - 15.0f);
 }

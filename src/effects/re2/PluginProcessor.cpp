@@ -46,11 +46,26 @@ juce::AudioProcessorValueTreeState::ParameterLayout RE2AudioProcessor::createLay
     return l;
 }
 
+std::vector<vibr::PresetManager::Factory> RE2AudioProcessor::factoryPresets()
+{
+    return {
+        { "Init", "Default settings: heads 2 + 3", {} },
+        { "Slapback", "Single short repeat, classic rockabilly", { { "mode", 3 }, { "repeatRate", 3.5f }, { "intensity", 1.0f }, { "echoVol", 5.5f }, { "reverbVol", 0 } } },
+        { "Studio Echo", "Two heads, even repeats, clean tape", { { "mode", 4 }, { "repeatRate", 5.0f }, { "intensity", 4.0f }, { "echoVol", 5.0f }, { "saturation", 2.0f }, { "wowFlutter", 2.0f } } },
+        { "Triple Head", "All three heads, rhythmic pattern", { { "mode", 7 }, { "repeatRate", 6.0f }, { "intensity", 3.5f }, { "echoVol", 5.5f }, { "treble", 4.5f } } },
+        { "Spring Space", "Head 3 echo with spring reverb", { { "mode", 8 }, { "repeatRate", 6.5f }, { "intensity", 3.0f }, { "echoVol", 4.5f }, { "reverbVol", 5.5f } } },
+        { "Dub Wash", "Long feedback, dark and swirling", { { "mode", 11 }, { "repeatRate", 8.0f }, { "intensity", 7.5f }, { "echoVol", 6.0f }, { "reverbVol", 5.0f }, { "treble", 3.0f }, { "bass", 6.0f }, { "tapeAged", 1 } } },
+        { "Worn Tape", "Old tape: saturated, wobbly, dull", { { "mode", 5 }, { "repeatRate", 5.5f }, { "intensity", 4.5f }, { "echoVol", 5.5f }, { "saturation", 6.5f }, { "wowFlutter", 6.5f }, { "treble", 3.5f }, { "tapeAged", 1 } } },
+        { "Reverb Only", "Spring reverb, no repeats", { { "mode", 12 }, { "reverbVol", 6.5f }, { "echoVol", 0 } } },
+        { "Synced Eighths", "Heads follow the host tempo, 1/8", { { "mode", 4 }, { "sync", 1 }, { "division", 4 }, { "intensity", 3.5f }, { "echoVol", 5.0f } } },
+    };
+}
+
 RE2AudioProcessor::RE2AudioProcessor()
     : AudioProcessor (BusesProperties()
                           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts (*this, nullptr, "STATE", createLayout())
+      apvts (*this, &undoManager, "STATE", createLayout())
 {
     pMode       = apvts.getRawParameterValue ("mode");
     pRate       = apvts.getRawParameterValue ("repeatRate");

@@ -23,7 +23,7 @@ OC5AudioProcessor::OC5AudioProcessor()
     : AudioProcessor (BusesProperties()
                           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts (*this, nullptr, "OC5", createLayout())
+      apvts (*this, &undoManager, "OC5", createLayout())
 {
     midiMap.setDefault ("up1", 1);
     midiMap.setDefault ("down1", 11);
@@ -101,3 +101,18 @@ void OC5AudioProcessor::setStateInformation (const void* data, int size)
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new OC5AudioProcessor(); }
+
+std::vector<vibr::PresetManager::Factory> OC5AudioProcessor::factoryPresets()
+{
+    // plain values: knobs 0..10, poly 0 Vintage / 1 Poly; down2 is the -2 octave level (the range in Poly mode)
+    return {
+        { "Init",         "Defaults: direct plus one octave down",    {} },
+        { "Sub Thump",    "Solid octave down under the note",         { { "direct", 5.0f }, { "up1", 0.0f }, { "down1", 8.0f }, { "down2", 0.0f }, { "poly", 0 } } },
+        { "Double Deep",  "Two octaves down, bass-synth weight",      { { "direct", 4.0f }, { "up1", 0.0f }, { "down1", 7.0f }, { "down2", 7.0f }, { "poly", 0 } } },
+        { "Octave Up",    "Shimmering octave above the note",         { { "direct", 6.0f }, { "up1", 6.5f }, { "down1", 0.0f }, { "down2", 0.0f }, { "poly", 0 } } },
+        { "Organ Blend",  "Up and down octave, church organ feel",    { { "direct", 6.0f }, { "up1", 5.0f }, { "down1", 5.0f }, { "down2", 0.0f }, { "poly", 0 } } },
+        { "Full Range",   "All octaves, thick vintage stack",         { { "direct", 5.5f }, { "up1", 4.0f }, { "down1", 5.5f }, { "down2", 4.0f }, { "poly", 0 } } },
+        { "Poly Chords",  "Polyphonic octave down for chords",        { { "direct", 6.5f }, { "up1", 0.0f }, { "down1", 6.0f }, { "down2", 5.0f }, { "poly", 1 } } },
+        { "Poly Shimmer", "Polyphonic octave up and down",            { { "direct", 6.0f }, { "up1", 5.5f }, { "down1", 4.0f }, { "down2", 3.0f }, { "poly", 1 } } },
+    };
+}

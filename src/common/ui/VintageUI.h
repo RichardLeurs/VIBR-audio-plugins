@@ -239,14 +239,14 @@ inline void paintBipolarArc (juce::Graphics& g, juce::Point<float> c, float knob
 
 // A knob's decoration around its centre: the value ring, the legends under the ends, the name and the value (red, mono) in two rows below.
 inline void paintKnob (juce::Graphics& g, const Palette& pal, juce::Point<float> c, const juce::String& name, const juce::String& value, const juce::String& lo,
-                       const juce::String& hi, float prop, float knobR = kKnobR)
+                       const juce::String& hi, float prop, float knobR = kKnobR, float labelUp = 0.0f)      // labelUp: moves the name and the value that much closer to the knob
 {
     paintValueArc (g, c, knobR, prop, pal.accent, pal.track);
     const float rr = knobR * 1.71f;                                                 // half of the 72 unit cell the artwork is drawn in
     drawText (g, lo, c.x - knobR * 1.4f, c.y + ringRadius (knobR) * 0.707f + 15.0f, 13.0f, pal.inkSoft, false, 0.0f, juce::Justification::centredLeft, Face::Mono);
     drawText (g, hi, c.x + knobR * 1.4f, c.y + ringRadius (knobR) * 0.707f + 15.0f, 13.0f, pal.inkSoft, false, 0.0f, juce::Justification::centredRight, Face::Mono);
-    drawText (g, name, c.x, c.y + rr + 22.0f, 21.0f, pal.ink, true, 0.1f);
-    drawText (g, value, c.x, c.y + rr + 43.0f, 14.0f, pal.accent, true, 0.0f, juce::Justification::centred, Face::Mono);
+    drawText (g, name, c.x, c.y + rr + 22.0f - labelUp, 21.0f, pal.ink, true, 0.1f);
+    drawText (g, value, c.x, c.y + rr + 43.0f - labelUp, 14.0f, pal.accent, true, 0.0f, juce::Justification::centred, Face::Mono);
 }
 
 // the dark recess and tick marks of a small knob (the matrix depth knobs): `knobR` = the black body's radius
@@ -333,6 +333,33 @@ inline void paintMeter (juce::Graphics& g, const Palette& pal, const vibr::ui::O
         }
         const juce::String txt = on && hold > -60.0f ? (hold <= -10.0f ? juce::String ((int) std::lround (hold)) : juce::String (hold, 1)) : juce::String ("-inf");
         drawText (g, txt, cx, y + kMeterH - 14.0f, 14.0f, on && hold > -1.0f ? pal.segRed : pal.phosphor, true, 0.0f, juce::Justification::centred, Face::Mono);
+    }
+}
+
+// The wide output meter (SD-1): a phosphor screen with the L / R bars of 20 segments (3 dB each, +6 .. -48 dB) either side of a shared dBFS scale, the peak hold under each bar.
+// Pass the whole screen rectangle (298 wide in the SD-1); the segments spread over its height.
+inline void paintMeterWide (juce::Graphics& g, const Palette& pal, const vibr::ui::OutputMeter& m, juce::Rectangle<float> r, bool on)
+{
+    paintScreen (g, pal, r, 6.0f);
+    const float cx = r.getCentreX(), top = r.getY() + 38.0f, bottomSeg = r.getBottom() - 40.0f, pitch = (bottomSeg - top) / 19.0f, segH = std::min (7.0f, pitch * 0.72f);      // the 20 segments fill the screen at any height
+    drawText (g, "dBFS", cx, r.getY() + 23.0f, 14.0f, pal.phosphorDim, false, 0.16f, juce::Justification::centred, Face::Mono);
+    for (const float db : { 6.0f, 0.0f, -6.0f, -12.0f, -24.0f, -36.0f, -48.0f })                       // the scale, linear from +6 (top segment) to -48 (bottom segment)
+        drawText (g, db > 0.0f ? "+" + juce::String ((int) db) : juce::String ((int) db), cx, top + (6.0f - db) / 54.0f * (bottomSeg - top), 13.0f, pal.phosphorDim, false, 0.0f, juce::Justification::centred, Face::Mono);
+    for (int ch = 0; ch < 2; ++ch)
+    {
+        const float bx = cx + (ch == 0 ? -74.0f : 74.0f);
+        const float level = on ? m.bar[ch] : -90.0f, hold = on ? m.hold[ch] : -90.0f;
+        drawText (g, ch == 0 ? "L" : "R", bx, r.getY() + 23.0f, 17.0f, pal.phosphor, true, 0.1f, juce::Justification::centred, Face::Mono);
+        for (int i = 0; i < 20; ++i)
+        {
+            const float db = 6.0f - 3.0f * (float) i;
+            const auto col = i < 3 ? pal.segRed : i < 5 ? pal.segYellow : pal.segGreen;
+            const bool lit = level > db - 3.0f, isHold = hold > -60.0f && hold > db - 3.0f && hold <= db;
+            g.setColour (lit ? col : isHold ? col.withAlpha (0.55f) : col.withAlpha (0.22f));
+            g.fillRoundedRectangle (juce::Rectangle<float> (32.0f, segH).withCentre ({ bx, top + (float) i * pitch }), 1.0f);
+        }
+        const juce::String txt = on && hold > -60.0f ? (hold <= -10.0f ? juce::String ((int) std::lround (hold)) : juce::String (hold, 1)) : juce::String ("-inf");
+        drawText (g, txt, bx, r.getBottom() - 15.0f, 20.0f, on && hold > -1.0f ? pal.segRed : pal.phosphor, true, 0.0f, juce::Justification::centred, Face::Mono);
     }
 }
 
@@ -442,7 +469,9 @@ inline void showPresetMenu (juce::Component& owner, vibr::PresetManager& mgr, fl
 // a click at `p` (layout units) on the preset screen, UNDO, REDO or A / B: true when the bar took it (the power switch is the editor's: powerRect())
 inline bool presetBarMouseDown (juce::Point<float> p, juce::Component& owner, vibr::PresetManager& mgr, juce::UndoManager& undo, float scale, std::function<void()> done)
 {
-    if (presetChipRect().contains (p)) { showPresetMenu (owner, mgr, scale, done); return true; }
+    const auto chip = presetChipRect();
+    if (juce::Rectangle<float> (chip).removeFromRight (36.0f).contains (p)) { mgr.stepPreset (p.y < chip.getCentreY() ? -1 : 1); done(); return true; }      // the up / down marks: previous / next preset
+    if (chip.contains (p)) { showPresetMenu (owner, mgr, scale, done); return true; }
     for (int i = 0; i < 2; ++i)
         if (abRect (i).contains (p)) { mgr.switchAB (i); done(); return true; }
     if (undoRect (false).contains (p)) { undo.undo(); done(); return true; }

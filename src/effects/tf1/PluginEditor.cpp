@@ -45,7 +45,7 @@ juce::Point<float> knobCentre (int panel, int k, int n)
 }
 juce::Point<float> meterOrigin() { const auto r = panelRect (3); return { r.getRight() - 20.0f - ui::kMeterW, r.getY() + (r.getHeight() - ui::kMeterH) * 0.5f }; }
 // the SEQUENCER: the 16 steps (58 wide, spread over 1024), the legend, and the row of buttons 200 below the top
-juce::Rectangle<float> stepRect (int s) { const auto r = panelRect (0); return { r.getX() + 20.0f + (1024.0f - 58.0f) / 15.0f * (float) s, r.getY() + 22.0f, 58.0f, 104.0f }; }
+juce::Rectangle<float> stepRect (int s) { const auto r = panelRect (0); return { r.getX() + 20.0f + (1024.0f - 58.0f) / 15.0f * (float) s, r.getY() + 32.0f, 58.0f, 104.0f }; }      // 32 below the top: clear of the mode tabs on the edge
 juce::Rectangle<float> divisionRect (int d) { const auto r = panelRect (0); return { r.getX() + 20.0f + 66.0f * (float) d, r.getY() + 200.0f, 60.0f, 30.0f }; }
 juce::Rectangle<float> lengthMinus() { const auto r = panelRect (0); return { r.getX() + 434.0f, r.getY() + 200.0f, 30.0f, 30.0f }; }
 juce::Rectangle<float> lengthPlus() { const auto r = panelRect (0); return { r.getX() + 616.0f, r.getY() + 200.0f, 30.0f, 30.0f }; }

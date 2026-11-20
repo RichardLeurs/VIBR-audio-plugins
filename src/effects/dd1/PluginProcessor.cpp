@@ -54,7 +54,7 @@ DD1AudioProcessor::DD1AudioProcessor()
     : AudioProcessor (BusesProperties()
                           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts (*this, nullptr, "DD1", createLayout())
+      apvts (*this, &undoManager, "DD1", createLayout())
 {
     seedFactoryMemories();
     const auto bind = [this] (DelayParams& d, const char* p)
@@ -285,7 +285,7 @@ struct Preset { const char* name; PV values; };
 
 // aDiv: 0 FREE, 1 1/1, 2 1/2, 3 1/4., 4 1/4, 5 1/4T, 6 1/8., 7 1/8, 8 1/8T, 9 1/16.
 // bDiv (ratio of A): 0 2/1, 1 3/2, 2 1/1, 3 3/4, 4 2/3, 5 1/2, 6 3/8, 7 1/3, 8 1/4, 9 1/8.   A = 1/4 with B = 3/4 is the dotted eighth.
-const std::vector<Preset>& presets()
+const std::vector<Preset>& edgePresets()
 {
     static const std::vector<Preset> list = {
         { "CLEAN",         { { "aLevel", 0.0f }, { "bLevel", 0.0f }, { "rLevel", 0.0f } } },
@@ -324,13 +324,50 @@ const std::vector<Preset>& presets()
 }
 } // namespace
 
-int DD1AudioProcessor::getNumPresets() { return (int) presets().size(); }
-const char* DD1AudioProcessor::getPresetName (int index) { return presets()[(size_t) juce::jlimit (0, getNumPresets() - 1, index)].name; }
+// The factory presets of the preset manager (plain values; ids not listed keep their default): the Edge-style dotted-eighth delay sounds, one per song tempo.
+// Delay A = 1/8. (dotted eighth = 60000 / bpm * 0.75 ms) and Delay B = 2/1 of A (dotted quarter), so it follows the tempo (host sync, or the tempo set here / tapped).
+// Bypass and host sync are never touched (PedalPresets neverReset).
+std::vector<vibr::PedalPresets::Factory> DD1AudioProcessor::factoryPresets()
+{
+    return {
+        { "Init", "All controls at their defaults", {} },
+        { "Where The Streets Have No Name", "Dotted 1/8, 126 bpm, 3-4 repeats",
+          { { "tempo", 126.0f }, { "aDiv", 6 }, { "bDiv", 0 }, { "aRep", 3.5f }, { "bRep", 3.0f }, { "aLevel", 5.5f }, { "bLevel", 3.5f }, { "aMod", 1.2f }, { "bMod", 1.2f },
+            { "aLowCut", 3.0f }, { "lowCut", 3.0f }, { "aHiCut", 7.0f }, { "hiCut", 7.0f }, { "spread", 6.0f }, { "rLevel", 0.0f }, { "rvLevel", 1.0f }, { "rvDecay", 3.5f } } },
+        { "Pride", "Dotted 1/8, 106 bpm, ping-pong",
+          { { "tempo", 106.0f }, { "aDiv", 6 }, { "bDiv", 0 }, { "aRep", 3.5f }, { "bRep", 3.0f }, { "aLevel", 5.5f }, { "bLevel", 3.5f }, { "aMod", 1.5f }, { "bMod", 1.5f },
+            { "pingB", 1 }, { "spread", 8.0f }, { "chLevel", 2.0f }, { "chDepth", 3.0f }, { "chRate", 2.5f }, { "rLevel", 0.0f }, { "rvLevel", 1.5f } } },
+        { "Sunday Bloody Sunday", "Dotted 1/8, 104 bpm, dry and tight",
+          { { "tempo", 104.0f }, { "aDiv", 6 }, { "bDiv", 0 }, { "aRep", 2.5f }, { "bRep", 2.0f }, { "aLevel", 5.0f }, { "bLevel", 3.0f }, { "aMod", 0.0f }, { "bMod", 0.0f },
+            { "aHiCut", 7.5f }, { "hiCut", 7.5f }, { "spread", 4.0f }, { "boostOn", 1 }, { "drive", 5.0f }, { "boostLevel", 5.0f }, { "rLevel", 0.0f }, { "rvLevel", 0.8f } } },
+        { "I Will Follow", "Dotted 1/8, 160 bpm, short repeats",
+          { { "tempo", 160.0f }, { "aDiv", 6 }, { "bDiv", 2 }, { "aRep", 2.5f }, { "bRep", 2.5f }, { "aLevel", 5.0f }, { "bLevel", 3.0f }, { "aMod", 0.0f }, { "bMod", 0.0f },
+            { "aLowCut", 3.5f }, { "lowCut", 3.5f }, { "boostOn", 1 }, { "drive", 5.0f }, { "rLevel", 0.0f }, { "rvLevel", 0.6f } } },
+        { "Bad", "Dotted 1/8, 108 bpm, long soft tails",
+          { { "tempo", 108.0f }, { "aDiv", 6 }, { "bDiv", 0 }, { "aRep", 4.5f }, { "bRep", 4.0f }, { "aLevel", 5.0f }, { "bLevel", 4.0f }, { "aMod", 3.0f }, { "bMod", 3.0f },
+            { "aHiCut", 5.5f }, { "hiCut", 5.5f }, { "spread", 7.0f }, { "chLevel", 1.5f }, { "rLevel", 3.0f }, { "rDecay", 7.0f }, { "rShim", 6.0f }, { "rInt", 2 },
+            { "rvLevel", 2.5f }, { "rvDecay", 6.0f } } },
+        { "New Year's Day", "Dotted 1/8, 138 bpm, bright ping-pong",
+          { { "tempo", 138.0f }, { "aDiv", 6 }, { "bDiv", 0 }, { "aRep", 3.0f }, { "bRep", 3.0f }, { "aLevel", 5.0f }, { "bLevel", 3.5f }, { "aMod", 0.8f }, { "bMod", 0.8f },
+            { "aLowCut", 4.0f }, { "lowCut", 4.0f }, { "aHiCut", 8.0f }, { "hiCut", 8.0f }, { "pingA", 1 }, { "pingB", 1 }, { "spread", 9.0f }, { "boostOn", 1 }, { "drive", 4.0f },
+            { "rLevel", 0.0f }, { "rvLevel", 1.0f } } },
+        { "With Or Without You", "Dotted 1/8, 110 bpm, shimmer pad",
+          { { "tempo", 110.0f }, { "aDiv", 6 }, { "bDiv", 0 }, { "aRep", 4.0f }, { "bRep", 4.0f }, { "aLevel", 4.5f }, { "bLevel", 4.0f }, { "aMod", 3.5f }, { "bMod", 4.0f },
+            { "aRate", 2.0f }, { "bRate", 2.5f }, { "spread", 8.0f }, { "chLevel", 3.0f }, { "chDepth", 6.0f }, { "chRate", 2.0f },
+            { "rLevel", 5.0f }, { "rDecay", 8.0f }, { "rShim", 7.0f }, { "rInt", 2 }, { "rvLevel", 3.0f }, { "rvDecay", 7.0f } } },
+        { "Elevation", "Dotted 1/8, 107 bpm, driven lead",
+          { { "tempo", 107.0f }, { "aDiv", 6 }, { "bDiv", 0 }, { "aRep", 3.0f }, { "bRep", 3.0f }, { "aLevel", 4.5f }, { "bLevel", 3.5f }, { "aMod", 0.5f }, { "bMod", 0.5f },
+            { "boostOn", 1 }, { "drive", 7.0f }, { "boostTone", 5.0f }, { "boostLevel", 4.5f }, { "rLevel", 0.0f }, { "rvLevel", 1.0f } } },
+    };
+}
+
+int DD1AudioProcessor::getNumPresets() { return (int) edgePresets().size(); }
+const char* DD1AudioProcessor::getPresetName (int index) { return edgePresets()[(size_t) juce::jlimit (0, getNumPresets() - 1, index)].name; }
 
 void DD1AudioProcessor::applyPreset (int index)
 {
     index = juce::jlimit (0, getNumPresets() - 1, index);
-    const auto& pr = presets()[(size_t) index];
+    const auto& pr = edgePresets()[(size_t) index];
     const auto set = [] (juce::RangedAudioParameter* p, float normalised)
     {
         p->beginChangeGesture(); p->setValueNotifyingHost (normalised); p->endChangeGesture();
@@ -368,7 +405,7 @@ void DD1AudioProcessor::seedFactoryMemories()
     for (int i = 0; i < 4; ++i)
     {
         const Preset* pr = nullptr;
-        for (const auto& q : presets())
+        for (const auto& q : edgePresets())
             if (juce::String (q.name) == slots[i].preset) pr = &q;
         if (pr == nullptr) continue;
 

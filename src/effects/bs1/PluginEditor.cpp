@@ -72,9 +72,11 @@ void BigSkyAudioProcessorEditor::resized()
 
 void BigSkyAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 {
+    const auto pt = e.position / scale();
+    proc.undoManager.beginNewTransaction();
+    if (ui::presetBarMouseDown (pt, *this, proc.presets, proc.undoManager, scale(), [this] { repaint(); })) { repaint(); return; }
     if (toggleBypassAt (e.position)) { repaint(); return; }           // the power switch is the bypass switch
     if (e.mods.isPopupMenu()) return;
-    const auto pt = e.position / scale();
     for (int i = 0; i < bigsky::kNumTypes; ++i)
         if (typeButton (i).contains (pt)) { typeAtt.setValueAsCompleteGesture ((float) i); return; }
 }
@@ -120,7 +122,8 @@ void BigSkyAudioProcessorEditor::paint (juce::Graphics& g)
 {
     g.addTransform (juce::AffineTransform::scale (scale()));
     ui::paintBody (g, kPal, kDesignW, kDesignH);
-    ui::paintHeaderNoPresets (g, kPal, "BS-1", "REVERB MACHINE", "ENDLESS SPACES", powerOn());
+    ui::paintHeader (g, kPal, "BS-1", "REVERB MACHINE", "ENDLESS SPACES");
+    ui::paintPresetBar (g, kPal, proc.presets, proc.undoManager, powerOn());
 
     // TYPE: the display with the name of the current type, and the 12 types as buttons
     ui::paintPanel (g, kPal, typePanel(), "TYPE");

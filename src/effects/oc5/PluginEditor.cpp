@@ -65,6 +65,7 @@ void OC5AudioProcessorEditor::resized()
 
 void OC5AudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 {
+    if (ui::presetBarMouseDown (e.position / scale(), *this, proc.presets, proc.undoManager, scale(), [this] { repaint(); })) return;
     if (toggleBypassAt (e.position)) { repaint(); return; }       // the power switch is the bypass switch
 
     const auto p = e.position / scale();
@@ -98,7 +99,8 @@ void OC5AudioProcessorEditor::paint (juce::Graphics& g)
 {
     g.addTransform (juce::AffineTransform::scale (scale()));
     ui::paintBody (g, kPal, kDesignW, kDesignH);
-    ui::paintHeaderNoPresets (g, kPal, "OC-5", "OCTAVE", "OCTAVE HARMONY", powerOn());
+    ui::paintHeader (g, kPal, "OC-5", "OCTAVE", "OCTAVE HARMONY");
+    ui::paintPresetBar (g, kPal, proc.presets, proc.undoManager, powerOn());
 
     ui::paintPanel (g, kPal, panelRect (0), "LEVEL");
     ui::paintPanel (g, kPal, panelRect (1), "LOW");

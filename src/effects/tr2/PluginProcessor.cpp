@@ -20,11 +20,26 @@ juce::AudioProcessorValueTreeState::ParameterLayout TR2AudioProcessor::createLay
     return layout;
 }
 
+std::vector<vibr::PresetManager::Factory> TR2AudioProcessor::factoryPresets()
+{
+    return {
+        { "Init", "Rate 4, Depth 6, sine", {} },
+        { "Slow Swell", "Slow, deep sine pulse", { { "rate", 2.0f }, { "depth", 7.0f }, { "wave", 0.0f } } },
+        { "Surf Guitar", "Fast, deep, sharp", { { "rate", 6.5f }, { "depth", 9.0f }, { "wave", 3.0f } } },
+        { "Soft Shimmer", "Light, fast, gentle amount", { { "rate", 7.0f }, { "depth", 3.0f }, { "wave", 0.0f } } },
+        { "Square Chop", "Hard on / off stutter", { { "rate", 5.0f }, { "depth", 10.0f }, { "wave", 10.0f } } },
+        { "Quarter Pulse", "Tempo synced to 1/4 notes", { { "depth", 8.0f }, { "wave", 6.0f }, { "sync", 1.0f }, { "division", 3.0f } } },
+        { "Eighth Groove", "Tempo synced to 1/8 notes", { { "depth", 7.0f }, { "wave", 2.0f }, { "sync", 1.0f }, { "division", 4.0f } } },
+        { "Amp Wobble", "Mild slow wobble, vintage amp", { { "rate", 3.5f }, { "depth", 4.5f }, { "wave", 1.0f } } },
+    };
+}
+
 TR2AudioProcessor::TR2AudioProcessor()
     : AudioProcessor (BusesProperties()
                           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts (*this, nullptr, "TR2", createLayout())
+      apvts (*this, &undoManager, "TR2", createLayout()),
+      presets (*this, apvts, undoManager, "TR-2 Presets", factoryPresets(), { "bypass" })
 {
     pRate  = apvts.getRawParameterValue ("rate");
     pDepth = apvts.getRawParameterValue ("depth");

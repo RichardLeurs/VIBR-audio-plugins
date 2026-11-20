@@ -22,11 +22,25 @@ juce::AudioProcessorValueTreeState::ParameterLayout PH2AudioProcessor::createLay
     return layout;
 }
 
+std::vector<vibr::PresetManager::Factory> PH2AudioProcessor::factoryPresets()
+{
+    return {
+        { "Init", "Default settings: classic 4 stage phase", {} },
+        { "Slow Swirl", "Slow, deep sweep (mode I)", { { "rate", 1.5f }, { "depth", 6.5f }, { "res", 3.0f }, { "mode", 0 } } },
+        { "Classic Sweep", "Mid rate, moderate resonance", { { "rate", 3.5f }, { "depth", 5.5f }, { "res", 5.0f }, { "mode", 0 } } },
+        { "Deep Jet", "8 stage, high resonance, rich", { { "rate", 2.5f }, { "depth", 8.0f }, { "res", 7.5f }, { "mode", 1 } } },
+        { "Fast Rotor", "Quick, shallow Leslie-like wobble", { { "rate", 7.5f }, { "depth", 4.0f }, { "res", 3.5f }, { "mode", 0 } } },
+        { "Subtle Motion", "Light movement for chords", { { "rate", 2.0f }, { "depth", 3.0f }, { "res", 2.0f }, { "mode", 0 } } },
+        { "Synced Quarter", "One sweep per beat, host tempo", { { "sync", 1 }, { "division", 3 }, { "depth", 6.0f }, { "res", 5.0f }, { "mode", 1 } } },
+        { "Synced Bar", "One sweep per bar, 8 stage", { { "sync", 1 }, { "division", 1 }, { "depth", 7.0f }, { "res", 6.0f }, { "mode", 1 } } },
+    };
+}
+
 PH2AudioProcessor::PH2AudioProcessor()
     : AudioProcessor (BusesProperties()
                           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts (*this, nullptr, "PH2", createLayout())
+      apvts (*this, &undoManager, "PH2", createLayout())
 {
     pRes    = apvts.getRawParameterValue ("res");
     pDepth  = apvts.getRawParameterValue ("depth");

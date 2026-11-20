@@ -41,7 +41,7 @@ public:
         resetToDefaults();
         for (const auto& [id, v] : presets[(size_t) index].values)
             if (auto* par = apvts.getParameter (id)) { par->beginChangeGesture(); par->setValueNotifyingHost (par->convertTo0to1 (v)); par->endChangeGesture(); }
-        apvts.state.setProperty ("presetName", presets[(size_t) index].name, nullptr);
+        apvts.state.setProperty ("presetName", presets[(size_t) index].name, &undo);       // with the undo manager, so UNDO / REDO bring the old name back too
     }
 
     bool saveUser (const juce::String& nameIn)
@@ -80,8 +80,23 @@ public:
         resetToDefaults();
         keepCurrent (tree);
         apvts.replaceState (tree);
-        apvts.state.setProperty ("presetName", file.getFileNameWithoutExtension(), nullptr);
+        apvts.state.setProperty ("presetName", file.getFileNameWithoutExtension(), &undo);
         return true;
+    }
+
+    // the previous (dir < 0) or next (dir > 0) preset of the list: the factory presets, then the user presets (sorted by name); wraps around
+    void stepPreset (int dir)
+    {
+        auto files = folderFile().findChildFiles (juce::File::findFiles, false, "*.xml");
+        files.sort();
+        const int nf = (int) presets.size(), total = nf + files.size();
+        if (total <= 0) return;
+        const auto cur = name();
+        int index = -1;
+        for (int i = 0; i < total && index < 0; ++i)
+            if ((i < nf ? presets[(size_t) i].name : files[i - nf].getFileNameWithoutExtension()) == cur) index = i;
+        index = index < 0 ? (dir > 0 ? 0 : total - 1) : (index + (dir > 0 ? 1 : total - 1)) % total;
+        if (index < nf) applyFactory (index); else loadUser (files[index - nf]);
     }
 
     // 0 = A, 1 = B: the current settings go to the slot you leave

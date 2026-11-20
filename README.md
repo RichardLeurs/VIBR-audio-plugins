@@ -14,17 +14,14 @@ A collection of guitar effects inspired by iconic vintage pedals and original ex
 
 VIBR is open source by design. Every plugin, its code and artwork are free to explore, modify and share. Made for creativity, collaboration and a shared passion for audio.
 
-![DM-1 Delay Machine front panel](src/effects/dm1/assets/dm-1.webp)
+![DL-1 Delay LAB front panel](/src/effects/dl1/assets/dl-1.webp)
 
 ### Delay & Echo
 
 | Plugin | What it is |
 |---|---|
 | DD-1 Dual Delay | two delays + shimmer reverb, boost, chorus, hall reverb, 4 panel memories; compact two-tab window (DELAY: tempo, delay A, stereo, delay B / EFFECTS: boost, ambience, shimmer) |
-| DM-1 Delay Machine | 12-mode modulation delay, tap division, 4 panel memories |
 | RE-2 Space Echo | tape echo + spring reverb, saturation, guitar / line, new / aged tape, 4 panel memories |
-| MM-1 Analog Delay | analog-style delay, chorus and vibrato |
-| SD-1 Digital Delay | digital delay: time, factor, regeneration, hi-cut, modulation, headroom meter |
 
 ### Modulation
 
@@ -59,8 +56,8 @@ VIBR is open source by design. Every plugin, its code and artwork are free to ex
 
 | Plugin | What it is |
 |---|---|
-| GE-7 Equalizer | graphic equalizer: 7 bands (100 Hz - 6.4 kHz, +-15 dB) and a level fader |
 | EH-2 Enhancer | treble enhancer: mix (inverting), freq, sens |
+| EQ-1 Graphic EQ | eight-band equalizer on a live spectrum: drag a band for frequency and gain, wheel for Q; low shelf, six bells, high shelf; each band on stereo, left, right, mid or side, and optionally dynamic (above or below a threshold); minimum phase, no latency; presets, A / B, undo |
 
 ### Amp & Cabinet
 
@@ -130,9 +127,6 @@ Default CCs (all channels; everything else through MIDI learn):
 | Plugin | CC1 (mod wheel) | CC11 (expression) | CC64 (sustain) |
 |---|---|---|---|
 | RE-2 | intensity | repeat rate | |
-| MM-1 | depth | delay | |
-| SD-1 | mod intensity | delay time | |
-| DM-1 | mod depth | delay time | |
 | DD-1 | delay A repeats | delay A time | |
 | DL-1 | mod depth | time | hold |
 | SF-1 | morph | smear | freeze |
@@ -154,7 +148,7 @@ ML-1: CC1 and CC11 move DEPTH (INTENSITY in UNI-VIBE) and RATE (SPEED in ROTARY,
 
 RH-1 MATRIX also reads the mod wheel, expression and channel pressure as modulation sources; TR-08 plays its drums from MIDI notes and keeps its own fixed map. MS-1, ME-1 and the plugins not listed above do not take MIDI.
 
-**Tap tempo.** DM-1, DL-1, DD-1, RE-2, MM-1 and SD-1 tap the tempo from any MIDI note-on or from CC85 (a rising edge, value 64 or higher), with the same averaging as the TAP button; RE-2, MM-1 and SD-1 have no TAP button, only MIDI. A tap turns SYNC off (DM-1 ignores taps while SYNC is on).
+**Tap tempo.** DL-1, DD-1 and RE-2 tap the tempo from any MIDI note-on or from CC85 (a rising edge, value 64 or higher), with the same averaging as the TAP button; RE-2 has no TAP button, only MIDI. A tap turns SYNC off.
 
 The shared code is `src/common/MidiMap.h` (CC map, learn, soft takeover, tap flag), `MidiTarget.h` (learn target over code-drawn switches) and `TapTempo.h`. Its unit test: `cmake --build ~/Developer/VIBR --target MidiMapTest`, then run `~/Developer/VIBR/tools/midi-test/MidiMapTest_artefacts/Release/MidiMapTest` (exit code 0 = all checks passed).
 
@@ -193,7 +187,7 @@ The build on macOS is placed outside the iCloud synced folders in `~/Developer/V
 ./build.sh --arch all       # both, one after the other
 ./build.sh --arch linux64     # on Linux x86_64: VST3 and Standalone in ~/Developer/VIBR/releases/linux64 (no AU on Linux)
 ./build.sh --arch linuxarm64  # on Linux arm64 / aarch64 (e.g. Raspberry Pi 5, ARM servers): VST3 and Standalone in ~/Developer/VIBR/releases/linuxarm64 (no AU on Linux)
-./build.sh DD-1 SD-1        # only these plugins
+./build.sh DD-1 CE-1        # only these plugins
 ./build.sh --clean          # rebuild from scratch
 ./build.sh --no-zip         # skip the zip step
 ./build.sh --install        # also install this Mac's VST3 / AU in ~/Library/Audio/Plug-Ins (needed for auval or to try them in a DAW)
@@ -210,7 +204,7 @@ cmake -S config -B ~/Developer/VIBR -DRL_ARCH=arm64 -DRELEASES_DIR=~/Developer/V
 cmake --build ~/Developer/VIBR --config Release -j8
 ```
 
-One plugin: `--target DD-1_All` (or `DM-1_All`, `CE-1_All`, `RE-2_All`, `DS-1_All`, `BF-3_All`, `CS-3_All`, `LM-2_All`, `PH-2_All`, `TR-2_All`, `GE-7_All`, `EH-2_All`, `ME-1_All`, `TR-8_All`, `SL-2_All`, `OD-2_All`, `OC-5_All`, `BS-1_All`, `MM-1_All`, `SD-1_All`, `SP-1_All`, `RV-1_All`, `MF-1_All`, `HM-2_All`, `GR-1_All`, `SR-1_All`, `VC-1_All`, `PT-1_All`, `DY-1_All`, `SA-1_All`, `SF-1_All`, `TF-1_All`, `IC-1_All`, `SU-1_All`, `ML-1_All`, `DL-1_All`, `DN-1_All`, `DV-1_All`, `AL-1_All`, `RH-1_All`, `RB-1_All`, `MS-1_All`, ...).
+One plugin: `--target DD-1_All` (or `CE-1_All`, `RE-2_All`, `DS-1_All`, `BF-3_All`, `CS-3_All`, `LM-2_All`, `PH-2_All`, `TR-2_All`, `EH-2_All`, `ME-1_All`, `TR-8_All`, `SL-2_All`, `OD-2_All`, `OC-5_All`, `BS-1_All`, `SP-1_All`, `RV-1_All`, `MF-1_All`, `HM-2_All`, `GR-1_All`, `SR-1_All`, `VC-1_All`, `PT-1_All`, `DY-1_All`, `SA-1_All`, `SF-1_All`, `TF-1_All`, `IC-1_All`, `SU-1_All`, `EQ-1_All`, `ML-1_All`, `DL-1_All`, `DN-1_All`, `DV-1_All`, `AL-1_All`, `RH-1_All`, `RB-1_All`, `MS-1_All`, ...).
 
 ### Screenshots for the website
 

@@ -3,6 +3,7 @@
 
 #include "BypassLink.h"
 #include "MidiMap.h"
+#include "plugin/PedalPresets.h"
 #include "TapTempo.h"
 
 #include <JuceHeader.h>
@@ -29,16 +30,19 @@ public:
     double getTailLengthSeconds() const override { return 8.0; }
     juce::AudioProcessorParameter* getBypassParameter() const override { return apvts.getParameter ("bypass"); }
 
-    int getNumPrograms() override { return 1; }
-    int getCurrentProgram() override { return 0; }
-    void setCurrentProgram (int) override {}
-    const juce::String getProgramName (int) override { return {}; }
+    int getNumPrograms() override { return presets.numPrograms(); }
+    int getCurrentProgram() override { return presets.currentProgram(); }
+    void setCurrentProgram (int i) override { presets.setProgram (i); }
+    const juce::String getProgramName (int i) override { return presets.programName (i); }
     void changeProgramName (int, const juce::String&) override {}
 
     void getStateInformation (juce::MemoryBlock&) override;
     void setStateInformation (const void*, int) override;
 
+    juce::UndoManager undoManager { 30000, 100 };          // before apvts
     juce::AudioProcessorValueTreeState apvts;
+    vibr::PedalPresets presets { *this, apvts, undoManager, "RE-2 Presets", factoryPresets(), { "bypass" } };   // factory + user presets, A / B
+    static std::vector<vibr::PresetManager::Factory> factoryPresets();
 
     vibr::BypassLink bypassLink { apvts };                // host bypass <-> OFF / ON switch
     MidiMap midiMap { apvts, { "saturation", "wowFlutter", "mode", "bass", "treble", "reverbVol", "repeatRate", "intensity", "echoVol" } };   // CC -> knob, MIDI learn

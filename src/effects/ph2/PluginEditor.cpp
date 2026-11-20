@@ -96,6 +96,7 @@ void PH2AudioProcessorEditor::syncChanged (bool on)
 
 void PH2AudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 {
+    if (ui::presetBarMouseDown (e.position / scale(), *this, proc.presets, proc.undoManager, scale(), [this] { repaint(); })) return;
     if (toggleBypassAt (e.position)) { repaint(); return; }           // the power switch is the bypass switch
     if (syncRect().expanded (3.0f).contains (e.position / scale()))
         syncAtt.setValueAsCompleteGesture (syncOn ? 0.0f : 1.0f);
@@ -118,7 +119,8 @@ void PH2AudioProcessorEditor::paint (juce::Graphics& g)
 {
     g.addTransform (juce::AffineTransform::scale (scale()));
     ui::paintBody (g, kPal, kDesignW, kDesignH);
-    ui::paintHeaderNoPresets (g, kPal, "PH-2", "SUPER PHASER", "PHASE MOVEMENT", powerOn());
+    ui::paintHeader (g, kPal, "PH-2", "SUPER PHASER", "PHASE MOVEMENT");
+    ui::paintPresetBar (g, kPal, proc.presets, proc.undoManager, powerOn());
 
     // SWEEP: RATE (the note division while sync is on) and DEPTH, the SYNC button under RATE
     ui::paintPanel (g, kPal, sweepPanel(), "SWEEP");

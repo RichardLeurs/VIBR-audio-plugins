@@ -16,7 +16,7 @@
 #   ./build.sh --arch all         arm64 and x86_64 one after the other
 #   ./build.sh --arch win64       (on Windows) build everything for 64-bit Windows: VST3 and Standalone in ~/Developer/VIBR/releases/win64 (build tree ~/Developer/VIBR-win64)
 #   ./build.sh --arch winarm64    (on Windows) the same for Windows on ARM: releases/winarm64 (build tree ~/Developer/VIBR-winarm64 when cross-compiling on an x64 PC)
-#   ./build.sh DD-1 SD-3          build only these plugins (DD-1 DM-1 CE-1 RE-1 RE-2 DS-1 BF-3 CS-3 LM-2 PH-2 GE-7 EH-2 TR-2 ME-1 SL-2 OD-2 OC-5 BS-1 MM-1 SD-1 SD-3 SU-1 ML-1 DL-1 DN-1 DV-1 AL-1 RH-1 RB-1 MS-1 TR-8)
+#   ./build.sh DD-1 SD-3          build only these plugins (DD-1 CE-1 RE-1 RE-2 DS-1 BF-3 CS-3 LM-2 PH-2 EH-2 TR-2 ME-1 SL-2 OD-2 OC-5 BS-1 SD-3 SU-1 EQ-1 ML-1 DL-1 DN-1 DV-1 AL-1 RH-1 RB-1 MS-1 TR-8)
 #   ./build.sh --clean [names]    rebuild from scratch (the bundles are collected in releases / test on every build, also when nothing was recompiled)
 #   ./build.sh --configure        only (re)configure
 #   ./build.sh --no-zip           skip the zip step

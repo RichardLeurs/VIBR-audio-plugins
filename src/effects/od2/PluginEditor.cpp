@@ -12,7 +12,6 @@ constexpr float kDesignW = 1120.0f, kDesignH = 522.0f, kGap = 18.0f;
 constexpr float kTypeY = 114.0f, kTypeH = 108.0f, kRowY = 240.0f, kRowH = 252.0f;
 constexpr float kKnobDy = 86.0f, kKnobPitch = 160.0f, kStripDy = 206.0f, kStripH = 30.0f, kLampPitch = 44.0f, kBtnW = 96.0f;
 constexpr float kPanelW2 = (kDesignW - 2.0f * ui::kMargin - kGap) * 0.5f;
-constexpr juce::uint32 kHoldMs = 800;
 const char* const kSlotId[5] = { "param", "boostPost", "boostPre", "gateDecay", "gateThresh" };      // what the PARAM knob edits
 
 juce::Rectangle<float> typePanel() { return { ui::kMargin, kTypeY, kDesignW - 2.0f * ui::kMargin, kTypeH }; }
@@ -25,7 +24,7 @@ juce::Rectangle<float> typeButton (int i)                                       
     return { x0 + (float) (i % 6) * (w + 8.0f), r.getY() + 20.0f + (float) (i / 6) * 38.0f, w, 30.0f };
 }
 juce::Point<float> knobCentre (int i) { const auto r = rowPanel (i / 3); return { r.getCentreX() + kKnobPitch * (float) (i % 3 - 1), r.getY() + kKnobDy }; }
-juce::Rectangle<float> leftButton (int panel) { const auto r = rowPanel (panel); return { r.getX() + 20.0f, r.getY() + kStripDy, kBtnW, kStripH }; }      // PARAM / MEMORY
+juce::Rectangle<float> leftButton (int panel) { const auto r = rowPanel (panel); return { r.getX() + 20.0f, r.getY() + kStripDy, kBtnW, kStripH }; }      // PARAM
 juce::Rectangle<float> boostButton() { const auto r = rowPanel (0); return { r.getRight() - 20.0f - kBtnW, r.getY() + kStripDy, kBtnW, kStripH }; }
 juce::Point<float> lampCentre (int panel, int i) { const auto r = rowPanel (panel); return { r.getCentreX() + kLampPitch * (float) (i - 2), r.getY() + kStripDy + kStripH * 0.5f }; }
 
@@ -64,15 +63,10 @@ OD2AudioProcessorEditor::OD2AudioProcessorEditor (OD2AudioProcessor& p)
     param.slider.onValueChange = [this] { shownUntil = juce::Time::getMillisecondCounter() + 1200; repaint(); };   // show the value in the display for a moment
 
     paramZone.onClick = [this] { selectSlot ((slot + 1) % 5); };
-    memoryZone.onDown = [this] { memHeld = true; memWritten = false; memDownAt = juce::Time::getMillisecondCounter(); };
-    memoryZone.onUp = [this] { memHeld = false; };
-    memoryZone.onClick = [this] { if (! memWritten) memory.stepNext(); repaint(); };      // short press
-    for (int i = 0; i < 5; ++i)      // clicking a lamp selects it: the parameter the PARAM knob edits, or a memory slot (MAN, 1-4)
+    for (int i = 0; i < 5; ++i)      // clicking a lamp selects the parameter the PARAM knob edits
     {
         paramLedZone[i].onClick = [this, i] { selectSlot (i); };
-        memLedZone[i].onClick   = [this, i] { memory.select (i); repaint(); };
         addAndMakeVisible (paramLedZone[i]);
-        addAndMakeVisible (memLedZone[i]);
     }
     typeTarget.onPress = [this] { setType ((lastType < 0 ? 0 : lastType) + 1); };
     addAndMakeVisible (typeTarget);
@@ -81,7 +75,6 @@ OD2AudioProcessorEditor::OD2AudioProcessorEditor (OD2AudioProcessor& p)
     addAndMakeVisible (boostTarget);
     midiUI.add (boostTarget, "boostOn");
     addAndMakeVisible (paramZone);
-    addAndMakeVisible (memoryZone);
 
     resized();
     startTimerHz (30);
@@ -125,17 +118,16 @@ void OD2AudioProcessorEditor::resized()
     typeTarget.setBounds (typeDisplay().transformedBy (juce::AffineTransform::scale (scale())).toNearestInt());
     boostTarget.setBounds (px (boostButton(), scale()));
     paramZone.setBounds (px (leftButton (0), scale()));
-    memoryZone.setBounds (px (leftButton (1), scale()));
     for (int i = 0; i < 5; ++i)
     {
         const auto z = [this] (juce::Point<float> c) { return juce::Rectangle<float> (50.0f, 50.0f).withCentre (c).transformedBy (juce::AffineTransform::scale (scale())).toNearestInt(); };
         paramLedZone[i].setBounds (z (lampCentre (0, i)));
-        memLedZone[i].setBounds (z (lampCentre (1, i)));
     }
 }
 
 void OD2AudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 {
+    if (ui::presetBarMouseDown (e.position / scale(), *this, proc.presets, proc.undoManager, scale(), [this] { repaint(); })) return;
     if (toggleBypassAt (e.position)) { repaint(); return; }          // the power switch is the bypass switch
     const auto p = e.position / scale();
     for (int i = 0; i < od2::kNumTypes; ++i)
@@ -150,24 +142,13 @@ void OD2AudioProcessorEditor::paintOverChildren (juce::Graphics& g)
 void OD2AudioProcessorEditor::timerCallback()
 {
     if (midiUI.needsRepaint()) { midiUI.tick(); repaint(); }
-    // memory: holding the button writes the slot; moving a knob after a recall goes back to MANUAL
-    const auto now = juce::Time::getMillisecondCounter();
-    if (memHeld && ! memWritten && now - memDownAt >= kHoldMs)
-    {
-        memory.write();
-        memWritten = true;
-        memFlashUntil = now + 500;
-    }
-    memory.revertIfEdited();
-
     const bool on = powerOn();
     const bool boost = proc.apvts.getRawParameterValue ("boostOn")->load() > 0.5f;
     const int t = (int) std::lround (proc.apvts.getRawParameterValue ("type")->load());
-    const bool flashing = now < memFlashUntil, showing = now < shownUntil;
-    if (on != lastOn || boost != lastBoost || t != lastType || memory.current() != memShown || flashing || flashing != memFlashShown
-        || showing || showing != valueShown)
+    const bool showing = juce::Time::getMillisecondCounter() < shownUntil;
+    if (on != lastOn || boost != lastBoost || t != lastType || showing || showing != valueShown)
     {
-        lastOn = on; lastBoost = boost; lastType = t; memShown = memory.current(); memFlashShown = flashing; valueShown = showing;
+        lastOn = on; lastBoost = boost; lastType = t; valueShown = showing;
         repaint();
     }
 }
@@ -176,7 +157,8 @@ void OD2AudioProcessorEditor::paint (juce::Graphics& g)
 {
     g.addTransform (juce::AffineTransform::scale (scale()));
     ui::paintBody (g, kPal, kDesignW, kDesignH);
-    ui::paintHeaderNoPresets (g, kPal, "OD-2", "HYBRID DRIVE", "VINTAGE OVERDRIVE", powerOn());
+    ui::paintHeader (g, kPal, "OD-2", "HYBRID DRIVE", "VINTAGE OVERDRIVE");
+    ui::paintPresetBar (g, kPal, proc.presets, proc.undoManager, powerOn());
 
     // TYPE: the phosphor display (the drive type, or the PARAM value while the PARAM knob is turned) and the 12 buttons
     ui::paintPanel (g, kPal, typePanel(), "TYPE");
@@ -203,17 +185,11 @@ void OD2AudioProcessorEditor::paint (juce::Graphics& g)
         ui::paintKnob (g, kPal, knobCentre (i), ks[i]->name, juce::String (s.getValue(), 1), "0", "10", (float) s.valueToProportionOfLength (s.getValue()));
     }
 
-    // lower strips: PARAM + 5 red lamps + BOOST, MEMORY + 5 green lamps
+    // lower strip: PARAM + 5 red lamps + BOOST
     ui::paintFlatButton (g, kPal, leftButton (0), "PARAM", paramZone.isDown(), 17.0f);
-    ui::paintFlatButton (g, kPal, leftButton (1), "MEMORY", memoryZone.isDown(), 17.0f);
     ui::paintFlatButton (g, kPal, boostButton(), "BOOST", proc.apvts.getRawParameterValue ("boostOn")->load() > 0.5f, 17.0f);
-    const auto now = juce::Time::getMillisecondCounter();
-    const bool memFlashing = now < memFlashUntil, blinkOff = memFlashing && ((now / 100) % 2) == 1;
     for (int i = 0; i < 5; ++i)
-    {
         drawLamp (g, lampCentre (0, i), slot == i, juce::Colour (0xffFF4A2A), juce::Colour (0xff5A2A20));
-        drawLamp (g, lampCentre (1, i), memFlashing ? ! blinkOff : memory.current() == i, juce::Colour (0xff7FD86A), juce::Colour (0xff253020));
-    }
 
     ui::paintFooter (g, kPal, kDesignH - 15.0f);
 }

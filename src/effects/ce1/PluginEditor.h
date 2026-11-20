@@ -18,6 +18,7 @@ public:
     void mouseDown (const juce::MouseEvent&) override;
 
 private:
+    int presetBarKey = 0;
     void timerCallback() override;
     void syncChanged();
     int stateKey() const;

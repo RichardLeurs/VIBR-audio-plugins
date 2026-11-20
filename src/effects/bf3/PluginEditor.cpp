@@ -54,6 +54,14 @@ BF3AudioProcessorEditor::BF3AudioProcessorEditor (BF3AudioProcessor& p)
     add (rate, "rate");
     midiUI.add (manual.slider, "manual");  midiUI.add (res.slider, "res");
     midiUI.add (depth.slider, "depth");    midiUI.add (rate.slider, "rate");
+    addAndMakeVisible (modeArea);
+    modeArea.onDown = [this] (juce::Point<float> pos)
+    {
+        const auto pt = (pos + modeArea.getPosition().toFloat()) / scale();     // area-local pixels to design units
+        for (int i = 0; i < 3; ++i)
+            if (modeRect (i).expanded (3.0f).contains (pt)) { modeAtt.setValueAsCompleteGesture ((float) i / 2.0f); return; }   // normalised 0, 0.5, 1
+    };
+    midiUI.add (modeArea, "mode");
     syncAtt.sendInitialUpdate();
     divisionAtt.sendInitialUpdate();
     modeAtt.sendInitialUpdate();
@@ -70,23 +78,20 @@ void BF3AudioProcessorEditor::resized()
     placeKnob (res.slider, knobCentre (0, 1));
     placeKnob (depth.slider, knobCentre (1, 0));
     placeKnob (rate.slider, knobCentre (1, 1));
+    modeArea.setBounds (modeRect (0).getUnion (modeRect (2)).transformedBy (juce::AffineTransform::scale (scale())).toNearestInt());
 }
 
 void BF3AudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 {
-    if (toggleBypassAt (e.position)) return;
+    proc.undoManager.beginNewTransaction();
     const auto p = e.position / scale();
+    if (ui::presetBarMouseDown (p, *this, proc.presets, proc.undoManager, scale(), [this] { repaint(); })) { repaint(); return; }
+    if (toggleBypassAt (e.position)) return;
     if (syncRect().expanded (3.0f).contains (p))
     {
         syncAtt.setValueAsCompleteGesture (syncOn ? 0.0f : 1.0f);
         return;
     }
-    for (int i = 0; i < 3; ++i)
-        if (modeRect (i).expanded (3.0f).contains (p))
-        {
-                modeAtt.setValueAsCompleteGesture ((float) i / 2.0f);          // the choice parameter is normalised 0, 0.5, 1
-            return;
-        }
 }
 
 void BF3AudioProcessorEditor::syncChanged()
@@ -123,7 +128,8 @@ void BF3AudioProcessorEditor::paint (juce::Graphics& g)
 {
     g.addTransform (juce::AffineTransform::scale (scale()));
     ui::paintBody (g, kPal, kDesignW, kDesignH);
-    ui::paintHeaderNoPresets (g, kPal, "BF-3", "STEREO FLANGER", "LIQUID MOTION", powerOn());
+    ui::paintHeader (g, kPal, "BF-3", "STEREO FLANGER", "LIQUID MOTION");
+    ui::paintPresetBar (g, kPal, proc.presets, proc.undoManager, powerOn());
     ui::paintFooter (g, kPal, kDesignH - 15.0f);
 
     ui::paintPanel (g, kPal, kPanels[0], "FLANGE");

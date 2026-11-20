@@ -4,9 +4,8 @@
 #include "PluginProcessor.h"
 #include "ui/VintagePedalEditor.h"
 #include "ClickZone.h"
-#include "ParamMemory.h"
 
-// RE-2 in the default (Vintage Hardware) look: TAPE, MIXER and ECHO knob panels, MODE (12-position dial with head lamps) and MEMORY, drawn in code (no background image).
+// RE-2 in the default (Vintage Hardware) look: MODE (12-position dial with head lamps), ECHO, TAPE and MIXER panels, drawn in code (no background image).
 class RE2AudioProcessorEditor : public vibr::ui::vintage::PedalEditor,
                                 private juce::Timer
 {
@@ -22,7 +21,6 @@ public:
 private:
     void timerCallback() override;
     void syncChanged();                       // SYNC toggled: RATE switches between the repeat rate and the note division
-    void toggleParam (const char* id);
     bool paramOn (const char* id) const { return proc.apvts.getRawParameterValue (id)->load() > 0.5f; }
 
     struct Knob
@@ -47,14 +45,7 @@ private:
     int division = 4;
     std::unique_ptr<juce::SliderParameterAttachment> divisionKnobAtt;      // RATE while sync is on
 
-    // MEMORY: short press steps MANUAL / 1-4, holding it writes the knobs into the selected slot
-    ClickZone memoryZone, inputZone, tapeZone;
-    ClickZone memLedZone[5], inputLedZone[2], tapeLedZone[2];       // click a lamp to select it (memory slot, GUITAR / LINE, NEW / AGED)
-    ParamMemory memory { proc.apvts, { "power", "bypass" } };
-    bool memHeld = false, memWritten = false, lastOn = true;
-    juce::uint32 memDownAt = 0, memFlashUntil = 0;
-    int memShown = -1;
-    bool memFlashShown = false;
+    ClickZone inputLedZone[2], tapeLedZone[2];       // GUITAR / LINE and NEW / AGED buttons
     int shownState = -1;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (RE2AudioProcessorEditor)

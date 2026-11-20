@@ -9,7 +9,7 @@ const ui::Palette kPal { juce::Colour (32, 182, 208) };
 
 // Design space: 1120 wide (margin 28, gap 18), one row of three equal panels, y 114 to 344, footer centre 15 above the bottom.
 constexpr float kDesignW = 1120.0f, kDesignH = 374.0f;
-constexpr float kPanelY = 114.0f, kPanelH = 230.0f, kKnobDy = 86.0f;
+constexpr float kPanelY = 114.0f, kPanelH = 230.0f, kKnobDy = 96.0f, kBigR = 44.0f, kLabelUp = 12.0f;
 constexpr float kPanelW = (kDesignW - 2.0f * ui::kMargin - 2.0f * 18.0f) / 3.0f;
 
 juce::Rectangle<float> panelRect (int i) { return { ui::kMargin + (float) i * (kPanelW + 18.0f), kPanelY, kPanelW, kPanelH }; }
@@ -42,13 +42,16 @@ EH2AudioProcessorEditor::~EH2AudioProcessorEditor() = default;
 
 void EH2AudioProcessorEditor::resized()
 {
-    placeKnob (mix.slider, knobCentre (0));
-    placeKnob (freq.slider, knobCentre (1));
-    placeKnob (sens.slider, knobCentre (2));
+    placeKnob (mix.slider, knobCentre (0), kBigR);
+    placeKnob (freq.slider, knobCentre (1), kBigR);
+    placeKnob (sens.slider, knobCentre (2), kBigR);
 }
 
 void EH2AudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 {
+    const auto p = e.position / scale();
+    proc.undoManager.beginNewTransaction();
+    if (ui::presetBarMouseDown (p, *this, proc.presets, proc.undoManager, scale(), [this] { repaint(); })) return;
     if (toggleBypassAt (e.position)) repaint();                       // the power switch is the bypass switch
 }
 
@@ -63,7 +66,8 @@ void EH2AudioProcessorEditor::paint (juce::Graphics& g)
 {
     g.addTransform (juce::AffineTransform::scale (scale()));
     ui::paintBody (g, kPal, kDesignW, kDesignH);
-    ui::paintHeaderNoPresets (g, kPal, "EH-2", "ENHANCER", "SONIC CLARITY", powerOn());
+    ui::paintHeader (g, kPal, "EH-2", "ENHANCER", "SONIC CLARITY");
+    ui::paintPresetBar (g, kPal, proc.presets, proc.undoManager, powerOn());
 
     const char* titles[] = { "ENHANCE", "FREQUENCY", "SENSITIVITY" };
     const char* lo[] = { "INV", "LO", "MIN" };
@@ -75,8 +79,8 @@ void EH2AudioProcessorEditor::paint (juce::Graphics& g)
         auto& s = knobs[i]->slider;
         const auto c = knobCentre (i);
         const float prop = (float) s.valueToProportionOfLength (s.getValue());
-        ui::paintKnob (g, kPal, c, knobs[i]->name, juce::String (s.getValue(), 1), lo[i], hi[i], i == 0 ? 0.0f : prop);
-        if (i == 0) ui::paintBipolarArc (g, c, ui::kKnobR, prop * 2.0f - 1.0f, kPal.accent, kPal.track);
+        ui::paintKnob (g, kPal, c, knobs[i]->name, juce::String (s.getValue(), 1), lo[i], hi[i], i == 0 ? 0.0f : prop, kBigR, kLabelUp);
+        if (i == 0) ui::paintBipolarArc (g, c, kBigR, prop * 2.0f - 1.0f, kPal.accent, kPal.track);
     }
 
     // SENS lamp (red, lit while the effect is open)

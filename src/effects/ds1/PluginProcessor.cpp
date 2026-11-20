@@ -17,11 +17,25 @@ juce::AudioProcessorValueTreeState::ParameterLayout DS1AudioProcessor::createLay
     return layout;
 }
 
+std::vector<vibr::PresetManager::Factory> DS1AudioProcessor::factoryPresets()
+{
+    return {
+        { "Init", "Default settings: tone, level and dist at noon", {} },
+        { "Edge of Breakup", "Light grit that cleans up with the pick", { { "tone", 4.5f }, { "level", 5.5f }, { "dist", 2.0f } } },
+        { "Crunch Rhythm", "Tight mid-gain crunch for chords", { { "tone", 5.0f }, { "level", 5.0f }, { "dist", 4.5f } } },
+        { "Classic Orange", "Bright, sharp distortion, full drive", { { "tone", 6.5f }, { "level", 5.0f }, { "dist", 6.5f } } },
+        { "Lead Boost", "Sustaining lead, louder than the band", { { "tone", 5.5f }, { "level", 7.0f }, { "dist", 7.5f } } },
+        { "Dark Wall", "Thick, dark and heavy", { { "tone", 2.5f }, { "level", 5.5f }, { "dist", 8.5f } } },
+        { "Fuzzy Bite", "Maximum drive, bright and buzzy", { { "tone", 7.5f }, { "level", 4.5f }, { "dist", 10.0f } } },
+        { "Clean Push", "Barely driven, adds punch to an amp", { { "tone", 5.0f }, { "level", 6.5f }, { "dist", 0.8f } } },
+    };
+}
+
 DS1AudioProcessor::DS1AudioProcessor()
     : AudioProcessor (BusesProperties()
                           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts (*this, nullptr, "DS1", createLayout())
+      apvts (*this, &undoManager, "DS1", createLayout())
 {
     pTone  = apvts.getRawParameterValue ("tone");
     pLevel = apvts.getRawParameterValue ("level");

@@ -23,11 +23,26 @@ juce::AudioProcessorValueTreeState::ParameterLayout BigSkyAudioProcessor::create
     return layout;
 }
 
+std::vector<vibr::PedalPresets::Factory> BigSkyAudioProcessor::factoryPresets()
+{
+    return {
+        { "Init", "Room, all knobs at the defaults", {  } },
+        { "Small Room", "Tight natural room, short tail", { { "type", 0.0f }, { "decay", 2.5f }, { "predelay", 0.5f }, { "mix", 3.5f }, { "tone", 5.5f } } },
+        { "Concert Hall", "Wide warm hall, long tail", { { "type", 1.0f }, { "decay", 7.0f }, { "predelay", 2.5f }, { "mix", 4.0f }, { "tone", 4.5f }, { "mod", 3.0f } } },
+        { "Vocal Plate", "Bright smooth plate, short pre-delay", { { "type", 2.0f }, { "decay", 4.5f }, { "predelay", 1.0f }, { "mix", 3.5f }, { "tone", 6.5f } } },
+        { "Surf Spring", "Splashy spring tank for clean guitar", { { "type", 3.0f }, { "decay", 5.0f }, { "predelay", 0.0f }, { "mix", 4.5f }, { "tone", 6.0f }, { "param1", 6.0f } } },
+        { "Swell Pad", "Slow swelling wash, ambient", { { "type", 4.0f }, { "decay", 8.0f }, { "predelay", 1.0f }, { "mix", 5.5f }, { "tone", 4.5f }, { "param1", 7.0f }, { "mod", 4.0f } } },
+        { "Cloud Nine", "Huge diffuse cloud, soft tone", { { "type", 6.0f }, { "decay", 9.0f }, { "predelay", 3.0f }, { "mix", 6.0f }, { "tone", 4.0f }, { "mod", 5.0f } } },
+        { "Shimmer Sky", "Octave-up shimmer, endless tail", { { "type", 8.0f }, { "decay", 8.5f }, { "predelay", 2.0f }, { "mix", 5.5f }, { "tone", 6.5f }, { "param1", 6.5f }, { "mod", 3.5f } } },
+        { "Gated Reflections", "Short dense reflections, big drums", { { "type", 11.0f }, { "decay", 3.0f }, { "predelay", 0.0f }, { "mix", 5.0f }, { "tone", 6.0f } } },
+    };
+}
+
 BigSkyAudioProcessor::BigSkyAudioProcessor()
     : AudioProcessor (BusesProperties()
                           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts (*this, nullptr, "BIGSKY", createLayout())
+      apvts (*this, &undoManager, "BIGSKY", createLayout())
 {
     pType  = apvts.getRawParameterValue ("type");
     pDecay = apvts.getRawParameterValue ("decay");

@@ -18,11 +18,25 @@ juce::AudioProcessorValueTreeState::ParameterLayout LM2AudioProcessor::createLay
     return layout;
 }
 
+std::vector<vibr::PresetManager::Factory> LM2AudioProcessor::factoryPresets()
+{
+    return {
+        { "Init", "Default settings: gentle peak control", {} },
+        { "Transparent", "High threshold, only catches peaks", { { "threshold", 7.0f }, { "release", 4.0f }, { "tone", 5.0f }, { "level", 6.0f } } },
+        { "Tight Peaks", "Fast release, tames spikes", { { "threshold", 4.5f }, { "release", 2.0f }, { "tone", 5.0f }, { "level", 6.5f } } },
+        { "Loud and Safe", "Low threshold, pushed level", { { "threshold", 3.0f }, { "release", 4.5f }, { "tone", 5.5f }, { "level", 7.5f } } },
+        { "Smooth Release", "Slow release, glued and even", { { "threshold", 4.0f }, { "release", 7.5f }, { "tone", 5.0f }, { "level", 6.0f } } },
+        { "Bright Edge", "Limited with an open top end", { { "threshold", 5.0f }, { "release", 3.0f }, { "tone", 7.5f }, { "level", 6.0f } } },
+        { "Warm Limiter", "Soft, dark limiting for bass", { { "threshold", 4.5f }, { "release", 5.5f }, { "tone", 2.5f }, { "level", 6.5f } } },
+        { "Brickwall", "Hard limiting, very low threshold", { { "threshold", 1.5f }, { "release", 3.5f }, { "tone", 5.0f }, { "level", 8.0f } } },
+    };
+}
+
 LM2AudioProcessor::LM2AudioProcessor()
     : AudioProcessor (BusesProperties()
                           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts (*this, nullptr, "LM2", createLayout())
+      apvts (*this, &undoManager, "LM2", createLayout())
 {
     pLevel   = apvts.getRawParameterValue ("level");
     pTone    = apvts.getRawParameterValue ("tone");

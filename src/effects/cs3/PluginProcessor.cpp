@@ -18,11 +18,25 @@ juce::AudioProcessorValueTreeState::ParameterLayout CS3AudioProcessor::createLay
     return layout;
 }
 
+std::vector<vibr::PresetManager::Factory> CS3AudioProcessor::factoryPresets()
+{
+    return {
+        { "Init", "Default settings: smooth, even sustain", {} },
+        { "Clean Sustain", "Long even sustain, transparent", { { "sustain", 6.5f }, { "attack", 2.0f }, { "tone", 5.0f }, { "level", 6.0f } } },
+        { "Country Squeeze", "Fast attack, bright, snappy chicken-pickin", { { "sustain", 7.0f }, { "attack", 6.5f }, { "tone", 7.0f }, { "level", 5.5f } } },
+        { "Funk Snap", "Tight and punchy, quick grab", { { "sustain", 5.5f }, { "attack", 8.0f }, { "tone", 6.5f }, { "level", 6.0f } } },
+        { "Singing Lead", "Max sustain, soft attack, warm", { { "sustain", 8.5f }, { "attack", 2.5f }, { "tone", 4.0f }, { "level", 5.5f } } },
+        { "Light Touch", "Gentle leveling, keeps dynamics", { { "sustain", 3.0f }, { "attack", 4.0f }, { "tone", 5.0f }, { "level", 6.5f } } },
+        { "Warm Bass", "Dark and round, steady low end", { { "sustain", 5.0f }, { "attack", 3.5f }, { "tone", 2.5f }, { "level", 6.5f } } },
+        { "Squash", "Heavy squash, lively and loud", { { "sustain", 9.5f }, { "attack", 5.0f }, { "tone", 6.0f }, { "level", 4.5f } } },
+    };
+}
+
 CS3AudioProcessor::CS3AudioProcessor()
     : AudioProcessor (BusesProperties()
                           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts (*this, nullptr, "CS3", createLayout())
+      apvts (*this, &undoManager, "CS3", createLayout())
 {
     pLevel   = apvts.getRawParameterValue ("level");
     pTone    = apvts.getRawParameterValue ("tone");

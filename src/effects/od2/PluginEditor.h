@@ -5,7 +5,6 @@
 #include "ui/VintagePedalEditor.h"
 #include "ClickZone.h"
 #include "MidiTarget.h"
-#include "ParamMemory.h"
 
 // OD-2 in the default (Vintage Hardware) look: TYPE (a phosphor display and 12 flat buttons), DRIVE and TONE with their lower strips, drawn in code (no background image).
 class OD2AudioProcessorEditor : public vibr::ui::vintage::PedalEditor,
@@ -40,14 +39,13 @@ private:
          low { "low", "LOW", {}, {} }, middle { "middle", "MIDDLE", {}, {} }, high { "high", "HIGH", {}, {} };
     MidiTarget typeTarget;                         // over the type display: click = next type; right-click = MIDI learn of TYPE
     MidiTarget boostTarget;                        // over the BOOST button (MIDI learn target)
-    ClickZone paramZone, memoryZone;
-    ClickZone paramLedZone[5], memLedZone[5];      // click a lamp to select it
+    ClickZone paramZone;
+    ClickZone paramLedZone[5];                     // click a lamp to select it
 
     int slot = 0;                                  // what the PARAM knob edits: TYPE param, POST, PRE, DECAY, THRESH
-    bool lastOn = true, lastBoost = false, valueShown = false, memHeld = false, memWritten = false, memFlashShown = false;
-    int lastType = -1, memShown = -1;
-    juce::uint32 shownUntil = 0, memDownAt = 0, memFlashUntil = 0;
-    ParamMemory memory { proc.apvts, { "bypass" } };
+    bool lastOn = true, lastBoost = false, valueShown = false;
+    int lastType = -1;
+    juce::uint32 shownUntil = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (OD2AudioProcessorEditor)
 };

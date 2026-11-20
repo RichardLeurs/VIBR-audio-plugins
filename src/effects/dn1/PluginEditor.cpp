@@ -7,7 +7,7 @@ namespace
 namespace ui = vibr::ui::vintage;          // the default look (src/common/ui/VintageUI.h)
 
 constexpr float kW = ui::kW, kH = ui::kH, kRow1Y = 114.0f, kRow1H = 244.0f, kRow2Y = 376.0f, kRow2H = 254.0f;
-const ui::Palette kPal { juce::Colour (244, 197, 66) };            // the Dynamics colour #F4C542: value rings, knob values and the plugin code
+const ui::Palette kPal { juce::Colour (207, 155, 10) };             // the Dynamics colour #CF9B0A (a darker yellow, readable on the cream plate): value rings, knob values and the plugin code
 
 // panels: 0 CONTROLS (with the mode tabs), 1 SIDECHAIN, 2 ACTION (the scope), 3 OUTPUT. Row 1 and row 2 share their columns (x 28 / 703 wide, x 749 / 343 wide)
 constexpr float kPanelX[4] = { 28.0f, 749.0f, 28.0f, 749.0f }, kPanelW[4] = { 703.0f, 343.0f, 703.0f, 343.0f };

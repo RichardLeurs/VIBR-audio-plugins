@@ -2,11 +2,10 @@
 #pragma once
 
 #include "PluginProcessor.h"
-#include "ParamMemory.h"
 #include "ui/VintagePedalEditor.h"
 
-// DD-1 in the default (Vintage Hardware) look, drawn in code (no background image): TEMPO (MEMORY, tap, host sync, TIME), STEREO, ROUTING,
-// DELAY A / DELAY B (two knob rows, time screen, PING-PONG), BOOST, AMBIENCE (chorus / reverb) and SHIMMER.
+// DD-1 in the default (Vintage Hardware) look, drawn in code (no background image), two rows: DELAY A / DELAY B (time screen, PING-PONG, one row of 7 knobs) and
+// TEMPO & STEREO (BPM, TAP, HOST SYNC, ROUTING, TIME, SPREAD) + EFFECTS (tabs BOOST / AMBIENCE / SHIMMER, one tab's knobs at a time).
 class DD1AudioProcessorEditor : public vibr::ui::vintage::PedalEditor,
                                 private juce::Timer
 {
@@ -18,13 +17,14 @@ public:
     void paintOverChildren (juce::Graphics&) override;
     void resized() override;
     void mouseDown (const juce::MouseEvent&) override;
-    void mouseUp (const juce::MouseEvent&) override;
 
 private:
+    int presetBarKey = 0;
     void timerCallback() override;
     void toggleParam (const char* id);
     void setBool (const char* id, bool v);
     void tap();
+    void setTab (int);
 
     struct Knob
     {
@@ -32,6 +32,8 @@ private:
         std::unique_ptr<juce::SliderParameterAttachment> attachment;
         const char* name = "";
         juce::Point<float> centre;
+        float r = 30.0f;            // body radius
+        int tab = -1;               // -1 always shown, else the EFFECTS tab (0 BOOST, 1 AMBIENCE, 2 SHIMMER)
         int kind = 0;               // 0 = 0..10, 1 = division of delay A, 2 = ratio of delay B, 3 = shimmer interval
     };
 
@@ -40,11 +42,7 @@ private:
     std::vector<std::unique_ptr<Knob>> knobs;
     bool lastOn = true, lastSeries = false;
     int lastFlags = 0;
-    // MEMORY: short press steps MANUAL / 1-4, holding it writes the knobs into the selected slot
-    ParamMemory memory { proc.apvts, { "bypass" } };
-    bool memHeld = false, memWritten = false, memFlashShown = false;
-    int memShown = -1;
-    juce::uint32 memDownAt = 0, memFlashUntil = 0;
+    int fxTab = 2;
     bool lastBlink = false;
     float lastBpm = 0.0f;
     float lastMs[2] { -1.0f, -1.0f };

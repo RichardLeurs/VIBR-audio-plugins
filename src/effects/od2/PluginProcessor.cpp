@@ -32,7 +32,7 @@ OD2AudioProcessor::OD2AudioProcessor()
     : AudioProcessor (BusesProperties()
                           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts (*this, nullptr, "OD2", createLayout())
+      apvts (*this, &undoManager, "OD2", createLayout())
 {
     pType = apvts.getRawParameterValue ("type");       pParam = apvts.getRawParameterValue ("param");
     pDrive = apvts.getRawParameterValue ("drive");     pLevel = apvts.getRawParameterValue ("level");
@@ -212,3 +212,18 @@ void OD2AudioProcessor::setStateInformation (const void* data, int size)
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new OD2AudioProcessor(); }
+
+std::vector<vibr::PresetManager::Factory> OD2AudioProcessor::factoryPresets()
+{
+    // plain values: knobs 0..10; type 0 Overdrive, 1 Blues, 2 Scream, 3 Cntr OD, 4 X-Drive, 5 Dist, 6 X-Dist, 7 Stack Drive, 8 Fat Dist, 9 Brown, 10 X-Metal, 11 Fuzz
+    return {
+        { "Init",           "Defaults: classic overdrive",            {} },
+        { "Edge of Breakup", "Light Blues drive, keeps the dynamics",   { { "type", 1 }, { "param", 4.0f }, { "drive", 3.0f }, { "level", 6.0f }, { "low", 5.0f }, { "middle", 5.5f }, { "high", 5.0f } } },
+        { "Scream Lead",    "Mid-hump lead boost, singing sustain",    { { "type", 2 }, { "param", 6.0f }, { "drive", 6.0f }, { "level", 5.5f }, { "low", 4.0f }, { "middle", 7.0f }, { "high", 5.5f } } },
+        { "Amp Pusher",     "Clean boost to slam the amp front",       { { "type", 0 }, { "param", 5.0f }, { "drive", 2.0f }, { "level", 7.5f }, { "low", 5.0f }, { "middle", 5.0f }, { "high", 5.5f }, { "boostOn", 1 }, { "boostPre", 3.0f }, { "boostPost", 5.0f } } },
+        { "Classic Crunch", "Rock rhythm crunch, tight low end",       { { "type", 5 }, { "param", 5.0f }, { "drive", 5.5f }, { "level", 5.0f }, { "low", 4.5f }, { "middle", 6.0f }, { "high", 6.0f } } },
+        { "Stacked Rhythm", "Two-stage drive, thick and focused",      { { "type", 7 }, { "param", 5.0f }, { "drive", 6.5f }, { "level", 4.5f }, { "low", 5.5f }, { "middle", 5.0f }, { "high", 5.5f }, { "gateThresh", 2.0f }, { "gateDecay", 4.0f } } },
+        { "Brown Heavy",    "Saturated high gain, gate on",            { { "type", 9 }, { "param", 6.0f }, { "drive", 7.0f }, { "level", 4.5f }, { "low", 6.0f }, { "middle", 4.0f }, { "high", 6.0f }, { "gateThresh", 3.5f }, { "gateDecay", 3.5f } } },
+        { "Fuzz Face",      "Gated, spitty fuzz with a boost",         { { "type", 11 }, { "param", 6.0f }, { "drive", 7.0f }, { "level", 4.0f }, { "low", 6.0f }, { "middle", 4.5f }, { "high", 5.0f }, { "boostOn", 1 } } },
+    };
+}

@@ -28,9 +28,17 @@ private:
         std::unique_ptr<juce::SliderParameterAttachment> attachment;
     };
 
+    // a transparent area over the three MODE buttons: it takes the clicks and carries the MIDI learn menu of the MODE parameter
+    struct ModeArea : juce::Component
+    {
+        std::function<void (juce::Point<float>)> onDown;
+        void mouseDown (const juce::MouseEvent& e) override { if (! e.mods.isPopupMenu() && onDown) onDown (e.position); }
+    };
+
     BF3AudioProcessor& proc;
     MidiLearnUI midiUI { proc.midiMap };       // right-click a knob: MIDI learn
     Knob manual, res, depth, rate;
+    ModeArea modeArea;
     int lastKey = -1;
 
     bool syncOn = false;

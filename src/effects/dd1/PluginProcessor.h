@@ -2,6 +2,7 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include "plugin/PedalPresets.h"
 #include "MidiMap.h"
 #include "TapTempo.h"
 #include "DD1DSP.h"
@@ -26,10 +27,10 @@ public:
     bool isMidiEffect() const override { return false; }
     double getTailLengthSeconds() const override { return 12.0; }
 
-    int getNumPrograms() override { return 1; }
-    int getCurrentProgram() override { return 0; }
-    void setCurrentProgram (int) override {}
-    const juce::String getProgramName (int) override { return {}; }
+    int getNumPrograms() override { return presets.numPrograms(); }
+    int getCurrentProgram() override { return presets.currentProgram(); }
+    void setCurrentProgram (int i) override { presets.setProgram (i); }
+    const juce::String getProgramName (int i) override { return presets.programName (i); }
     void changeProgramName (int, const juce::String&) override {}
 
     void getStateInformation (juce::MemoryBlock&) override;
@@ -37,7 +38,11 @@ public:
 
     juce::AudioProcessorParameter* getBypassParameter() const override { return bypassParam; }
 
+    static std::vector<vibr::PedalPresets::Factory> factoryPresets();     // the factory presets (also the host programs)
+
+    juce::UndoManager undoManager { 30000, 100 };
     juce::AudioProcessorValueTreeState apvts;
+    vibr::PedalPresets presets { *this, apvts, undoManager, "DD-1 Presets", factoryPresets(), { "bypass", "hostSync" } };
     MidiMap midiMap { apvts, { "aTime", "aRep", "aLevel", "bTime", "bRep", "bLevel", "drive", "boostLevel", "chDepth", "chLevel", "rvDecay", "rvLevel", "rLevel", "rShim", "spread", "tempo" } };   // CC -> knob, MIDI learn
     void tapAt (double ms);                      // one tap (ms: juce::Time::getMillisecondCounterHiRes); message thread
     vibr::TapAverager tapAvg;

@@ -91,6 +91,7 @@ void CE1AudioProcessorEditor::resized()
 
 void CE1AudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 {
+    if (! e.mods.isPopupMenu() && ui::presetBarMouseDown (e.position / scale(), *this, proc.presets, proc.undoManager, scale(), [this] { repaint(); })) return;     // preset screen, UNDO / REDO, A / B
     if (e.mods.isPopupMenu()) return;
     if (toggleBypassAt (e.position)) return;
     const auto p = e.position / scale();
@@ -141,6 +142,10 @@ int CE1AudioProcessorEditor::stateKey() const
 
 void CE1AudioProcessorEditor::timerCallback()
 {
+    {   // the preset bar follows host program changes, loads, undo / redo and A / B
+        const int key = (int) proc.presets.name().hashCode() ^ (proc.undoManager.canUndo() ? 1 : 0) ^ (proc.undoManager.canRedo() ? 2 : 0) ^ (proc.presets.abSlot() << 2);
+        if (key != presetBarKey) { presetBarKey = key; repaint(); }
+    }
     const bool learn = midiUI.needsRepaint();
     if (learn) midiUI.tick();
     if (proc.inputPeak.exchange (0.0f) > 0.9f) peakHold = 3;
@@ -156,7 +161,8 @@ void CE1AudioProcessorEditor::paint (juce::Graphics& g)
 {
     g.addTransform (juce::AffineTransform::scale (scale()));
     ui::paintBody (g, kPal, kDesignW, kDesignH);
-    ui::paintHeaderNoPresets (g, kPal, "CE-1", "CHORUS / VIBRATO", "LUSH DIMENSION", powerOn());
+    ui::paintHeader (g, kPal, "CE-1", "CHORUS / VIBRATO", "LUSH DIMENSION");
+    ui::paintPresetBar (g, kPal, proc.presets, proc.undoManager, powerOn());
     ui::paintFooter (g, kPal, kDesignH - 15.0f);
 
     ui::paintPanel (g, kPal, kPanels[0], "INPUT");

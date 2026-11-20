@@ -2,6 +2,7 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include "plugin/PedalPresets.h"
 #include "EH2DSP.h"
 
 class EH2AudioProcessor : public juce::AudioProcessor
@@ -24,10 +25,10 @@ public:
     bool isMidiEffect() const override { return false; }
     double getTailLengthSeconds() const override { return 0.0; }
 
-    int getNumPrograms() override { return 1; }
-    int getCurrentProgram() override { return 0; }
-    void setCurrentProgram (int) override {}
-    const juce::String getProgramName (int) override { return {}; }
+    int getNumPrograms() override { return presets.numPrograms(); }
+    int getCurrentProgram() override { return presets.currentProgram(); }
+    void setCurrentProgram (int i) override { presets.setProgram (i); }
+    const juce::String getProgramName (int i) override { return presets.programName (i); }
     void changeProgramName (int, const juce::String&) override {}
 
     void getStateInformation (juce::MemoryBlock&) override;
@@ -35,11 +36,14 @@ public:
 
     juce::AudioProcessorParameter* getBypassParameter() const override { return bypassParam; }
 
+    juce::UndoManager undoManager { 30000, 100 };                  // before apvts: the parameters record into it
     juce::AudioProcessorValueTreeState apvts;
+    vibr::PedalPresets presets;                                    // factory / user presets, also the host programs
     float getOpen() const { return openMeter.load(); }
 
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
+    static std::vector<vibr::PresetManager::Factory> factoryPresets();
 
     static constexpr int kMaxChannels = 2;
 

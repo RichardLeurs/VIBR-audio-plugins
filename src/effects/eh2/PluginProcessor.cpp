@@ -17,11 +17,26 @@ juce::AudioProcessorValueTreeState::ParameterLayout EH2AudioProcessor::createLay
     return layout;
 }
 
+std::vector<vibr::PresetManager::Factory> EH2AudioProcessor::factoryPresets()
+{
+    return {
+        { "Init", "Mix 4, Freq 5, Sens 5", {} },
+        { "Subtle Sheen", "Gentle clarity, barely there", { { "mix", 2.0f }, { "freq", 6.0f }, { "sens", 4.0f } } },
+        { "Bright Pick", "Pick attack sparkles, clean sustain", { { "mix", 5.0f }, { "freq", 7.5f }, { "sens", 6.0f } } },
+        { "Full Air", "Strong top-end lift", { { "mix", 8.0f }, { "freq", 8.5f }, { "sens", 3.0f } } },
+        { "Vocal Presence", "Adds clarity and breath", { { "mix", 4.0f }, { "freq", 5.5f }, { "sens", 5.0f } } },
+        { "Low Lift", "Wide band, enhances body", { { "mix", 5.0f }, { "freq", 2.5f }, { "sens", 5.0f } } },
+        { "Dynamic Open", "Opens only on loud playing", { { "mix", 6.0f }, { "freq", 6.5f }, { "sens", 8.0f } } },
+        { "Inverted Hollow", "Phase-inverted thin, odd tone", { { "mix", -6.0f }, { "freq", 5.0f }, { "sens", 5.0f } } },
+    };
+}
+
 EH2AudioProcessor::EH2AudioProcessor()
     : AudioProcessor (BusesProperties()
                           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts (*this, nullptr, "EH2", createLayout())
+      apvts (*this, &undoManager, "EH2", createLayout()),
+      presets (*this, apvts, undoManager, "EH-2 Presets", factoryPresets(), { "bypass" })
 {
     pMix  = apvts.getRawParameterValue ("mix");
     pFreq = apvts.getRawParameterValue ("freq");

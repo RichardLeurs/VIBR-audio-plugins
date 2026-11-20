@@ -9,7 +9,7 @@ const ui::Palette kPal { juce::Colour (233, 185, 63) };
 
 // Design space: 1120 wide (margin 28, gap 18), one row of two equal panels, y 114 to 344, footer centre 15 above the bottom.
 constexpr float kDesignW = 1120.0f, kDesignH = 374.0f;
-constexpr float kPanelY = 114.0f, kPanelH = 230.0f, kKnobDy = 86.0f, kKnobDx = 110.0f;
+constexpr float kPanelY = 114.0f, kPanelH = 230.0f, kKnobDy = 96.0f, kBigR = 44.0f, kLabelUp = 12.0f, kKnobDx = 110.0f;
 constexpr float kPanelW = (kDesignW - 2.0f * ui::kMargin - 18.0f) / 2.0f;
 
 juce::Rectangle<float> panelRect (int i) { return { ui::kMargin + (float) i * (kPanelW + 18.0f), kPanelY, kPanelW, kPanelH }; }
@@ -46,14 +46,15 @@ LM2AudioProcessorEditor::~LM2AudioProcessorEditor() = default;
 
 void LM2AudioProcessorEditor::resized()
 {
-    placeKnob (level.slider, knobCentre (0));
-    placeKnob (tone.slider, knobCentre (1));
-    placeKnob (release.slider, knobCentre (2));
-    placeKnob (threshold.slider, knobCentre (3));
+    placeKnob (level.slider, knobCentre (0), kBigR);
+    placeKnob (tone.slider, knobCentre (1), kBigR);
+    placeKnob (release.slider, knobCentre (2), kBigR);
+    placeKnob (threshold.slider, knobCentre (3), kBigR);
 }
 
 void LM2AudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 {
+    if (ui::presetBarMouseDown (e.position / scale(), *this, proc.presets, proc.undoManager, scale(), [this] { repaint(); })) return;
     if (toggleBypassAt (e.position)) repaint();                       // the power switch is the bypass switch
 }
 
@@ -74,7 +75,8 @@ void LM2AudioProcessorEditor::paint (juce::Graphics& g)
 {
     g.addTransform (juce::AffineTransform::scale (scale()));
     ui::paintBody (g, kPal, kDesignW, kDesignH);
-    ui::paintHeaderNoPresets (g, kPal, "LM-2", "PEAK LIMITER", "DYNAMIC CONTROL", powerOn());
+    ui::paintHeader (g, kPal, "LM-2", "PEAK LIMITER", "DYNAMIC CONTROL");
+    ui::paintPresetBar (g, kPal, proc.presets, proc.undoManager, powerOn());
 
     ui::paintPanel (g, kPal, panelRect (0), "OUTPUT");
     ui::paintPanel (g, kPal, panelRect (1), "LIMITER");
@@ -86,7 +88,7 @@ void LM2AudioProcessorEditor::paint (juce::Graphics& g)
     {
         auto& s = knobs[i]->slider;
         ui::paintKnob (g, kPal, knobCentre (i), knobs[i]->name, juce::String (s.getValue(), 1), lo[i], hi[i],
-                       (float) s.valueToProportionOfLength (s.getValue()));
+                       (float) s.valueToProportionOfLength (s.getValue()), kBigR, kLabelUp);
     }
     ui::paintFooter (g, kPal, kDesignH - 15.0f);
 }

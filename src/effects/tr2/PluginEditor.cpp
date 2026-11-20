@@ -68,6 +68,9 @@ void TR2AudioProcessorEditor::syncChanged (bool on)
 
 void TR2AudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 {
+    const auto p = e.position / scale();
+    proc.undoManager.beginNewTransaction();
+    if (ui::presetBarMouseDown (p, *this, proc.presets, proc.undoManager, scale(), [this] { repaint(); })) return;
     if (syncRect().expanded (3.0f).contains (e.position / scale())) { syncAtt.setValueAsCompleteGesture (syncOn ? 0.0f : 1.0f); return; }
     if (toggleBypassAt (e.position)) repaint();                       // the power switch is the bypass switch
 }
@@ -89,7 +92,8 @@ void TR2AudioProcessorEditor::paint (juce::Graphics& g)
 {
     g.addTransform (juce::AffineTransform::scale (scale()));
     ui::paintBody (g, kPal, kDesignW, kDesignH);
-    ui::paintHeaderNoPresets (g, kPal, "TR-2", "TREMOLO", "PULSING MOTION", powerOn());
+    ui::paintHeader (g, kPal, "TR-2", "TREMOLO", "PULSING MOTION");
+    ui::paintPresetBar (g, kPal, proc.presets, proc.undoManager, powerOn());
 
     const char* titles[] = { "SPEED", "SHAPE", "AMOUNT" };
     const char* names[]  = { "RATE", "WAVE", "DEPTH" };

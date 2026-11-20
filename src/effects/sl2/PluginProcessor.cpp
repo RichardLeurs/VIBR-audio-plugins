@@ -26,7 +26,7 @@ SL2AudioProcessor::SL2AudioProcessor()
     : AudioProcessor (BusesProperties()
                           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts (*this, nullptr, "SL2", createLayout())
+      apvts (*this, &undoManager, "SL2", createLayout())
 {
     pBalance   = apvts.getRawParameterValue ("balance");
     pTempo     = apvts.getRawParameterValue ("tempo");
@@ -149,3 +149,18 @@ void SL2AudioProcessor::setStateInformation (const void* data, int size)
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new SL2AudioProcessor(); }
+
+std::vector<vibr::PresetManager::Factory> SL2AudioProcessor::factoryPresets()
+{
+    // plain values: knobs 0..10, variation 1..11, mode 0 Single / 1 Dual / 2 Tremolo / 3 SFX / 4 Harmonic, hostSync 0 / 1
+    return {
+        { "Init",            "Defaults: eighth-note slicing",          {} },
+        { "Eighth Chop",     "Tight eighth gate, short tail",          { { "balance", 10.0f }, { "tempo", 4.0f }, { "attack", 1.0f }, { "duty", 4.5f }, { "variation", 2 }, { "mode", 0 } } },
+        { "Sixteenth Stutter", "Fast machine-gun gating",              { { "balance", 10.0f }, { "tempo", 3.5f }, { "attack", 0.5f }, { "duty", 3.0f }, { "variation", 3 }, { "mode", 0 } } },
+        { "Soft Pulse",      "Slow quarter swells under the dry",      { { "balance", 6.0f }, { "tempo", 3.0f }, { "attack", 6.5f }, { "duty", 8.0f }, { "variation", 1 }, { "mode", 0 } } },
+        { "Syncopated Groove", "Off-kilter rhythm, wide gaps",         { { "balance", 8.5f }, { "tempo", 4.5f }, { "attack", 2.0f }, { "duty", 5.0f }, { "variation", 7 }, { "mode", 0 } } },
+        { "Off-Beat Tremolo", "Smooth off-beat amplitude motion",      { { "balance", 8.0f }, { "tempo", 4.0f }, { "attack", 5.0f }, { "duty", 7.0f }, { "variation", 10 }, { "mode", 2 } } },
+        { "Dual Shuffle",    "Shuffle pattern with a second voice",    { { "balance", 8.0f }, { "tempo", 3.5f }, { "attack", 2.5f }, { "duty", 5.5f }, { "variation", 11 }, { "mode", 1 } } },
+        { "Harmonic Push",   "Low and high bands alternate",           { { "balance", 9.0f }, { "tempo", 4.0f }, { "attack", 3.0f }, { "duty", 6.0f }, { "variation", 9 }, { "mode", 4 } } },
+    };
+}
