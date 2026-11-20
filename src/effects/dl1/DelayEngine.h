@@ -13,7 +13,7 @@
 #include <atomic>
 #include <cmath>
 #include <vector>
-#include "../dm1/DM1DSP.h"
+#include "DM1DSP.h"
 
 namespace dl1
 {
