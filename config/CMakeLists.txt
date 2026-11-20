@@ -70,6 +70,15 @@ endif()
 
 FetchContent_MakeAvailable(JUCE)
 
+# Windows on ARM: JUCE's VST3 post-build step runs a helper that loads the new plugin to write moduleinfo.json; on the ARM64 runner that load fails
+# ("LoadLibraryW failed ... The specified module could not be found") and every VST3 target errors out (MSB3073). The manifest is optional, so it is
+# switched off for this architecture: every juce_add_plugin call gets VST3_AUTO_MANIFEST FALSE.
+if(RL_ARCH STREQUAL "winarm64")
+  function(juce_add_plugin)
+    _juce_add_plugin(${ARGN} VST3_AUTO_MANIFEST FALSE)
+  endfunction()
+endif()
+
 # A build for the other architecture must not be installed on this Mac: JUCE's own post-build copy would overwrite the plugins of
 # this Mac's architecture in ~/Library/Audio/Plug-Ins, so it is redirected into the build tree, and the install / share steps below are skipped.
 # By default nothing is installed: the bundles are only collected in the releases folder. ./build.sh --install (RL_INSTALL_PLUGINS=ON)
