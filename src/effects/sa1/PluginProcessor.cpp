@@ -26,6 +26,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout SA1AudioProcessor::createLay
     flag ("hold", "Peak Hold", false);
     flag ("freeze", "Freeze", false);
     flag ("harmonics", "Harmonic Markers", true);
+    pick ("mode", "Analysis Mode", { "Spectrum", "Spectrogram", "Octave Bands" }, 0);
+    pick ("bands", "Octave Bands Width", { "1/3 Octave", "1 Octave" }, 0);
+    pick ("speed", "Spectrogram Speed", { "Fast", "Medium", "Slow" }, 0);
+    flag ("compare", "Compare With Snapshot", false);
     return layout;
 }
 
@@ -38,6 +42,8 @@ std::vector<vibr::PresetManager::Factory> sa1FactoryPresets()
         { "Guitar Detail", "A 16K FFT with 4x averaging: the low strings and the harmonics resolve", { { "fftSize", 4 }, { "avg", 2 }, { "smooth", 1 }, { "range", 1 }, { "harmonics", 1 } } },
         { "Fast Look", "A 2K FFT with no averaging: it follows picking and palm mutes", { { "fftSize", 1 }, { "avg", 0 }, { "smooth", 0 }, { "range", 1 } } },
         { "Tonal Balance", "An 8K FFT, 8x averaging and heavy smoothing: the broad shape of the sound", { { "fftSize", 3 }, { "avg", 3 }, { "smooth", 3 }, { "range", 0 }, { "harmonics", 0 } } },
+        { "Octave Balance", "1/3-octave bands with 8x averaging: the tonal balance at a glance", { { "mode", 2 }, { "bands", 0 }, { "avg", 3 }, { "fftSize", 3 }, { "range", 0 } } },
+        { "Spectrogram", "Frequency over time: watch the harmonics, the decay and the modulation", { { "mode", 1 }, { "fftSize", 3 }, { "avg", 1 }, { "smooth", 0 }, { "range", 1 } } },
         { "Peak Hunt", "A 16K FFT with the peak hold on, as a line: find the resonances", { { "fftSize", 4 }, { "hold", 1 }, { "display", 1 }, { "avg", 1 }, { "smooth", 0 }, { "range", 2 } } },
     };
 }
